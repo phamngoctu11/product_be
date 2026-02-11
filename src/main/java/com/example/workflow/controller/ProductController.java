@@ -3,6 +3,7 @@ import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 @RestController

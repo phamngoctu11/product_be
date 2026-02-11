@@ -10,6 +10,8 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     @Transactional(readOnly = true)
+    @Cacheable(value = "users")
     public List<UserResDTO> getAllUsers() {
         return userRepository.findAll().stream()
                 .map(userMapper::toResponse)
@@ -37,12 +40,14 @@ public class UserService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
         return userMapper.toResponse(user);
     }
+    @CacheEvict(value = "users", allEntries = true)
     public UserResDTO updateUser(Long id, UserCreDTO request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found to update"));
         userMapper.updateUser(user, request);
         return userMapper.toResponse(userRepository.save(user));
     }
+    @CacheEvict(value = "users", allEntries = true)
     public void deleteUser(Long id) {
         if (!userRepository.existsById(id)) {
             throw new AppException(HttpStatus.NOT_FOUND, "Cannot delete: User not found");

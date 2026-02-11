@@ -1,8 +1,8 @@
 package com.example.workflow.dto;
 import lombok.Data;
-import java.util.List;
+import java.io.Serializable;
 @Data
-public class UserResDTO {
+public class UserResDTO implements Serializable {
     private Long id;
     private String username;
     private String role;
