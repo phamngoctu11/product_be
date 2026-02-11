@@ -2,8 +2,6 @@ package com.example.workflow.entity;
 import com.example.workflow.nume.Role;
 import jakarta.persistence.*;
 import lombok.*;
-import java.util.HashSet;
-import java.util.Set;
 
 @Entity
 @Table(name = "users")
@@ -24,4 +22,5 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "role")
     private Role role ;
+    private int reputation;
 }

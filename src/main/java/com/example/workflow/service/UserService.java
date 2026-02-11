@@ -2,22 +2,17 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserResDTO;
-import com.example.workflow.entity.Cart;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.UserMapper;
-import com.example.workflow.nume.Role;
-import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 

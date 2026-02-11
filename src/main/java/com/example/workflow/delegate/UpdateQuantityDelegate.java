@@ -6,6 +6,7 @@ import com.example.workflow.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Component;
 
 @Component("updateQuantityDelegate")
@@ -14,6 +15,7 @@ public class UpdateQuantityDelegate implements JavaDelegate {
 
     private final CartRepository cartRepository;
 
+    @CacheEvict(value = "cart", allEntries = true)
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         Long cartId = (Long) execution.getVariable("cartId");

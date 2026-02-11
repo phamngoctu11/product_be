@@ -8,12 +8,11 @@ import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-import java.util.HashSet;
-import java.util.Set;
+
 @Component("saveUserDelegate")
 @RequiredArgsConstructor
 //@Transactional
@@ -22,6 +21,9 @@ public class SaveUserDelegate implements JavaDelegate {
     private final CartRepository cartRepository;
     private final PasswordEncoder passwordEncoder;
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "users", allEntries = true)
+    })
     public void execute(DelegateExecution execution) throws Exception {
         String username = (String) execution.getVariable("username");
         String password = (String) execution.getVariable("password");
@@ -44,6 +46,7 @@ public class SaveUserDelegate implements JavaDelegate {
         Cart cart = new Cart();
         cart.setUser(user);
         user.setCart(cart);
+        user.setReputation(50);
         userRepository.save(user);
         cartRepository.save(cart);
         userRepository.flush();

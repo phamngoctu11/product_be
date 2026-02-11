@@ -9,6 +9,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
+//@PreAuthorize("hasRole('ADMIN')")
 public class ProductController {
     private final ProductService service;
     @PostMapping

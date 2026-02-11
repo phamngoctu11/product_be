@@ -7,4 +7,5 @@ public class UserResDTO implements Serializable {
     private String username;
     private String role;
     private CartResDTO cart;
+    private int reputation;
 }
