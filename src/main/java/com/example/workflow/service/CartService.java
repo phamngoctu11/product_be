@@ -1,5 +1,4 @@
 package com.example.workflow.service;
-
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
@@ -13,10 +12,8 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -43,7 +40,6 @@ public class CartService {
         cartRepository.save(cart);
     }
 
-    // Xóa item khỏi giỏ hàng cũng cần xóa cache
     @CacheEvict(value = "carts", key = "#userId")
     public void removeFromCart(Long userId, Long productId) {
         Cart cart = cartRepository.findByUserId(userId)
@@ -52,7 +48,6 @@ public class CartService {
         cartRepository.save(cart);
     }
 
-    // Lưu kết quả giỏ hàng vào Redis với key là userId
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(Long userId) {
@@ -63,7 +58,8 @@ public class CartService {
     @Caching(evict = {
             @CacheEvict(value = "carts", key = "#userId"),
             @CacheEvict(value = "products", allEntries = true), // Xóa hết cache sản phẩm vì số lượng tồn kho đã thay đổi
-            @CacheEvict(value = "users", allEntries = true)     // Nếu User có chứa list đơn hàng hoặc reputation bị thay đổi
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "orders", key = "#userId") // Nếu User có chứa list đơn hàng hoặc reputation bị thay đổi
     })
     @Transactional
     public String approve_cart(Long userId) {

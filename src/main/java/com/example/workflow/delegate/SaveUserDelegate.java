@@ -12,10 +12,13 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 
 @Component("saveUserDelegate")
 @RequiredArgsConstructor
-//@Transactional
+@Transactional
 public class SaveUserDelegate implements JavaDelegate {
     private final UserRepository userRepository;
     private final CartRepository cartRepository;
@@ -27,9 +30,21 @@ public class SaveUserDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         String username = (String) execution.getVariable("username");
         String password = (String) execution.getVariable("password");
+        String firstname = (String) execution.getVariable("firstname");
+        String lastname = (String) execution.getVariable("lastname");
+        String gender = (String) execution.getVariable("gender");
+        String phone = (String) execution.getVariable("phone");
+        LocalDate birth = (LocalDate) execution.getVariable("birth");
+        String address = (String) execution.getVariable("address");
         String roleStr = (String) execution.getVariable("role");
         User user = new User();
         user.setUsername(username);
+        user.setFirstname(firstname);
+        user.setLastname(lastname);
+        user.setGender(gender);
+        user.setAddress(address);
+        user.setPhone(phone);
+        user.setBirth(birth);
         user.setPassword(passwordEncoder.encode(password));
         Role role;
         try {

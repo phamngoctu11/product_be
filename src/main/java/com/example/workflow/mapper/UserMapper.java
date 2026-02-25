@@ -10,6 +10,8 @@ public interface UserMapper {
     @Mapping(target = "role",source = "role")
     User toEntity(UserCreDTO request);
     @Mapping(source="cart",target="cart")
+    @Mapping(source="birth",target = "birth")
+    @Mapping(source="phone",target="phone")
     UserResDTO toResponse(User user);
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "password", ignore = true)

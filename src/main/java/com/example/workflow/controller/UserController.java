@@ -24,7 +24,13 @@ public class UserController {
         Map<String, Object> variables = new HashMap<>();
         variables.put("username", dto.getUsername());
         variables.put("password", dto.getPassword());
+        variables.put("firstname", dto.getFirstname());
+        variables.put("lastname", dto.getLastname());
+        variables.put("gender", dto.getGender());
+        variables.put("address", dto.getAddress());
         variables.put("role", dto.getRole());
+        variables.put("birth", dto.getBirth());
+        variables.put("phone", dto.getPhone());
         runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
         Map<String, String> response = new HashMap<>();
         response.put("message", "Quy trình tạo User đã bắt đầu!");
