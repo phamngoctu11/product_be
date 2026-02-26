@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.UserCreDTO;
+import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
@@ -22,11 +23,9 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     @Transactional(readOnly = true)
-    @Cacheable(value = "users")
-    public List<UserResDTO> getAllUsers() {
-        return userRepository.findAll().stream()
-                .map(userMapper::toResponse)
-                .collect(Collectors.toList());
+    //@Cacheable(value = "users")
+    public List<UserListDTO> getAllUsers() {
+        return userRepository.findAllCustom();
     }
     @Transactional(readOnly = true)
     public UserResDTO getUserById(Long id) {

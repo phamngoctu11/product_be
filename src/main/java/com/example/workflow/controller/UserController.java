@@ -1,5 +1,6 @@
 package com.example.workflow.controller;
 import com.example.workflow.dto.UserCreDTO;
+import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -37,8 +38,8 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
     @GetMapping
-    public ResponseEntity<List<UserResDTO>> getAll() {
-        List<UserResDTO> users = userService.getAllUsers();
+    public ResponseEntity<List<UserListDTO>> getAll() {
+        List<UserListDTO> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
     }
     @GetMapping("/{id}")
