@@ -26,7 +26,7 @@ public class ProductService {
         return mapper.toDto(savedProduct);
     }
     @Transactional(readOnly = true)
-    @Cacheable(value = "products")
+    //@Cacheable(value = "products")
     public List<ProductDTO> getAllProducts() {
         return repository.findAll().stream()
                 .map(mapper::toDto)

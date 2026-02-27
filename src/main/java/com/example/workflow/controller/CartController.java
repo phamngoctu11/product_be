@@ -17,18 +17,10 @@ import java.util.Map;
 public class CartController {
     private final CartService cartService;
     private final RuntimeService runtimeService;
-    //@PreAuthorize("hasAnyRole('ADMIN','USER')")
-//    @PostMapping("/add")
-//    public String add(@RequestParam Long userId, @RequestParam Long productId, @RequestParam int quantity) {
-//        cartService.addToCart(userId, productId, quantity);
-//        return "Added to cart successfully";
-//    }
     @PostMapping("/add")
     public ResponseEntity<String> addToCart(@RequestParam Long userId,
                                             @RequestParam Long productId,
                                             @RequestParam int quantity) {
-
-        // 1. Chuẩn bị các biến đầu vào cho quy trình (Process Variables)
         Map<String, Object> variables = new HashMap<>();
         variables.put("userId", userId);
         variables.put("productId", productId);

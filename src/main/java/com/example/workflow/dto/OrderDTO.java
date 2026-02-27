@@ -11,6 +11,7 @@ import java.util.List;
 @NoArgsConstructor
 @Data
 public class OrderDTO implements Serializable {
+    private Long id;
     private Long user_id;
     private List<OrderItemDTO> items;
     private double totalPrice;

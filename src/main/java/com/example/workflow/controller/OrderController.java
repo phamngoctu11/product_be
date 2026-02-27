@@ -4,10 +4,7 @@ import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -15,10 +12,34 @@ import java.util.List;
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
+
     private final OrderService orderService;
+
     @GetMapping("/user/{user_id}")
-    public ResponseEntity<List<OrderDTO>> getAllMyOrders(@PathVariable Long user_id) {
+    public ResponseEntity<List<OrderDTO>> getAllMyOrders(@PathVariable("user_id") Long user_id) {
         List<OrderDTO> orders = orderService.getOrdersByUserId(user_id);
         return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderDTO> getOrderById(@PathVariable("id") Long id) {
+        OrderDTO orders = orderService.getOrderById(id);
+        return ResponseEntity.ok(orders);
+    }
+
+    @PutMapping("/{order_id}/status")
+    public ResponseEntity<String> updateStatus(
+            @PathVariable("order_id") Long order_id,
+            @RequestParam("status") String status,
+            @RequestParam("cancellReason") String cancellReason) {
+        try {
+            orderService.updateStatus(order_id, status,cancellReason);
+            return ResponseEntity.ok("Cập nhật trạng thái thành công!");
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // BE trả về lỗi 400 và câu báo lỗi để FE hiện lên màn hình
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Lỗi hệ thống: " + e.getMessage());
+        }
     }
 }
