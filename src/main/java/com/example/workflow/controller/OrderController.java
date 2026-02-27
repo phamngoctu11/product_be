@@ -31,12 +31,11 @@ public class OrderController {
     public ResponseEntity<String> updateStatus(
             @PathVariable("order_id") Long order_id,
             @RequestParam("status") String status,
-            @RequestParam("cancellReason") String cancellReason) {
+            @RequestParam(value = "cancelledReason", required = false) String cancelledReason) { // Thêm cái này
         try {
-            orderService.updateStatus(order_id, status,cancellReason);
+            orderService.updateStatus(order_id, status, cancelledReason);
             return ResponseEntity.ok("Cập nhật trạng thái thành công!");
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // BE trả về lỗi 400 và câu báo lỗi để FE hiện lên màn hình
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Lỗi hệ thống: " + e.getMessage());

@@ -15,33 +15,28 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class OrderService {
-
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final UserRepository userRepository;
-    // 1. Tiêm thêm ProductRepository để tương tác với bảng Sản phẩm
     private final ProductRepository productRepository;
-
     public List<OrderDTO> getOrdersByUserId(Long user_id) {
         List<Order> orders = orderRepository.getOrdersByUserId(user_id);
         return orders.stream()
                 .map(orderMapper::toDto)
                 .collect(Collectors.toList());
     }
-
     public OrderDTO getOrderById(Long id){
         return orderMapper.toDto(orderRepository.getOrdersById(id));
     }
-
     @Transactional
-    //@CacheEvict(value = {"products", "product"}, allEntries = true)
-    public void updateStatus(Long id, String newStatusStr,String cancelledReason) {
+    public void updateStatus(Long id, String newStatusStr, String cancelledReason) {
         Order order = orderRepository.getOrdersById(id);
         if (order == null) {
             throw new RuntimeException("Không tìm thấy đơn hàng với ID: " + id);
@@ -83,21 +78,25 @@ public class OrderService {
             }
             user.setReputation(user.getReputation() - deduction);
             userRepository.save(user);
+
+            // B. HOÀN TRẢ KHO
             if (order.getItems() != null) {
                 for (OrderItem item : order.getItems()) {
-                    Product product = item.getProduct(); // Lấy sản phẩm tương ứng với Item
+                    Product product = item.getProduct();
                     if (product != null) {
-                        // Lấy số lượng hiện tại trong kho + số lượng của đơn bị hủy
-                        // Lưu ý: Sửa .getQuantity() thành tên hàm thực tế trong Entity Product của bạn (ví dụ: getStock(), getAmount()...)
                         int newStock = product.getQuantity() + item.getQuantity();
                         product.setQuantity(newStock);
-                        productRepository.save(product); // Cập nhật lại vào DB
+                        productRepository.save(product);
                     }
                 }
             }
 
+            // C. LƯU LÝ DO HỦY VÀ THỜI GIAN
+            order.setCancelReason(cancelledReason);
+            order.setEndOrderTime(LocalDateTime.now()); // Lưu thời gian kết thúc
+
         } else {
-            cancelledReason = null;
+            // Các logic chặn đổi trạng thái thông thường
             if (currentStatus == OrderStatus.CANCELLED) {
                 throw new IllegalStateException("Đơn hàng đã bị hủy, không thể cập nhật.");
             }
@@ -107,9 +106,13 @@ public class OrderService {
             if (currentStatus == OrderStatus.SHIPPING && newStatus == OrderStatus.PENDING_WAREHOUSE) {
                 throw new IllegalStateException("Đơn hàng đang giao, không thể quay lại trạng thái xuất kho.");
             }
+
+            // Nếu trạng thái mới là ĐÃ GIAO (DELIVERED) thì cũng lưu thời gian kết thúc
+            if (newStatus == OrderStatus.DELIVERED) {
+                order.setEndOrderTime(LocalDateTime.now());
+            }
         }
         order.setStatus(newStatus);
-        order.setCancelReason(cancelledReason);
         orderRepository.save(order);
     }
 }

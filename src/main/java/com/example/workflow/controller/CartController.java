@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -44,7 +45,10 @@ public class CartController {
         return ResponseEntity.ok(cart);
     }
     @PostMapping("/approve/{userId}")
-    public String approve(@PathVariable Long userId){
-        return cartService.approve_cart(userId);
+    public ResponseEntity<String> approveCart(
+            @PathVariable("userId") Long userId,
+            @RequestBody List<Long> productIdsToCheckout) {
+        cartService.approve_cart(userId, productIdsToCheckout);
+        return ResponseEntity.ok("Thanh toán thành công");
     }
 }
