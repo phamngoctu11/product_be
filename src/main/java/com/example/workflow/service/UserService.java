@@ -10,41 +10,53 @@ import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
-import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
-//@PreAuthorize("hasRole('ADMIN')")
 public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+
     @Transactional(readOnly = true)
-    //@Cacheable(value = "users")
-    public List<UserListDTO> getAllUsers() {
-        return userRepository.findAllCustom();
+    @Cacheable(value = "users", key = "'list-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<UserListDTO> getAllUsers(Pageable pageable) {
+        return userRepository.findAllCustom(pageable);
     }
+
     @Transactional(readOnly = true)
+    @Cacheable(value = "user", key = "#id")
     public UserResDTO getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
         return userMapper.toResponse(user);
     }
-    @CacheEvict(value = "users", allEntries = true)
+
+    @Caching(evict = {
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "user", key = "#id")
+    })
     public UserResDTO updateUser(Long id, UserCreDTO request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found to update"));
         userMapper.updateUser(user, request);
         return userMapper.toResponse(userRepository.save(user));
     }
-    @CacheEvict(value = "users", allEntries = true)
+
+    @Caching(evict = {
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "user", key = "#id")
+    })
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new AppException(HttpStatus.NOT_FOUND, "Cannot delete: User not found");
-        }
-        userRepository.deleteById(id);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found to update"));
+        user.setDelete(true);
+        userRepository.save(user);
     }
 }

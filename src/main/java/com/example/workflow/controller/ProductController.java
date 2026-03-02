@@ -2,6 +2,8 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,8 +19,8 @@ public class ProductController {
         return ResponseEntity.ok(service.createProduct(dto));
     }
     @GetMapping
-    public ResponseEntity<List<ProductDTO>> getAllProducts() {
-        return ResponseEntity.ok(service.getAllProducts());
+    public ResponseEntity<Page<ProductDTO>> getAllProducts(Pageable pageable) {
+        return ResponseEntity.ok(service.getAllProducts(pageable));
     }
     @GetMapping("/{id}")
     public ResponseEntity<ProductDTO> getProductById(@PathVariable Long id) {

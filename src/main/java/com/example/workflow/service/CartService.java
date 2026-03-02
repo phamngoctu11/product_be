@@ -7,6 +7,8 @@ import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -17,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors; // Nhớ import thư viện này
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class CartService {
     private final CartMapper cartMapper;
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
+    private final CacheManager cacheManager; // Đã thêm CacheManager
 
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(Long userId, Long productId, int newQuantity) {
@@ -64,27 +67,20 @@ public class CartService {
 
     @Caching(evict = {
             @CacheEvict(value = "carts", key = "#userId"),
-            @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "users", allEntries = true),
             @CacheEvict(value = "orders", key = "#userId")
     })
     @Transactional
-    // BỔ SUNG THÊM THAM SỐ List<Long> productIdsToCheckout
-    public String approve_cart(Long userId, List<Long> productIdsToCheckout) {
+    public Long approve_cart(Long userId, List<Long> productIdsToCheckout) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy giỏ hàng!"));
 
-        if (cart.getItems() == null || cart.getItems().isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Thất bại: Giỏ hàng đang trống.");
-        }
-
         if (productIdsToCheckout == null || productIdsToCheckout.isEmpty()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "Vui lòng chọn ít nhất 1 sản phẩm để thanh toán.");
         }
 
-        // Lọc ra các Item trong giỏ hàng TRÙNG KHỚP với danh sách ID người dùng đã tích chọn
         List<CartItem> itemsToCheckout = cart.getItems().stream()
                 .filter(cartItem -> productIdsToCheckout.contains(cartItem.getProduct().getId()))
                 .collect(Collectors.toList());
@@ -100,20 +96,19 @@ public class CartService {
         order.setItems(new ArrayList<>());
         double totalPrice = 0;
 
-        // Chỉ duyệt qua danh sách các sản phẩm ĐƯỢC CHỌN thay vì toàn bộ giỏ hàng
+        Cache productCache = cacheManager.getCache("product");
+        Cache productListCache = cacheManager.getCache("products");
+
         for (CartItem cartItem : itemsToCheckout) {
             Product pro = cartItem.getProduct();
 
-            // Giả định bạn lưu tên sản phẩm là getProduct_name() (tùy theo entity của bạn)
-            if (cartItem.getQuantity() > pro.getQuantity()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Sản phẩm (ID: " + pro.getId() + ") không đủ số lượng trong kho.");
+            int updatedRows = productRepository.decreaseStockIfAvailable(pro.getId(), cartItem.getQuantity());
+
+            if (updatedRows == 0) {
+                throw new AppException(HttpStatus.BAD_REQUEST,
+                        "Sản phẩm (ID: " + pro.getId() + ") đã hết hàng hoặc không đủ số lượng đáp ứng!");
             }
 
-            // Trừ kho
-            pro.setQuantity(pro.getQuantity() - cartItem.getQuantity());
-            productRepository.save(pro);
-
-            // Tạo OrderItem
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
             orderItem.setProduct(pro);
@@ -122,16 +117,25 @@ public class CartService {
 
             totalPrice += (cartItem.getQuantity() * pro.getPrice());
             order.getItems().add(orderItem);
+
+            // Xóa cache chi tiết của đúng sản phẩm vừa mua
+            if (productCache != null) {
+                productCache.evict(pro.getId());
+            }
+        }
+
+        // Làm mới cache danh sách sản phẩm
+        if (productListCache != null) {
+            productListCache.clear();
         }
 
         order.setTotalPrice(totalPrice);
-        orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
 
-        // QUAN TRỌNG: CHỈ xóa các item ĐÃ THANH TOÁN, giữ lại các item người dùng chưa chọn
         cartItemRepository.deleteAll(itemsToCheckout);
         cart.getItems().removeAll(itemsToCheckout);
         cartRepository.save(cart);
 
-        return "Duyệt giỏ hàng thành công! Đơn hàng đã được tạo.";
+        return savedOrder.getId();
     }
 }

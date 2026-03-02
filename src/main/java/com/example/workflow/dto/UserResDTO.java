@@ -16,4 +16,5 @@ public class UserResDTO implements Serializable {
     private String role;
     private CartResDTO cart;
     private int reputation;
+    private boolean isDelete;
 }

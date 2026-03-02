@@ -37,5 +37,8 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "role")
     private Role role ;
+    @Column(name="reputation")
     private int reputation;
+    @Column(name="isdelete")
+    private boolean isDelete;
 }

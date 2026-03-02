@@ -18,7 +18,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         // 1. Tìm user trong database
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsernameAndIsDeleteFalse(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         // 2. Chuyển đổi một Role duy nhất thành danh sách Authority của Spring Security

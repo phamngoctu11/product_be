@@ -8,6 +8,7 @@ import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +24,8 @@ public class SaveUserDelegate implements JavaDelegate {
     private final UserRepository userRepository;
     private final CartRepository cartRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CacheManager cacheManager;
+
     @Override
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true)
@@ -62,9 +65,10 @@ public class SaveUserDelegate implements JavaDelegate {
         cart.setUser(user);
         user.setCart(cart);
         user.setReputation(50);
+        user.setDelete(false);
         userRepository.save(user);
         cartRepository.save(cart);
-        userRepository.flush();
+
         System.out.println(">>> Camunda: Created User & Cart for: " + username + " with role: " + role);
     }
 }
