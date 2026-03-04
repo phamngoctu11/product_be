@@ -47,8 +47,12 @@ public class CartController {
     @PostMapping("/approve/{userId}")
     public ResponseEntity<String> approveCart(
             @PathVariable("userId") Long userId,
-            @RequestBody List<Long> productIdsToCheckout) {
-        cartService.approve_cart(userId, productIdsToCheckout);
+            @RequestBody List<Long> productIdsToCheckout,
+            @RequestParam(value = "userVoucherId", required = false) Long userVoucherId) {
+
+        // Chỉ truyền userVoucherId xuống service
+        cartService.approve_cart(userId, productIdsToCheckout, userVoucherId);
+
         return ResponseEntity.ok("Thanh toán thành công");
     }
 }

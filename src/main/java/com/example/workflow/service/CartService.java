@@ -31,7 +31,8 @@ public class CartService {
     private final CartMapper cartMapper;
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
-    private final CacheManager cacheManager; // Đã thêm CacheManager
+    private final CacheManager cacheManager;
+    private final UserVoucherRepository userVoucherRepository; // REPO XỬ LÝ VOUCHER
 
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(Long userId, Long productId, int newQuantity) {
@@ -71,7 +72,7 @@ public class CartService {
             @CacheEvict(value = "orders", key = "#userId")
     })
     @Transactional
-    public Long approve_cart(Long userId, List<Long> productIdsToCheckout) {
+    public Long approve_cart(Long userId, List<Long> productIdsToCheckout, Long userVoucherId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
         Cart cart = cartRepository.findByUserId(userId)
@@ -101,12 +102,10 @@ public class CartService {
 
         for (CartItem cartItem : itemsToCheckout) {
             Product pro = cartItem.getProduct();
-
             int updatedRows = productRepository.decreaseStockIfAvailable(pro.getId(), cartItem.getQuantity());
 
             if (updatedRows == 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST,
-                        "Sản phẩm (ID: " + pro.getId() + ") đã hết hàng hoặc không đủ số lượng đáp ứng!");
+                throw new AppException(HttpStatus.BAD_REQUEST, "Sản phẩm (ID: " + pro.getId() + ") đã hết hàng hoặc không đủ số lượng!");
             }
 
             OrderItem orderItem = new OrderItem();
@@ -118,18 +117,58 @@ public class CartService {
             totalPrice += (cartItem.getQuantity() * pro.getPrice());
             order.getItems().add(orderItem);
 
-            // Xóa cache chi tiết của đúng sản phẩm vừa mua
-            if (productCache != null) {
-                productCache.evict(pro.getId());
+            if (productCache != null) productCache.evict(pro.getId());
+        }
+
+        if (productListCache != null) productListCache.clear();
+
+        // ==========================================
+        // LOGIC TÍNH TOÁN VOUCHER (BACKEND TỰ TÍNH)
+        // ==========================================
+        double discountAmount = 0.0;
+        UserVoucher appliedVoucher = null;
+
+        if (userVoucherId != null) {
+            appliedVoucher = userVoucherRepository.findById(userVoucherId)
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Mã giảm giá không tồn tại."));
+
+            // Validate Bảo Mật
+            if (appliedVoucher.isUsed()) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Mã giảm giá này đã được sử dụng.");
             }
+            if (appliedVoucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Mã giảm giá đã hết hạn.");
+            }
+            if (!appliedVoucher.getUser().getId().equals(userId)) {
+                throw new AppException(HttpStatus.FORBIDDEN, "Mã giảm giá này không hợp lệ.");
+            }
+            if (totalPrice < appliedVoucher.getTemplate().getMinOrderValue()) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này.");
+            }
+            if (appliedVoucher.getTemplate().getDiscountPercent() > 0) {
+                discountAmount = (totalPrice * appliedVoucher.getTemplate().getDiscountPercent()) / 100;
+                if (appliedVoucher.getTemplate().getMaxDiscountAmount() > 0 && discountAmount > appliedVoucher.getTemplate().getMaxDiscountAmount()) {
+                    discountAmount = appliedVoucher.getTemplate().getMaxDiscountAmount();
+                }
+            } else {
+                discountAmount = appliedVoucher.getTemplate().getMaxDiscountAmount();
+            }
+
+            // Đánh dấu mã đã sử dụng
+            appliedVoucher.setUsed(true);
+            appliedVoucher.setUsedDate(LocalDateTime.now());
+            userVoucherRepository.save(appliedVoucher);
         }
 
-        // Làm mới cache danh sách sản phẩm
-        if (productListCache != null) {
-            productListCache.clear();
-        }
+        double finalPrice = totalPrice - discountAmount;
+        if (finalPrice < 0) finalPrice = 0;
 
+        // LƯU KẾT QUẢ VÀO ĐƠN HÀNG
         order.setTotalPrice(totalPrice);
+        order.setDiscountAmount(discountAmount);
+        order.setFinalPrice(finalPrice);
+        order.setUserVoucher(appliedVoucher);
+
         Order savedOrder = orderRepository.save(order);
 
         cartItemRepository.deleteAll(itemsToCheckout);

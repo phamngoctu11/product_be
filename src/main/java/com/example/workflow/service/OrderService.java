@@ -75,11 +75,10 @@ public class OrderService {
 
         if (newStatus == OrderStatus.DELIVERED) {
             User user = order.getUser();
-            user.setReputation(user.getReputation() + 1);
+            user.setReputation(user.getReputation() + 2);
             order.setEndOrderTime(LocalDateTime.now());
             userRepository.save(user);
         }
-
         order.setStatus(newStatus);
         orderRepository.save(order);
 

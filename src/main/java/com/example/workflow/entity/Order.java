@@ -26,4 +26,11 @@ public class Order {
     @Column(name = "status")
     OrderStatus status;
     String cancelReason;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_voucher_id")
+    private UserVoucher userVoucher; // Đơn này dùng voucher nào trong ví?
+    @Column(name = "discount_amount")
+    private Double discountAmount = 0.0; // Được giảm bao nhiêu tiền?
+    @Column(name = "final_price")
+    private Double finalPrice = 0.0;
 }
