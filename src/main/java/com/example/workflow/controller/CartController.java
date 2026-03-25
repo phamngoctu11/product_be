@@ -19,19 +19,23 @@ public class CartController {
     private final CartService cartService;
     private final RuntimeService runtimeService;
     @PostMapping("/add")
-    public ResponseEntity<String> addToCart(@RequestParam Long userId,
-                                            @RequestParam Long productId,
-                                            @RequestParam int quantity) {
+    public ResponseEntity<String> addToCart(
+            @RequestParam("userId") Long userId,
+            // ĐỔI TỪ productId SANG variantId
+            @RequestParam("variantId") Long variantId,
+            @RequestParam("quantity") int quantity) {
+
         Map<String, Object> variables = new HashMap<>();
         variables.put("userId", userId);
-        variables.put("productId", productId);
+        variables.put("variantId", variantId); // ĐỔI TÊN BIẾN TRUYỀN VÀO CAMUNDA
         variables.put("quantity", quantity);
-        ProcessInstance instance = runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
-        return ResponseEntity.ok("Quy trình thêm vào giỏ hàng đã bắt đầu! Instance ID: " + instance.getId());
+
+        runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
+        return ResponseEntity.ok("Đã đẩy lệnh thêm Giỏ hàng vào Workflow!");
     }
     @PutMapping("/update")
-    public String update(@RequestParam Long userId, @RequestParam Long productId, @RequestParam int quantity) {
-        cartService.updateQuantity(userId, productId, quantity);
+    public String update(@RequestParam Long userId, @RequestParam Long variantId, @RequestParam int quantity) {
+        cartService.updateQuantity(userId, variantId, quantity);
         return "Updated quantity";
     }
     @DeleteMapping("/remove")

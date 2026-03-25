@@ -4,19 +4,17 @@ import com.example.workflow.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-    // 1. Dùng Database level để trừ kho. Nếu kho < amount sẽ không update được (trả về 0)
-    @Modifying
-    @Query("UPDATE Product p SET p.quantity = p.quantity - :amount WHERE p.id = :id AND p.quantity >= :amount")
-    int decreaseStockIfAvailable(@Param("id") Long id, @Param("amount") int amount);
-
-    // 2. Thêm hàm hỗ trợ Phân trang
-    Page<Product> findAll(Pageable pageable);
+    @Query(value = "SELECT p FROM Product p " +
+            "LEFT JOIN p.variants v " +
+            "WHERE p.isDelete = false " +
+            "GROUP BY p " +
+            "ORDER BY CASE WHEN SUM(COALESCE(v.quantity, 0)) > 0 THEN 1 ELSE 0 END DESC, p.id DESC",
+            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.isDelete = false")
+    Page<Product> findAllByStockPriority(Pageable pageable);
 }

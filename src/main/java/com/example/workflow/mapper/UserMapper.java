@@ -17,5 +17,6 @@ public interface UserMapper {
     @Mapping(target = "password", ignore = true)
     @Mapping(target = "cart",ignore = true)
     @Mapping(target = "role",source = "role")
+    @Mapping(target = "avatarUrl",source = "avatarUrl")
     void updateUser(@MappingTarget User user, UserCreDTO request);
 }

@@ -11,14 +11,12 @@ import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface CartMapper {
-    @Mapping(source="user.id",target="user_id")
-    @Mapping(target = "totalPrice", ignore = true)
-    CartResDTO toDTO(Cart cart);
-    @Mapping(source = "product.id", target = "productId")
-    @Mapping(source = "product.product_name", target = "productName")
-    @Mapping(source = "quantity", target = "quantity")
-    @Mapping(source = "price", target = "price")
-    CartItemDTO toCartItemDTO(CartItem item);
+    @Mapping(source = "user.id", target = "user_id")
+    CartResDTO toDto(Cart cart);
+    @Mapping(source = "productVariant.id", target = "productId")
+    @Mapping(source = "productVariant.variantName", target = "productName")
+    @Mapping(source = "productVariant.price", target = "price")
+    CartItemDTO toDto(CartItem cartItem);
     @AfterMapping
     default void calculateTotalPrice(Cart cart, @MappingTarget CartResDTO dto) {
         if (dto.getItems() != null) {

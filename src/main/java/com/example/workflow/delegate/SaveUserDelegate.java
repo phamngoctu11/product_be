@@ -39,6 +39,7 @@ public class SaveUserDelegate implements JavaDelegate {
         String phone = (String) execution.getVariable("phone");
         LocalDate birth = (LocalDate) execution.getVariable("birth");
         String address = (String) execution.getVariable("address");
+        String avatar = (String) execution.getVariable("avatarUrl");
         String roleStr = (String) execution.getVariable("role");
         User user = new User();
         user.setUsername(username);
@@ -64,6 +65,7 @@ public class SaveUserDelegate implements JavaDelegate {
         Cart cart = new Cart();
         cart.setUser(user);
         user.setCart(cart);
+        user.setAvatarUrl(avatar);
         user.setReputation(50);
         user.setDelete(false);
         userRepository.save(user);

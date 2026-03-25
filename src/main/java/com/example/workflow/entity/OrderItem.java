@@ -16,9 +16,9 @@ public class OrderItem {
     @JoinColumn(name="order_id",referencedColumnName = "id")
     @ToString.Exclude
     private Order order;
-    @ManyToOne
-    @JoinColumn(name="product_id",referencedColumnName = "id")
-    private Product product;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id")
+    private ProductVariant productVariant;
     @Column(name="quantity")
     private int quantity;
     @Column(name="price")

@@ -23,6 +23,7 @@ spring:
     show-sql: true
     hibernate:
       ddl-auto: update
+
 camunda.bpm:
   deployment-resource-pattern:
     - classpath*:**/*.bpmn
@@ -36,3 +37,9 @@ camunda.bpm:
     email: admin@example.com
   generic-properties:
     enforce-history-time-to-live: false
+
+# ĐƯA CLOUDINARY RA SÁT LỀ TRÁI (Ngang hàng với spring và camunda.bpm)
+cloudinary:
+  cloud-name: dgoolohc8
+  api-key: "768686576265143"
+  api-secret: puDa8eZvm0E3ttWKAzxS6nUDFn8

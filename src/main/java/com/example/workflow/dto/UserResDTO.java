@@ -1,4 +1,5 @@
 package com.example.workflow.dto;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -17,4 +18,6 @@ public class UserResDTO implements Serializable {
     private CartResDTO cart;
     private int reputation;
     private boolean isDelete;
+    @JsonProperty("avatar_url")
+    private String avatarUrl;
 }

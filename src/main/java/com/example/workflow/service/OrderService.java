@@ -5,14 +5,14 @@ import com.example.workflow.dto.OrderStatusHistoryDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderItem;
 import com.example.workflow.entity.OrderStatusHistory;
-import com.example.workflow.entity.Product;
+import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.OrderStatusHistoryRepository;
-import com.example.workflow.repository.ProductRepository;
+import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.Cache;
@@ -32,21 +32,56 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final UserRepository userRepository;
-    private final ProductRepository productRepository;
-    private final OrderStatusHistoryRepository historyRepository; // Bổ sung repo
+    private final ProductVariantRepository productVariantRepository;
+    private final OrderStatusHistoryRepository historyRepository;
     private final CacheManager cacheManager;
     private final OrderStatusHistoryMapper historyMapper;
 
+    // ==============================================================
+    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh cho danh sách đơn hàng
+    // ==============================================================
     @Cacheable(value = "orders", key = "#user_id")
     public List<OrderDTO> getOrdersByUserId(Long user_id) {
-        return orderRepository.getOrdersByUserId(user_id).stream()
+        List<Order> orders = orderRepository.getOrdersByUserId(user_id);
+        List<OrderDTO> dtos = orders.stream()
                 .map(orderMapper::toDto)
                 .collect(Collectors.toList());
+
+        for (int i = 0; i < orders.size(); i++) {
+            injectImageUrls(orders.get(i), dtos.get(i));
+        }
+        return dtos;
     }
 
+    // ==============================================================
+    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh cho 1 đơn hàng cụ thể
+    // ==============================================================
     public OrderDTO getOrderById(Long id) {
-        return orderMapper.toDto(orderRepository.getOrdersById(id));
+        Order order = orderRepository.getOrdersById(id);
+        OrderDTO dto = orderMapper.toDto(order);
+        injectImageUrls(order, dto);
+        return dto;
     }
+
+    // Hàm hỗ trợ chèn link ảnh (Tránh lặp code)
+    private void injectImageUrls(Order entity, OrderDTO dto) {
+        if (entity.getItems() != null && dto.getItems() != null) {
+            for (int j = 0; j < entity.getItems().size(); j++) {
+                OrderItem itemEntity = entity.getItems().get(j);
+                var itemDTO = dto.getItems().get(j);
+
+                if (itemEntity.getProductVariant() != null) {
+                    ProductVariant variant = itemEntity.getProductVariant();
+                    if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) {
+                        itemDTO.setImageUrl(variant.getImageUrl());
+                    } else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) {
+                        itemDTO.setImageUrl(variant.getProduct().getImageUrl());
+                    }
+                }
+            }
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<OrderStatusHistoryDTO> getOrderHistory(Long orderId) {
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
@@ -55,7 +90,6 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
-    // 1. CẬP NHẬT TRẠNG THÁI (Giữ nguyên tên cũ)
     @Transactional
     public void updateStatus(Long id, String newStatusStr, String changer) {
         Order order = orderRepository.findById(id)
@@ -86,7 +120,6 @@ public class OrderService {
         clearRelatedCaches(order.getUser().getId(), null);
     }
 
-    // 2. HỦY ĐƠN HÀNG
     @Transactional
     public void cancelOrder(Long id, String reason, String changer) {
         Order order = orderRepository.findById(id)
@@ -106,17 +139,18 @@ public class OrderService {
         }
 
         user.setReputation(user.getReputation() - deduction);
-        List<Product> productsToUpdate = new ArrayList<>();
+
+        List<ProductVariant> variantsToUpdate = new ArrayList<>();
 
         if (order.getItems() != null && !order.getItems().isEmpty()) {
             for (OrderItem item : order.getItems()) {
-                Product product = item.getProduct();
-                if (product != null) {
-                    product.setQuantity(product.getQuantity() + item.getQuantity());
-                    productsToUpdate.add(product);
+                ProductVariant variant = item.getProductVariant();
+                if (variant != null) {
+                    variant.setQuantity(variant.getQuantity() + item.getQuantity());
+                    variantsToUpdate.add(variant);
                 }
             }
-            productRepository.saveAll(productsToUpdate);
+            productVariantRepository.saveAll(variantsToUpdate);
         }
 
         order.setCancelReason(reason);
@@ -127,10 +161,9 @@ public class OrderService {
         userRepository.save(user);
 
         saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, changer);
-        clearRelatedCaches(user.getId(), productsToUpdate);
+        clearRelatedCaches(user.getId(), variantsToUpdate);
     }
 
-    // 3. GHI LOG (Dùng chung)
     private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(order);
@@ -141,8 +174,7 @@ public class OrderService {
         historyRepository.save(history);
     }
 
-    // 4. CLEAR CACHE (Dùng chung)
-    private void clearRelatedCaches(Long userId, List<Product> updatedProducts) {
+    private void clearRelatedCaches(Long userId, List<ProductVariant> updatedVariants) {
         Cache ordersCache = cacheManager.getCache("orders");
         if (ordersCache != null) ordersCache.evict(userId);
 
@@ -152,10 +184,10 @@ public class OrderService {
         Cache userDetailCache = cacheManager.getCache("user");
         if (userDetailCache != null) userDetailCache.evict(userId);
 
-        if (updatedProducts != null && !updatedProducts.isEmpty()) {
+        if (updatedVariants != null && !updatedVariants.isEmpty()) {
             Cache productDetailCache = cacheManager.getCache("product");
             Cache productsListCache = cacheManager.getCache("products");
-            if (productDetailCache != null) updatedProducts.forEach(p -> productDetailCache.evict(p.getId()));
+            if (productDetailCache != null) updatedVariants.forEach(v -> productDetailCache.evict(v.getProduct().getId()));
             if (productsListCache != null) productsListCache.clear();
         }
     }

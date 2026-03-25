@@ -1,5 +1,6 @@
 package com.example.workflow.dto;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -16,8 +17,9 @@ public class UserCreDTO implements Serializable {
     private String gender;
     private String address;
     private String phone;
-    @JsonFormat(pattern = "dd/MM/yyyy")
     private LocalDate birth;
     private String role;
+    @JsonProperty("avatar_url")
+    private String avatarUrl;
 
 }

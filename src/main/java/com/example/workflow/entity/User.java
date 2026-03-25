@@ -1,5 +1,6 @@
 package com.example.workflow.entity;
 import com.example.workflow.nume.Role;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -41,4 +42,6 @@ public class User {
     private int reputation;
     @Column(name="isdelete")
     private boolean isDelete;
+    @Column(name = "avatar_url")
+    private String avatarUrl;
 }

@@ -26,22 +26,22 @@ import java.util.stream.Collectors;
 @Transactional
 public class CartService {
     private final CartRepository cartRepository;
-    private final ProductRepository productRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final UserRepository userRepository;
     private final CartMapper cartMapper;
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
     private final CacheManager cacheManager;
-    private final UserVoucherRepository userVoucherRepository; // REPO XỬ LÝ VOUCHER
+    private final UserVoucherRepository userVoucherRepository;
 
     @CacheEvict(value = "carts", key = "#userId")
-    public void updateQuantity(Long userId, Long productId, int newQuantity) {
+    public void updateQuantity(Long userId, Long variantId, int newQuantity) {
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Cart empty"));
         CartItem item = cart.getItems().stream()
-                .filter(i -> i.getProduct().getId().equals(productId))
+                .filter(i -> i.getProductVariant().getId().equals(variantId))
                 .findFirst()
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product not in cart"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product Variant not in cart"));
         if (newQuantity <= 0) {
             cart.getItems().remove(item);
         } else {
@@ -51,39 +51,66 @@ public class CartService {
     }
 
     @CacheEvict(value = "carts", key = "#userId")
-    public void removeFromCart(Long userId, Long productId) {
+    public void removeFromCart(Long userId, Long variantId) {
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Cart not found"));
-        cart.getItems().removeIf(item -> item.getProduct().getId().equals(productId));
+        cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
         cartRepository.save(cart);
     }
 
+    // ==============================================================
+    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh sau khi Mapper chạy xong
+    // ==============================================================
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(Long userId) {
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Giỏ hàng trống"));
-        return cartMapper.toDTO(cart);
+
+        CartResDTO dto = cartMapper.toDto(cart);
+
+        // MapStruct giữ nguyên thứ tự danh sách, ta map URL ảnh tương ứng
+        if (dto.getItems() != null && cart.getItems() != null) {
+            for (int i = 0; i < cart.getItems().size(); i++) {
+                CartItem entityItem = cart.getItems().get(i);
+                var dtoItem = dto.getItems().get(i);
+
+                if (entityItem.getProductVariant() != null) {
+                    ProductVariant variant = entityItem.getProductVariant();
+                    // Ưu tiên 1: Ảnh của biến thể
+                    if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) {
+                        dtoItem.setImageUrl(variant.getImageUrl());
+                    }
+                    // Ưu tiên 2: Ảnh của sản phẩm gốc
+                    else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) {
+                        dtoItem.setImageUrl(variant.getProduct().getImageUrl());
+                    }
+                }
+            }
+        }
+        return dto;
     }
 
     @Caching(evict = {
             @CacheEvict(value = "carts", key = "#userId"),
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "orders", key = "#userId")
+            @CacheEvict(value = "orders", key = "#userId"),
+            @CacheEvict(value = "products", allEntries = true),
+            @CacheEvict(value = "product", allEntries = true)
     })
     @Transactional
-    public Long approve_cart(Long userId, List<Long> productIdsToCheckout, Long userVoucherId) {
+    public Long approve_cart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy giỏ hàng!"));
 
-        if (productIdsToCheckout == null || productIdsToCheckout.isEmpty()) {
+        if (variantIdsToCheckout == null || variantIdsToCheckout.isEmpty()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "Vui lòng chọn ít nhất 1 sản phẩm để thanh toán.");
         }
 
         List<CartItem> itemsToCheckout = cart.getItems().stream()
-                .filter(cartItem -> productIdsToCheckout.contains(cartItem.getProduct().getId()))
+                .filter(cartItem -> variantIdsToCheckout.contains(cartItem.getProductVariant().getId()))
                 .collect(Collectors.toList());
 
         if (itemsToCheckout.isEmpty()) {
@@ -97,34 +124,25 @@ public class CartService {
         order.setItems(new ArrayList<>());
         double totalPrice = 0;
 
-        Cache productCache = cacheManager.getCache("product");
-        Cache productListCache = cacheManager.getCache("products");
-
         for (CartItem cartItem : itemsToCheckout) {
-            Product pro = cartItem.getProduct();
-            int updatedRows = productRepository.decreaseStockIfAvailable(pro.getId(), cartItem.getQuantity());
+            ProductVariant variant = cartItem.getProductVariant();
 
-            if (updatedRows == 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Sản phẩm (ID: " + pro.getId() + ") đã hết hàng hoặc không đủ số lượng!");
+            if (variant.getQuantity() < cartItem.getQuantity()) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Biến thể sản phẩm (ID: " + variant.getId() + ") đã hết hàng hoặc không đủ số lượng!");
             }
+
+            variant.setQuantity(variant.getQuantity() - cartItem.getQuantity());
 
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
-            orderItem.setProduct(pro);
+            orderItem.setProductVariant(variant);
             orderItem.setQuantity(cartItem.getQuantity());
-            orderItem.setPrice(pro.getPrice());
+            orderItem.setPrice(variant.getPrice());
 
-            totalPrice += (cartItem.getQuantity() * pro.getPrice());
+            totalPrice += (cartItem.getQuantity() * variant.getPrice());
             order.getItems().add(orderItem);
-
-            if (productCache != null) productCache.evict(pro.getId());
         }
 
-        if (productListCache != null) productListCache.clear();
-
-        // ==========================================
-        // LOGIC TÍNH TOÁN VOUCHER (BACKEND TỰ TÍNH)
-        // ==========================================
         double discountAmount = 0.0;
         UserVoucher appliedVoucher = null;
 
@@ -132,7 +150,6 @@ public class CartService {
             appliedVoucher = userVoucherRepository.findById(userVoucherId)
                     .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Mã giảm giá không tồn tại."));
 
-            // Validate Bảo Mật
             if (appliedVoucher.isUsed()) {
                 throw new AppException(HttpStatus.BAD_REQUEST, "Mã giảm giá này đã được sử dụng.");
             }
@@ -154,7 +171,6 @@ public class CartService {
                 discountAmount = appliedVoucher.getTemplate().getMaxDiscountAmount();
             }
 
-            // Đánh dấu mã đã sử dụng
             appliedVoucher.setUsed(true);
             appliedVoucher.setUsedDate(LocalDateTime.now());
             userVoucherRepository.save(appliedVoucher);
@@ -163,11 +179,12 @@ public class CartService {
         double finalPrice = totalPrice - discountAmount;
         if (finalPrice < 0) finalPrice = 0;
 
-        // LƯU KẾT QUẢ VÀO ĐƠN HÀNG
         order.setTotalPrice(totalPrice);
         order.setDiscountAmount(discountAmount);
         order.setFinalPrice(finalPrice);
         order.setUserVoucher(appliedVoucher);
+
+
 
         Order savedOrder = orderRepository.save(order);
 

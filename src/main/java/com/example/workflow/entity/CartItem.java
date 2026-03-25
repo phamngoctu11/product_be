@@ -17,9 +17,9 @@ public class CartItem {
     @ManyToOne
     @JoinColumn(name="cart_id",referencedColumnName = "id")
     private Cart cart;
-    @ManyToOne
-    @JoinColumn(name="product_id",referencedColumnName = "id")
-    private Product product;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id")
+    private ProductVariant productVariant;
     @Column(name="quantity")
     private int quantity;
     @Column(name="price")
