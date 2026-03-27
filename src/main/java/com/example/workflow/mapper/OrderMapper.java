@@ -9,5 +9,6 @@ public interface OrderMapper {
     @Mapping(source="user.id", target = "user_id")
     @Mapping(source="id", target = "id")
     @Mapping(source="userVoucher.template.name", target = "voucherName")
+    @Mapping(source="note", target = "note")
     OrderDTO toDto(Order order);
 }

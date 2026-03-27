@@ -3,5 +3,6 @@ public enum OrderStatus {
     PENDING_WAREHOUSE, // Đang xuất kho
     SHIPPING,          // Đang giao
     DELIVERED,         // Đã giao
-    CANCELLED          // Đã hủy
+    CANCELLED,
+    PENDING_PAYMENT// Đã hủy
 }

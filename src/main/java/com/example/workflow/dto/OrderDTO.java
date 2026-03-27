@@ -18,10 +18,11 @@ public class OrderDTO implements Serializable {
     private double totalPrice;
     private double discountAmount;  // Số tiền được giảm
     private double finalPrice;      // Thực trả
-
     private String voucherName;
-    LocalDateTime startOrderTime;
-    LocalDateTime endOrderTime;
-    OrderStatus status;
-    String cancelReason;
+    private LocalDateTime startOrderTime;
+    private LocalDateTime endOrderTime;
+    private OrderStatus status;
+    private String cancelReason;
+    private String paymentMethod;
+    private String note;
 }

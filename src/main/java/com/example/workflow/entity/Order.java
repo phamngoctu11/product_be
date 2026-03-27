@@ -1,12 +1,14 @@
 package com.example.workflow.entity;
 import com.example.workflow.nume.OrderStatus;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.List;
-@Data
+@Getter // Chỉ dùng Getter
+@Setter
 @Entity
 @NoArgsConstructor
 @Table(name="orders")
@@ -23,7 +25,7 @@ public class Order {
     LocalDateTime startOrderTime;
     LocalDateTime endOrderTime;
     @Enumerated(EnumType.STRING)
-    @Column(name = "status")
+    @Column(name = "status",length = 50)
     OrderStatus status;
     String cancelReason;
     @ManyToOne(fetch = FetchType.LAZY)
@@ -33,4 +35,8 @@ public class Order {
     private Double discountAmount = 0.0; // Được giảm bao nhiêu tiền?
     @Column(name = "final_price")
     private Double finalPrice = 0.0;
+    @Column(name="payment_method")
+    private String paymentMethod;
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note; // Ghi chú của khách hàng
 }

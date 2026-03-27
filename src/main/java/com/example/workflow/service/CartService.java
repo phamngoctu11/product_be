@@ -7,7 +7,6 @@ import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -99,9 +98,12 @@ public class CartService {
             @CacheEvict(value = "product", allEntries = true)
     })
     @Transactional
-    public Long approve_cart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId) {
+    public Long approve_cart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
+        if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Điểm uy tín của bạn quá thấp (< 20). Bắt buộc phải Thanh toán Online!");
+        }
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy giỏ hàng!"));
 
@@ -119,20 +121,21 @@ public class CartService {
 
         Order order = new Order();
         order.setUser(user);
+        order.setNote(note);
         order.setStartOrderTime(LocalDateTime.now());
-        order.setStatus(OrderStatus.PENDING_WAREHOUSE);
+        order.setPaymentMethod(paymentMethod); // Nhớ thêm trường này vào Entity Order
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            order.setStatus(OrderStatus.PENDING_PAYMENT); // Chờ thanh toán
+        } else {
+            order.setStatus(OrderStatus.PENDING_WAREHOUSE); // Chờ xuất kho luôn (COD)
+        }
         order.setItems(new ArrayList<>());
         double totalPrice = 0;
-
         for (CartItem cartItem : itemsToCheckout) {
             ProductVariant variant = cartItem.getProductVariant();
-
             if (variant.getQuantity() < cartItem.getQuantity()) {
                 throw new AppException(HttpStatus.BAD_REQUEST, "Biến thể sản phẩm (ID: " + variant.getId() + ") đã hết hàng hoặc không đủ số lượng!");
             }
-
-            variant.setQuantity(variant.getQuantity() - cartItem.getQuantity());
-
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
             orderItem.setProductVariant(variant);
@@ -184,14 +187,14 @@ public class CartService {
         order.setFinalPrice(finalPrice);
         order.setUserVoucher(appliedVoucher);
 
-
-
+        // Lưu Order vào DB
         Order savedOrder = orderRepository.save(order);
 
+        // Xóa khỏi giỏ hàng
         cartItemRepository.deleteAll(itemsToCheckout);
         cart.getItems().removeAll(itemsToCheckout);
         cartRepository.save(cart);
 
-        return savedOrder.getId();
+        return savedOrder.getId(); // Chỉ trả về ID để truyền cho Camunda
     }
 }
