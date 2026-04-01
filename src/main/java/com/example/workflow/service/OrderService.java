@@ -11,6 +11,7 @@ import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
+import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -63,37 +64,27 @@ public class OrderService {
             System.out.println("Giao dịch MoMo thất bại/Hủy. Mã: " + resultCode);
         }
     }
-
     @Transactional
     public void processAdminReview(Long orderId, AdminReviewRequest request, String adminName) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + orderId));
+        Order order = orderRepository.findById(orderId).orElseThrow();
 
         Task task = taskService.createTaskQuery()
                 .processVariableValueEquals("orderId", orderId)
                 .taskDefinitionKey("admin_xac_nhan")
                 .singleResult();
 
-        if (task == null) {
-            throw new RuntimeException("Đơn hàng này không ở trạng thái chờ Admin duyệt!");
-        }
+        if (task == null) throw new RuntimeException("Task không tồn tại");
 
         Map<String, Object> variables = new HashMap<>();
-        OrderStatus oldStatus = order.getStatus();
-        OrderStatus newStatus;
-
         if (request.isApproved()) {
-            newStatus = OrderStatus.SHIPPING;
-            order.setStatus(newStatus);
+            order.setStatus(OrderStatus.SHIPPING);
             variables.put("isApproved", true);
         } else {
-            newStatus = OrderStatus.CANCELLED;
-            order.setCancelReason(request.getCancelReason());
-            variables.put("isApproved", false);
+            order.setCancelReason("Admin từ chối: " + request.getCancelReason());
+            variables.put("isApproved", false); // Sẽ chạy vào CancelOrderDelegate
         }
 
         orderRepository.save(order);
-        saveAuditLog(order, oldStatus, newStatus, "Admin: " + adminName);
         taskService.complete(task.getId(), variables);
     }
 
@@ -198,25 +189,28 @@ public class OrderService {
 
     @Transactional
     public void cancelOrder(Long id, String reason, String changer) {
-        Order order = orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
-        OrderStatus oldStatus = order.getStatus();
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
 
-        // Chỉ cho phép hủy khi đang ở kho (Chờ Admin duyệt)
-        if (oldStatus != OrderStatus.PENDING_WAREHOUSE) {
-            throw new IllegalStateException("Chỉ có thể hủy đơn hàng khi đang chờ xác nhận (Đang xuất kho).");
+        // Điều kiện: Chỉ cho phép khách hủy khi đơn đang ở kho chờ xác nhận
+        if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
+            throw new IllegalStateException("Đơn hàng đã được xử lý, không thể tự hủy.");
         }
 
         User user = order.getUser();
         double totalPrice = order.getTotalPrice();
 
-        // Trừ điểm uy tín của User
+        // 1. Trừ điểm uy tín
         int deduction = (totalPrice < 1000000) ? 1 : (totalPrice <= 5000000) ? 2 : (totalPrice <= 10000000) ? 3 : 5;
-        if (user.getReputation() < deduction) throw new IllegalStateException("Điểm uy tín hiện tại của bạn không đủ để tự hủy đơn này.");
+        if (user.getReputation() < deduction) {
+            throw new IllegalStateException("Điểm uy tín của bạn không đủ để tự hủy đơn này.");
+        }
         user.setReputation(user.getReputation() - deduction);
+        userRepository.save(user);
 
-        // Trả lại số lượng tồn kho cho sản phẩm
+        // 2. Hoàn lại tồn kho
         List<ProductVariant> variantsToUpdate = new ArrayList<>();
-        if (order.getItems() != null && !order.getItems().isEmpty()) {
+        if (order.getItems() != null) {
             for (OrderItem item : order.getItems()) {
                 ProductVariant variant = item.getProductVariant();
                 if (variant != null) {
@@ -227,34 +221,37 @@ public class OrderService {
             productVariantRepository.saveAll(variantsToUpdate);
         }
 
-        // Cập nhật Database
-        order.setCancelReason(reason);
+        // 3. Hoàn lại Voucher (nếu có)
+        UserVoucher appliedVoucher = order.getUserVoucher();
+        if (appliedVoucher != null) {
+            appliedVoucher.setUsed(false);
+            appliedVoucher.setUsedDate(null);
+            // userVoucherRepository.save(appliedVoucher); // Nếu có repository thì bật lên
+        }
+
+        // 4. Lưu trạng thái CANCELLED trực tiếp vào DB
+        order.setCancelReason("Khách hàng tự hủy: " + reason);
         order.setStatus(OrderStatus.CANCELLED);
         order.setEndOrderTime(LocalDateTime.now());
-
         orderRepository.save(order);
-        userRepository.save(user);
 
-        saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, changer);
+        // 5. Lưu Audit Log và Xóa Cache (để FE cập nhật danh sách)
+        saveAuditLog(order, OrderStatus.PENDING_WAREHOUSE, OrderStatus.CANCELLED, changer);
         clearRelatedCaches(user.getId(), variantsToUpdate);
 
         // =================================================================
-        // 🚨 THÊM MỚI: ĐÁNH THỨC CAMUNDA VÀ ÉP RẼ SANG NHÁNH HỦY ĐƠN 🚨
+        // 🚨 TUYỆT KỸ: TÌM VÀ "GIẾT" LUỒNG CAMUNDA ĐANG CHẠY 🚨
         // =================================================================
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", id)
-                .taskDefinitionKey("admin_xac_nhan")
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .variableValueEquals("orderId", id)
                 .singleResult();
 
-        if (task != null) {
-            Map<String, Object> variables = new HashMap<>();
-            // Truyền false để sơ đồ tự rẽ xuống ô Huy_don_hang
-            variables.put("isApproved", false);
-            taskService.complete(task.getId(), variables);
-            System.out.println(">>> Camunda: User chủ động hủy đơn " + id + ", đã rẽ token sang nhánh Huy_don_hang (Hoàn Voucher).");
+        if (processInstance != null) {
+            // Lệnh này sẽ tiêu diệt luồng Camunda, xóa mọi Task liên quan khỏi hệ thống
+            runtimeService.deleteProcessInstance(processInstance.getId(), "Khách hàng chủ động hủy đơn");
+            System.out.println(">>> Camunda: Khách tự hủy -> Đã TIÊU DIỆT process instance của Order " + id);
         }
     }
-
     private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(order);

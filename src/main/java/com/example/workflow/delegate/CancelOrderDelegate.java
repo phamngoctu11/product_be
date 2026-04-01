@@ -1,14 +1,19 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
+import com.example.workflow.entity.OrderItem;
+import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.UserVoucher;
-import com.example.workflow.nume.OrderStatus; // Đảm bảo import đúng Enum trạng thái của bạn
+import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
 @Component("cancelOrderDelegate")
@@ -16,31 +21,44 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
+    private final ProductVariantRepository variantRepository;
+    private final CacheManager cacheManager;
 
     @Override
+    @Transactional
     public void execute(DelegateExecution execution) throws Exception {
-        // 1. Lấy orderId từ Camunda truyền sang
         Long orderId = (Long) execution.getVariable("orderId");
-
-        // 2. Tìm đơn hàng trong Database
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng ID: " + orderId));
 
-        // 3. Đổi trạng thái thành HỦY BỎ
+        // 1. Cập nhật trạng thái
         order.setStatus(OrderStatus.CANCELLED);
-        // (Nếu Status của bạn là String chứ không phải Enum thì dùng: order.setStatus("CANCELLED");)
 
-        // 4. KIỂM TRA VÀ HOÀN LẠI VOUCHER (Rất quan trọng)
+        // 2. Hoàn Tồn kho
+        if (order.getItems() != null) {
+            for (OrderItem item : order.getItems()) {
+                ProductVariant variant = item.getProductVariant();
+                if (variant != null) {
+                    variant.setQuantity(variant.getQuantity() + item.getQuantity());
+                    variantRepository.save(variant);
+                }
+            }
+        }
+
+        // 3. Hoàn Voucher
         UserVoucher appliedVoucher = order.getUserVoucher();
         if (appliedVoucher != null) {
-            appliedVoucher.setUsed(false); // Trả lại trạng thái chưa sử dụng
-            appliedVoucher.setUsedDate(null); // Xóa ngày sử dụng
+            appliedVoucher.setUsed(false);
+            appliedVoucher.setUsedDate(null);
             userVoucherRepository.save(appliedVoucher);
         }
 
-        // 5. Lưu lại đơn hàng đã hủy
         orderRepository.save(order);
 
-        System.out.println(">>> Camunda: Đơn hàng ID " + orderId + " đã bị HỦY TỰ ĐỘNG do hết hàng trong kho. Đã hoàn lại Voucher (nếu có).");
+        // 4. Xóa cache để Admin thấy danh sách được cập nhật
+        if (cacheManager.getCache("orders") != null) {
+            cacheManager.getCache("orders").evict(order.getUser().getId());
+        }
+        System.out.println(">>> Camunda: ADMIN từ chối -> Đã dọn dẹp kho & voucher cho Order " + orderId);
     }
 }

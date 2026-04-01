@@ -44,18 +44,13 @@ public class OrderController {
         return ResponseEntity.ok(history);
     }
 
-    // Hủy đơn hàng (Khách hàng tự hủy)
     @PutMapping("/{order_id}/cancel")
-    public ResponseEntity<String> cancelOrder(
-            @PathVariable("order_id") Long order_id,
-            @RequestParam("reason") String reason) {
+    public ResponseEntity<String> cancelOrder(@PathVariable("order_id") Long order_id, @RequestParam("reason") String reason) {
         try {
-            orderService.cancelOrder(order_id, reason, "USER");
-            return ResponseEntity.ok("Hủy đơn hàng thành công!");
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            orderService.cancelOrder(order_id, reason, "CUSTOMER");
+            return ResponseEntity.ok("Bạn đã hủy đơn hàng thành công.");
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Lỗi hệ thống: " + e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
@@ -95,21 +90,15 @@ public class OrderController {
 
     // Admin Duyệt / Từ chối đơn hàng (User Task Camunda)
     @PostMapping("/admin/review-order/{orderId}")
-    public ResponseEntity<?> reviewOrder(
-            @PathVariable Long orderId,
-            @RequestBody AdminReviewRequest request) {
+    public ResponseEntity<?> reviewOrder(@PathVariable Long orderId, @RequestBody AdminReviewRequest request) {
         try {
+            // Lấy changerName từ Body DTO để tránh lỗi Required parameter not present
             orderService.processAdminReview(orderId, request, request.getChanger());
-
-            String message = request.isApproved() ? "Đã duyệt đơn hàng thành công, chuẩn bị giao!" : "Đã từ chối đơn hàng!";
-            return ResponseEntity.ok(message);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.ok("Thao tác thành công!");
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Lỗi hệ thống: " + e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-
     // Cập nhật trạng thái thông thường (Dành cho Admin nếu cần ghi đè)
     @PutMapping("/{order_id}/status")
     public ResponseEntity<String> updateStatus(
