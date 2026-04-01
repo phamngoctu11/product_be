@@ -14,10 +14,11 @@ import java.util.List;
 public class OrderDTO implements Serializable {
     private Long id;
     private Long user_id;
+    private String lastname;
     private List<OrderItemDTO> items;
     private double totalPrice;
-    private double discountAmount;  // Số tiền được giảm
-    private double finalPrice;      // Thực trả
+    private double discountAmount;
+    private double finalPrice;
     private String voucherName;
     private LocalDateTime startOrderTime;
     private LocalDateTime endOrderTime;

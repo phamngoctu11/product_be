@@ -5,7 +5,6 @@ import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,27 +19,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
-    private final RuntimeService runtimeService;
 
     @PostMapping()
     public ResponseEntity<Map<String, String>> register(@RequestBody UserCreDTO dto) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("username", dto.getUsername());
-        variables.put("password", dto.getPassword());
-        variables.put("firstname", dto.getFirstname());
-        variables.put("lastname", dto.getLastname());
-        variables.put("gender", dto.getGender());
-        variables.put("address", dto.getAddress());
-        variables.put("role", dto.getRole());
-        variables.put("birth", dto.getBirth());
-        variables.put("phone", dto.getPhone());
-        runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
+        userService.startUserRegistrationProcess(dto); // Gọi Service làm việc
         Map<String, String> response = new HashMap<>();
         response.put("message", "Quy trình tạo User đã bắt đầu!");
         return ResponseEntity.ok(response);
     }
 
-    // SỬA Ở ĐÂY: Thêm RequestParam và trả về Page
     @GetMapping
     public ResponseEntity<Page<UserListDTO>> getAll(
             @RequestParam(defaultValue = "0") int page,

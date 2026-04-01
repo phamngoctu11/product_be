@@ -1,20 +1,17 @@
 package com.example.workflow.service;
 
+import com.example.workflow.dto.AdminReviewRequest; // Nhớ tạo DTO này như bài trước
 import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
-import com.example.workflow.entity.Order;
-import com.example.workflow.entity.OrderItem;
-import com.example.workflow.entity.OrderStatusHistory;
-import com.example.workflow.entity.ProductVariant;
-import com.example.workflow.entity.User;
+import com.example.workflow.entity.*;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
-import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.OrderStatusHistoryRepository;
-import com.example.workflow.repository.ProductVariantRepository;
-import com.example.workflow.repository.UserRepository;
+import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.camunda.bpm.engine.RuntimeService;
+import org.camunda.bpm.engine.TaskService;
+import org.camunda.bpm.engine.task.Task;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
@@ -23,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,25 +36,111 @@ public class OrderService {
     private final CacheManager cacheManager;
     private final OrderStatusHistoryMapper historyMapper;
 
-    // ==============================================================
-    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh cho danh sách đơn hàng
-    // ==============================================================
+    // TIÊM CAMUNDA VÀO
+    private final TaskService taskService;
+    private final RuntimeService runtimeService;
+
+    // ==========================================
+    // CÁC HÀM XỬ LÝ QUY TRÌNH (USER TASKS & IPN)
+    // ==========================================
+
+    @Transactional
+    public void processMomoCallbackResult(Long orderId, String resultCode) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + orderId));
+
+        if ("0".equals(resultCode)) {
+            try {
+                runtimeService.createMessageCorrelation("Msg_PaymentSuccess")
+                        .processInstanceVariableEquals("orderId", orderId)
+                        .correlate();
+            } catch (Exception e) {
+                System.out.println("Cảnh báo: Không tìm thấy luồng Camunda đang chờ cho Order " + orderId);
+            }
+            order.setStatus(OrderStatus.PENDING_WAREHOUSE);
+            orderRepository.save(order);
+        } else {
+            System.out.println("Giao dịch MoMo thất bại/Hủy. Mã: " + resultCode);
+        }
+    }
+
+    @Transactional
+    public void processAdminReview(Long orderId, AdminReviewRequest request, String adminName) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + orderId));
+
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("admin_xac_nhan")
+                .singleResult();
+
+        if (task == null) {
+            throw new RuntimeException("Đơn hàng này không ở trạng thái chờ Admin duyệt!");
+        }
+
+        Map<String, Object> variables = new HashMap<>();
+        OrderStatus oldStatus = order.getStatus();
+        OrderStatus newStatus;
+
+        if (request.isApproved()) {
+            newStatus = OrderStatus.SHIPPING;
+            order.setStatus(newStatus);
+            variables.put("isApproved", true);
+        } else {
+            newStatus = OrderStatus.CANCELLED;
+            order.setCancelReason(request.getCancelReason());
+            variables.put("isApproved", false);
+        }
+
+        orderRepository.save(order);
+        saveAuditLog(order, oldStatus, newStatus, "Admin: " + adminName);
+        taskService.complete(task.getId(), variables);
+    }
+
+    @Transactional
+    public void confirmCustomerReceipt(Long orderId, String username) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + orderId));
+
+        if (order.getStatus() != OrderStatus.SHIPPING) {
+            throw new RuntimeException("Đơn hàng chưa được giao, không thể xác nhận!");
+        }
+
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("khach_nhan_h_ang")
+                .singleResult();
+
+        if (task != null) {
+            taskService.complete(task.getId());
+        }
+
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setEndOrderTime(LocalDateTime.now());
+
+        // Cộng uy tín
+        User user = order.getUser();
+        user.setReputation(user.getReputation() + 2);
+        userRepository.save(user);
+
+        orderRepository.save(order);
+        saveAuditLog(order, oldStatus, OrderStatus.DELIVERED, username);
+    }
+
+
+    // ==========================================
+    // CÁC HÀM GET & UPDATE CŨ GIỮ NGUYÊN
+    // ==========================================
+
     @Cacheable(value = "orders", key = "#user_id")
     public List<OrderDTO> getOrdersByUserId(Long user_id) {
         List<Order> orders = orderRepository.getOrdersByUserId(user_id);
-        List<OrderDTO> dtos = orders.stream()
-                .map(orderMapper::toDto)
-                .collect(Collectors.toList());
-
-        for (int i = 0; i < orders.size(); i++) {
-            injectImageUrls(orders.get(i), dtos.get(i));
-        }
+        List<OrderDTO> dtos = orders.stream().map(orderMapper::toDto).collect(Collectors.toList());
+        for (int i = 0; i < orders.size(); i++) injectImageUrls(orders.get(i), dtos.get(i));
         return dtos;
     }
 
-    // ==============================================================
-    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh cho 1 đơn hàng cụ thể
-    // ==============================================================
     public OrderDTO getOrderById(Long id) {
         Order order = orderRepository.getOrdersById(id);
         OrderDTO dto = orderMapper.toDto(order);
@@ -63,7 +148,6 @@ public class OrderService {
         return dto;
     }
 
-    // Hàm hỗ trợ chèn link ảnh (Tránh lặp code)
     private void injectImageUrls(Order entity, OrderDTO dto) {
         if (entity.getItems() != null && dto.getItems() != null) {
             for (int j = 0; j < entity.getItems().size(); j++) {
@@ -85,27 +169,19 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderStatusHistoryDTO> getOrderHistory(Long orderId) {
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
-                .stream()
-                .map(historyMapper::toDto)
-                .collect(Collectors.toList());
+                .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }
 
     @Transactional
     public void updateStatus(Long id, String newStatusStr, String changer) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
+        Order order = orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
         OrderStatus oldStatus = order.getStatus();
         OrderStatus newStatus;
 
-        try {
-            newStatus = OrderStatus.valueOf(newStatusStr.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Trạng thái mới không hợp lệ: " + newStatusStr);
-        }
+        try { newStatus = OrderStatus.valueOf(newStatusStr.toUpperCase()); }
+        catch (IllegalArgumentException e) { throw new IllegalArgumentException("Trạng thái mới không hợp lệ: " + newStatusStr); }
 
-        if (newStatus == OrderStatus.CANCELLED) {
-            throw new IllegalStateException("Vui lòng dùng API hủy đơn riêng biệt để hủy đơn hàng.");
-        }
+        if (newStatus == OrderStatus.CANCELLED) throw new IllegalStateException("Vui lòng dùng API hủy đơn riêng biệt để hủy đơn hàng.");
 
         if (newStatus == OrderStatus.DELIVERED) {
             User user = order.getUser();
@@ -122,26 +198,24 @@ public class OrderService {
 
     @Transactional
     public void cancelOrder(Long id, String reason, String changer) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
+        Order order = orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
         OrderStatus oldStatus = order.getStatus();
 
+        // Chỉ cho phép hủy khi đang ở kho (Chờ Admin duyệt)
         if (oldStatus != OrderStatus.PENDING_WAREHOUSE) {
-            throw new IllegalStateException("Chỉ có thể hủy đơn hàng khi đang ở trạng thái Đang xuất kho.");
+            throw new IllegalStateException("Chỉ có thể hủy đơn hàng khi đang chờ xác nhận (Đang xuất kho).");
         }
 
         User user = order.getUser();
         double totalPrice = order.getTotalPrice();
+
+        // Trừ điểm uy tín của User
         int deduction = (totalPrice < 1000000) ? 1 : (totalPrice <= 5000000) ? 2 : (totalPrice <= 10000000) ? 3 : 5;
-
-        if (user.getReputation() < deduction) {
-            throw new IllegalStateException("Điểm uy tín hiện tại của bạn không đủ để tự hủy đơn này.");
-        }
-
+        if (user.getReputation() < deduction) throw new IllegalStateException("Điểm uy tín hiện tại của bạn không đủ để tự hủy đơn này.");
         user.setReputation(user.getReputation() - deduction);
 
+        // Trả lại số lượng tồn kho cho sản phẩm
         List<ProductVariant> variantsToUpdate = new ArrayList<>();
-
         if (order.getItems() != null && !order.getItems().isEmpty()) {
             for (OrderItem item : order.getItems()) {
                 ProductVariant variant = item.getProductVariant();
@@ -153,6 +227,7 @@ public class OrderService {
             productVariantRepository.saveAll(variantsToUpdate);
         }
 
+        // Cập nhật Database
         order.setCancelReason(reason);
         order.setStatus(OrderStatus.CANCELLED);
         order.setEndOrderTime(LocalDateTime.now());
@@ -162,6 +237,22 @@ public class OrderService {
 
         saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, changer);
         clearRelatedCaches(user.getId(), variantsToUpdate);
+
+        // =================================================================
+        // 🚨 THÊM MỚI: ĐÁNH THỨC CAMUNDA VÀ ÉP RẼ SANG NHÁNH HỦY ĐƠN 🚨
+        // =================================================================
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", id)
+                .taskDefinitionKey("admin_xac_nhan")
+                .singleResult();
+
+        if (task != null) {
+            Map<String, Object> variables = new HashMap<>();
+            // Truyền false để sơ đồ tự rẽ xuống ô Huy_don_hang
+            variables.put("isApproved", false);
+            taskService.complete(task.getId(), variables);
+            System.out.println(">>> Camunda: User chủ động hủy đơn " + id + ", đã rẽ token sang nhánh Huy_don_hang (Hoàn Voucher).");
+        }
     }
 
     private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
@@ -177,10 +268,8 @@ public class OrderService {
     private void clearRelatedCaches(Long userId, List<ProductVariant> updatedVariants) {
         Cache ordersCache = cacheManager.getCache("orders");
         if (ordersCache != null) ordersCache.evict(userId);
-
         Cache usersCache = cacheManager.getCache("users");
         if (usersCache != null) usersCache.clear();
-
         Cache userDetailCache = cacheManager.getCache("user");
         if (userDetailCache != null) userDetailCache.evict(userId);
 

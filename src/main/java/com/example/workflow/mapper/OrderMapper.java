@@ -6,6 +6,7 @@ import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring", uses = {OrderItemMapper.class})
 public interface OrderMapper {
+    @Mapping(source="user.lastname", target = "lastname")
     @Mapping(source="user.id", target = "user_id")
     @Mapping(source="id", target = "id")
     @Mapping(source="userVoucher.template.name", target = "voucherName")

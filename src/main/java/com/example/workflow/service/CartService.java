@@ -7,6 +7,7 @@ import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -17,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +35,19 @@ public class CartService {
     private final CartItemRepository cartItemRepository;
     private final CacheManager cacheManager;
     private final UserVoucherRepository userVoucherRepository;
+
+    // TIÊM THÊM 2 SERVICE NÀY VÀO ĐỂ LÀM ORCHESTRATOR
+    private final RuntimeService runtimeService;
+    private final MomoService momoService;
+
+    // LOGIC CAMUNDA THÊM GIỎ HÀNG
+    public void startAddToCartProcess(Long userId, Long variantId, int quantity) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("userId", userId);
+        variables.put("variantId", variantId);
+        variables.put("quantity", quantity);
+        runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
+    }
 
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(Long userId, Long variantId, int newQuantity) {
@@ -57,9 +73,6 @@ public class CartService {
         cartRepository.save(cart);
     }
 
-    // ==============================================================
-    // ĐÃ SỬA: Lồng ghép logic lấy URL ảnh sau khi Mapper chạy xong
-    // ==============================================================
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(Long userId) {
@@ -68,7 +81,6 @@ public class CartService {
 
         CartResDTO dto = cartMapper.toDto(cart);
 
-        // MapStruct giữ nguyên thứ tự danh sách, ta map URL ảnh tương ứng
         if (dto.getItems() != null && cart.getItems() != null) {
             for (int i = 0; i < cart.getItems().size(); i++) {
                 CartItem entityItem = cart.getItems().get(i);
@@ -76,11 +88,9 @@ public class CartService {
 
                 if (entityItem.getProductVariant() != null) {
                     ProductVariant variant = entityItem.getProductVariant();
-                    // Ưu tiên 1: Ảnh của biến thể
                     if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) {
                         dtoItem.setImageUrl(variant.getImageUrl());
                     }
-                    // Ưu tiên 2: Ảnh của sản phẩm gốc
                     else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) {
                         dtoItem.setImageUrl(variant.getProduct().getImageUrl());
                     }
@@ -90,6 +100,9 @@ public class CartService {
         return dto;
     }
 
+    // ==============================================================================
+    // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
+    // ==============================================================================
     @Caching(evict = {
             @CacheEvict(value = "carts", key = "#userId"),
             @CacheEvict(value = "users", allEntries = true),
@@ -97,8 +110,37 @@ public class CartService {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
-    @Transactional
-    public Long approve_cart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
+    @Transactional(rollbackFor = Exception.class) // Đảm bảo lỗi ở bất kỳ bước nào cũng rollback DB
+    public Map<String, String> processCheckoutOrchestrator(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) throws Exception {
+
+        // BƯỚC 1: Lưu Order vào DB
+        Long orderId = this.approve_cart_internal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
+        Order savedOrder = orderRepository.findById(orderId).orElseThrow();
+
+        // BƯỚC 2: Kích hoạt luồng Camunda
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("orderId", orderId);
+        variables.put("userId", userId);
+        variables.put("paymentMethod", paymentMethod);
+        variables.put("note", note);
+        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
+
+        // BƯỚC 3: Phân nhánh kết quả trả về
+        Map<String, String> response = new HashMap<>();
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
+            response.put("status", "REDIRECT");
+            response.put("url", momoPayUrl);
+            response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
+        } else {
+            response.put("status", "SUCCESS");
+            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
+        }
+        return response;
+    }
+
+    // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
+    private Long approve_cart_internal(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
         if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
@@ -123,11 +165,11 @@ public class CartService {
         order.setUser(user);
         order.setNote(note);
         order.setStartOrderTime(LocalDateTime.now());
-        order.setPaymentMethod(paymentMethod); // Nhớ thêm trường này vào Entity Order
+        order.setPaymentMethod(paymentMethod);
         if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-            order.setStatus(OrderStatus.PENDING_PAYMENT); // Chờ thanh toán
+            order.setStatus(OrderStatus.PENDING_PAYMENT);
         } else {
-            order.setStatus(OrderStatus.PENDING_WAREHOUSE); // Chờ xuất kho luôn (COD)
+            order.setStatus(OrderStatus.PENDING_WAREHOUSE);
         }
         order.setItems(new ArrayList<>());
         double totalPrice = 0;
@@ -187,14 +229,12 @@ public class CartService {
         order.setFinalPrice(finalPrice);
         order.setUserVoucher(appliedVoucher);
 
-        // Lưu Order vào DB
         Order savedOrder = orderRepository.save(order);
 
-        // Xóa khỏi giỏ hàng
         cartItemRepository.deleteAll(itemsToCheckout);
         cart.getItems().removeAll(itemsToCheckout);
         cartRepository.save(cart);
 
-        return savedOrder.getId(); // Chỉ trả về ID để truyền cho Camunda
+        return savedOrder.getId();
     }
 }

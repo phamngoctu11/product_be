@@ -1,6 +1,8 @@
 package com.example.workflow.repository;
 
+import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.entity.Order;
+import com.example.workflow.nume.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Repository;
@@ -10,4 +12,5 @@ import java.util.List;
 public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> getOrdersByUserId(Long user_id);
     Order getOrdersById(Long id);
+    List<Order>findByStatus(OrderStatus status);
 }

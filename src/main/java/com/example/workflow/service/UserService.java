@@ -8,6 +8,7 @@ import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -17,12 +18,31 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final RuntimeService runtimeService;
+
+    // CHUYỂN LOGIC TỪ CONTROLLER XUỐNG ĐÂY
+    public void startUserRegistrationProcess(UserCreDTO dto) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("username", dto.getUsername());
+        variables.put("password", dto.getPassword());
+        variables.put("firstname", dto.getFirstname());
+        variables.put("lastname", dto.getLastname());
+        variables.put("gender", dto.getGender());
+        variables.put("address", dto.getAddress());
+        variables.put("role", dto.getRole());
+        variables.put("birth", dto.getBirth());
+        variables.put("phone", dto.getPhone());
+        runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
+    }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "users", key = "'list-' + #pageable.pageNumber + '-' + #pageable.pageSize")
