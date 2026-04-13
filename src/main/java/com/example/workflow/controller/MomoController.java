@@ -12,7 +12,7 @@ import java.util.Map;
 public class MomoController {
 
     private final MomoService momoService;
-    private final OrderService orderService; // Tiêm OrderService vào
+    private final OrderService orderService; // Gọi OrderService để xử lý chung
 
     public MomoController(MomoService momoService, OrderService orderService) {
         this.momoService = momoService;
@@ -24,11 +24,9 @@ public class MomoController {
         try {
             String orderId = payload.get("orderId").toString();
             long amount = Long.parseLong(payload.get("amount").toString());
-
             String payUrl = momoService.createPayment(orderId, amount);
             return ResponseEntity.ok(Map.of("payUrl", payUrl));
         } catch (Exception e) {
-            e.printStackTrace();
             return ResponseEntity.status(500).body("Lỗi: " + e.getMessage());
         }
     }
@@ -37,25 +35,19 @@ public class MomoController {
     public ResponseEntity<?> momoCallback(@RequestParam Map<String, String> allParams) {
         try {
             boolean isValid = momoService.verifySignature(allParams);
-            if (!isValid) {
-                System.out.println("CẢNH BÁO: Chữ ký IPN từ MoMo không hợp lệ!");
-                return ResponseEntity.badRequest().body("Chữ ký MoMo không hợp lệ!");
-            }
+            if (!isValid) return ResponseEntity.badRequest().body("Chữ ký MoMo không hợp lệ!");
 
-            // Cắt đuôi timestamp
             String rawOrderId = allParams.get("orderId");
             Long orderId = Long.parseLong(rawOrderId.split("_")[0]);
             String resultCode = allParams.get("resultCode");
 
-            // Đẩy nghiệp vụ qua OrderService xử lý
+            // Đẩy sang OrderService xử lý Camunda và Bắn thông báo
             orderService.processMomoCallbackResult(orderId, resultCode);
 
-            // Báo cho MoMo biết đã nhận kết quả thành công
             return ResponseEntity.noContent().build();
-
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(500).body("Lỗi Server khi xử lý Webhook MoMo: " + e.getMessage());
+            return ResponseEntity.status(500).body("Lỗi Server: " + e.getMessage());
         }
     }
 }

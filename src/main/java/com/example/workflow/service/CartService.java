@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.CartResDTO;
+import com.example.workflow.dto.NotificationMessage;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.CartMapper;
@@ -13,6 +14,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,7 @@ public class CartService {
     // TIÊM THÊM 2 SERVICE NÀY VÀO ĐỂ LÀM ORCHESTRATOR
     private final RuntimeService runtimeService;
     private final MomoService momoService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // LOGIC CAMUNDA THÊM GIỎ HÀNG
     public void startAddToCartProcess(Long userId, Long variantId, int quantity) {
@@ -110,37 +113,8 @@ public class CartService {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
-    @Transactional(rollbackFor = Exception.class) // Đảm bảo lỗi ở bất kỳ bước nào cũng rollback DB
-    public Map<String, String> processCheckoutOrchestrator(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) throws Exception {
-
-        // BƯỚC 1: Lưu Order vào DB
-        Long orderId = this.approve_cart_internal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
-        Order savedOrder = orderRepository.findById(orderId).orElseThrow();
-
-        // BƯỚC 2: Kích hoạt luồng Camunda
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("orderId", orderId);
-        variables.put("userId", userId);
-        variables.put("paymentMethod", paymentMethod);
-        variables.put("note", note);
-        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
-
-        // BƯỚC 3: Phân nhánh kết quả trả về
-        Map<String, String> response = new HashMap<>();
-        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-            String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
-            response.put("status", "REDIRECT");
-            response.put("url", momoPayUrl);
-            response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
-        } else {
-            response.put("status", "SUCCESS");
-            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
-        }
-        return response;
-    }
-
     // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
-    private Long approve_cart_internal(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
+    public Long approve_cart_internal(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
         if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
@@ -236,5 +210,39 @@ public class CartService {
         cartRepository.save(cart);
 
         return savedOrder.getId();
+    }
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, String> processCheckoutOrchestrator(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) throws Exception {
+
+        Long orderId = this.approve_cart_internal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
+        Order savedOrder = orderRepository.findById(orderId).orElseThrow();
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("orderId", orderId);
+        variables.put("userId", userId);
+        variables.put("paymentMethod", paymentMethod);
+        variables.put("note", note);
+        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
+
+        Map<String, String> response = new HashMap<>();
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
+            response.put("status", "REDIRECT");
+            response.put("url", momoPayUrl);
+            response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
+        } else {
+            response.put("status", "SUCCESS");
+            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
+
+            // ==============================================================
+            // 🚨 BẮN THÔNG BÁO REAL-TIME CHO ADMIN KHI CÓ ĐƠN COD MỚI
+            // ==============================================================
+            NotificationMessage msg = new NotificationMessage(
+                    "Đơn hàng mới!",
+                    "Có một đơn hàng COD mới (Mã #" + orderId + ") đang chờ duyệt.",
+                    orderId);
+            messagingTemplate.convertAndSend("/topic/admin-notifications", msg);
+        }
+        return response;
     }
 }

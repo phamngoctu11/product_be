@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -76,10 +77,9 @@ public class ProductService {
         if (dto.getVariants() != null) {
             List<Long> incomingVariantIds = dto.getVariants().stream()
                     .map(ProductVariantDTO::getId)
-                    .filter(vId -> vId != null)
-                    .collect(Collectors.toList());
+                    .filter(Objects::nonNull)
+                    .toList();
 
-            // A. XÓA các biến thể không còn trong danh sách gửi lên
             existingProduct.getVariants().removeIf(v -> v.getId() != null && !incomingVariantIds.contains(v.getId()));
 
             // B. DUYỆT ĐỂ THÊM/SỬA
