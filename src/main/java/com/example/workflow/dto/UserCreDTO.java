@@ -21,5 +21,6 @@ public class UserCreDTO implements Serializable {
     private String role;
     @JsonProperty("avatar_url")
     private String avatarUrl;
+    private String email;
 
 }

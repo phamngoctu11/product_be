@@ -3,6 +3,17 @@ server:
 spring:
   application:
     name: my-workflow-app
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: tux2k4@gmail.com
+    password: "urdv fjdw fpzn chol"
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   datasource:
     url: jdbc:mysql://103.149.170.20:3306/db_A46764
     username: A46764

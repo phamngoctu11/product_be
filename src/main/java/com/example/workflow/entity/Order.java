@@ -39,4 +39,6 @@ public class Order {
     private String paymentMethod;
     @Column(name = "note", columnDefinition = "TEXT")
     private String note; // Ghi chú của khách hàng
+    @Column(name="email")
+    private String email;
 }

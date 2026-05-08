@@ -9,6 +9,7 @@ import com.example.workflow.repository.NotificationRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.CartService;
+import com.example.workflow.service.EmailService;
 import com.example.workflow.service.MomoService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
@@ -34,6 +35,7 @@ public class CartController {
     // Tiêm thêm 2 service này để lấy tên và gửi thông báo
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final EmailService emailService;
 
     @PostMapping("/add")
     public ResponseEntity<String> addToCart(@RequestParam("userId") Long userId, @RequestParam("variantId") Long variantId, @RequestParam("quantity") int quantity) {
@@ -71,9 +73,14 @@ public class CartController {
             @RequestParam(value = "note", required = false) String note) {
 
         try {
-            Long orderId = cartService.approve_cart_internal(userId, productIdsToCheckout, userVoucherId, paymentMethod, note );
-            User user = userRepository.findById(userId).orElseThrow();
+            Long orderId = cartService.approve_cart_internal(userId, productIdsToCheckout, userVoucherId, paymentMethod, note);
 
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy User"));
+            Order savedOrder = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy Order"));
+
+            // 3. Khởi chạy quy trình Camunda
             Map<String, Object> variables = new HashMap<>();
             variables.put("orderId", orderId);
             variables.put("userId", userId);
@@ -81,28 +88,55 @@ public class CartController {
             variables.put("note", note);
             runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
 
+            // ==========================================
+            // 4A. NẾU LÀ THANH TOÁN ONLINE (MOMO)
+            // ==========================================
             if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-                Order savedOrder = orderRepository.findById(orderId).orElseThrow();
                 String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
-                return ResponseEntity.ok(Map.of("status", "REDIRECT", "url", momoPayUrl, "message", "Vui lòng thanh toán qua MoMo để hoàn tất."));
+
+                Map<String, String> response = new HashMap<>();
+                response.put("status", "REDIRECT");
+                response.put("url", momoPayUrl);
+                response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
+                return ResponseEntity.ok(response);
             }
 
-            // NẾU LÀ COD -> LƯU VÀO DB VÀ BẮN THÔNG BÁO TÁCH BIỆT
-            // 1. Báo cho Admin (Lưu targetUserId = null)
+            // ==========================================
+            // 4B. NẾU LÀ THANH TOÁN COD
+            // ==========================================
+
+            // Bước 1: Lưu DB và bắn WebSocket báo Admin
             saveAndSendNotification(
                     "Đơn hàng mới từ " + user.getLastname(),
                     "Khách hàng " + user.getLastname() + " vừa tạo đơn hàng COD (Mã #" + orderId + ").",
                     orderId, null, "/topic/admin-notifications"
             );
 
-            // 2. Báo cho User (Lưu targetUserId = userId)
+            // Bước 2: Lưu DB và bắn WebSocket báo Khách hàng
             saveAndSendNotification(
                     "Đặt hàng thành công! 🎉",
                     "Đơn hàng #" + orderId + " của bạn đang chờ Admin duyệt. Bạn có thể hủy đơn nếu muốn.",
                     orderId, userId, "/topic/user-notifications/" + userId
             );
 
-            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Tạo đơn COD thành công! Đang chờ xuất kho."));
+            // Bước 3: Gửi Hóa Đơn Email Tự Động (Bọc trong Thread để chạy nền)
+            if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+                new Thread(() -> {
+                    emailService.sendOrderConfirmationEmail(
+                            user.getEmail(),
+                            user.getLastname(),
+                            orderId,
+                            savedOrder.getTotalPrice(),
+                            "Thanh toán khi nhận hàng (COD)"
+                    );
+                }).start();
+            }
+
+            // Bước 4: Trả kết quả thành công cho Frontend
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "SUCCESS");
+            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             e.printStackTrace();

@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/camunda/**").permitAll()
+                        .requestMatchers("/api/chat/users").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

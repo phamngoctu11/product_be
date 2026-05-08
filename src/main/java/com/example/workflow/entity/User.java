@@ -44,4 +44,6 @@ public class User {
     private boolean isDelete;
     @Column(name = "avatar_url")
     private String avatarUrl;
+    @Column(name="email")
+    private String email;
 }

@@ -41,6 +41,7 @@ public class UserService {
         variables.put("role", dto.getRole());
         variables.put("birth", dto.getBirth());
         variables.put("phone", dto.getPhone());
+        variables.put("email",dto.getEmail());
         runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
     }
 

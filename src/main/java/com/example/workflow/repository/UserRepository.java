@@ -16,4 +16,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsernameAndIsDeleteFalse(String username);
     @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role,u.avatarUrl) FROM User u where u.isDelete = false")
     Page<UserListDTO> findAllCustom(Pageable pageable);
+
+    boolean existsByEmail(String email);
 }

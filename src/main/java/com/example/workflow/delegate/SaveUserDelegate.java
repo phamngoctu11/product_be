@@ -41,6 +41,7 @@ public class SaveUserDelegate implements JavaDelegate {
         String address = (String) execution.getVariable("address");
         String avatar = (String) execution.getVariable("avatarUrl");
         String roleStr = (String) execution.getVariable("role");
+        String email = (String) execution.getVariable("email");
         User user = new User();
         user.setUsername(username);
         user.setFirstname(firstname);
@@ -49,6 +50,7 @@ public class SaveUserDelegate implements JavaDelegate {
         user.setAddress(address);
         user.setPhone(phone);
         user.setBirth(birth);
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
         Role role;
         try {

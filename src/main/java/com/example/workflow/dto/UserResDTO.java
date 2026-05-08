@@ -20,4 +20,5 @@ public class UserResDTO implements Serializable {
     private boolean isDelete;
     @JsonProperty("avatar_url")
     private String avatarUrl;
+    private String email;
 }

@@ -42,6 +42,7 @@ public class OrderService {
     private final RuntimeService runtimeService;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationRepository notificationRepository;
+    private final EmailService emailService;
 
     @Transactional
     public void processMomoCallbackResult(Long orderId, String resultCode) {
@@ -99,6 +100,16 @@ public class OrderService {
                     "Đơn hàng bị hủy ❌",
                     "Đơn hàng #" + orderId + " của bạn đã bị từ chối bởi Admin " + adminName + ". Lý do: " + request.getCancelReason(),
                     orderId, customerId, "/topic/user-notifications/" + customerId);
+            if (order.getUser().getEmail() != null && !order.getUser().getEmail().trim().isEmpty()) {
+                new Thread(() -> {
+                    emailService.sendOrderCancellationEmail(
+                            order.getUser().getEmail(),
+                            order.getUser().getLastname(),
+                            orderId,
+                            "Admin từ chối: " + request.getCancelReason()
+                    );
+                }).start();
+            }
         }
 
         orderRepository.save(order);
@@ -172,6 +183,21 @@ public class OrderService {
                 "Hủy đơn thành công",
                 "Bạn đã hủy đơn hàng #" + id + " thành công.",
                 id, user.getId(), "/topic/user-notifications/" + user.getId());
+        saveAndSendNotification("Hủy đơn thành công", "Bạn đã hủy đơn hàng #" + id + " thành công.", id, user.getId(), "/topic/user-notifications/" + user.getId());
+
+        // ==============================================================
+        // 🚨 THÊM MỚI: BẮN EMAIL KHI KHÁCH TỰ HỦY
+        // ==============================================================
+        if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+            new Thread(() -> {
+                emailService.sendOrderCancellationEmail(
+                        user.getEmail(),
+                        user.getLastname(),
+                        id,
+                        "Khách hàng chủ động hủy: " + reason
+                );
+            }).start();
+        }
     }
 
     // Các hàm phụ trợ giữ nguyên
