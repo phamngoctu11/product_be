@@ -8,6 +8,7 @@ import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -47,20 +48,35 @@ public class ChatController {
                         user.getFirstname(),
                         user.getLastname(),
                         user.getEmail(),
-                        user.getAvatarUrl() // Đảm bảo Entity User của bạn có hàm getImage() nhé
+                        user.getAvatarUrl(), // Đảm bảo Entity User của bạn có hàm getImage() nhé,
+                        user.getIsActive() != null ? user.getIsActive() : false
                 ))
                 .collect(Collectors.toList());
 
         // Trả về danh sách an toàn, siêu nhẹ cho Frontend
         return ResponseEntity.ok(safeUsers);
     }
+    // 🚨 Sửa hàm hứng tin nhắn gửi lên từ Frontend
     @MessageMapping("/chat.send")
-    public void processMessage(ChatMessage message) {
-        message.setTimestamp(LocalDateTime.now());
-        ChatMessage savedMessage = chatMessageRepository.save(message);
+    public void processMessage(@Payload ChatMessage chatMessage) {
+        // 1. Kiểm tra an toàn: Nếu không có loại tin nhắn thì mặc định là TEXT
+        if (chatMessage.getMessageType() == null) {
+            chatMessage.setMessageType("TEXT");
+        }
 
-        messagingTemplate.convertAndSend("/topic/chat/user/" + message.getUserId(), savedMessage);
+        // 2. Gán thời gian gửi
+        chatMessage.setTimestamp(LocalDateTime.now());
 
-        messagingTemplate.convertAndSend("/topic/chat/admin", savedMessage);
+        // 3. Lưu vào Database (Lúc này Hibernate sẽ lưu cả messageType và productId)
+        ChatMessage savedMessage = chatMessageRepository.save(chatMessage);
+
+        // 4. Phân luồng gửi đi
+        if (savedMessage.isAdminSender()) {
+            // Nếu Admin gửi -> Bắn về kênh riêng của Khách hàng đó
+            messagingTemplate.convertAndSend("/topic/chat/user/" + savedMessage.getUserId(), savedMessage);
+        } else {
+            // Nếu Khách hàng gửi -> Bắn lên kênh chung cho Admin thấy
+            messagingTemplate.convertAndSend("/topic/chat/admin", savedMessage);
+        }
     }
 }

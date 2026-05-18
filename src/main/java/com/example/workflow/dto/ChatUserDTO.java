@@ -13,4 +13,5 @@ public class ChatUserDTO {
     private String lastname;
     private String email;
     private String avatarUrl; // Đường dẫn ảnh Cloudinary
+    private Boolean isActive;
 }

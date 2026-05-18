@@ -46,4 +46,6 @@ public class User {
     private String avatarUrl;
     @Column(name="email")
     private String email;
+    @Column(name = "is_active")
+    private Boolean isActive = false;
 }

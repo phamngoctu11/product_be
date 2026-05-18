@@ -1,13 +1,13 @@
 server:
-  port: 8080
+  port: 8090
 spring:
   application:
     name: my-workflow-app
   mail:
     host: smtp.gmail.com
     port: 587
-    username: tux2k4@gmail.com
-    password: "urdv fjdw fpzn chol"
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -15,13 +15,13 @@ spring:
           starttls:
             enable: true
   datasource:
-    url: jdbc:mysql://103.149.170.20:3306/db_A46764
-    username: A46764
-    password: A46764@thanglong
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: localhost
+      host: ${REDIS_HOST:localhost}
       port: 6379
       timeout: 10000
       fail-on-error: true
@@ -49,11 +49,10 @@ camunda.bpm:
   generic-properties:
     enforce-history-time-to-live: false
 
-# ĐƯA CLOUDINARY RA SÁT LỀ TRÁI (Ngang hàng với spring và camunda.bpm)
 cloudinary:
-  cloud-name: dgoolohc8
-  api-key: "768686576265143"
-  api-secret: puDa8eZvm0E3ttWKAzxS6nUDFn8
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
 momo:
   partnerCode: "MOMOBKUN20180529"
   accessKey: "klm05TvNBzhg7h7j"
