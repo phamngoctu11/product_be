@@ -10,5 +10,6 @@ import lombok.NoArgsConstructor;
 public class AdminReviewRequest {
     private boolean approved; // true: Duyệt, false: Từ chối
     private String cancelReason;
+
     private String changer;// Nhập lý do nếu từ chối
 }
