@@ -143,7 +143,7 @@ public class CartService {
         if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
             order.setStatus(OrderStatus.PENDING_PAYMENT);
         } else {
-            order.setStatus(OrderStatus.PENDING_WAREHOUSE);
+            order.setStatus(OrderStatus.PENDING_APPROVAL);
         }
         order.setItems(new ArrayList<>());
         double totalPrice = 0;
@@ -211,38 +211,5 @@ public class CartService {
 
         return savedOrder.getId();
     }
-    @Transactional(rollbackFor = Exception.class)
-    public Map<String, String> processCheckoutOrchestrator(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) throws Exception {
 
-        Long orderId = this.approve_cart_internal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
-        Order savedOrder = orderRepository.findById(orderId).orElseThrow();
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("orderId", orderId);
-        variables.put("userId", userId);
-        variables.put("paymentMethod", paymentMethod);
-        variables.put("note", note);
-        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
-
-        Map<String, String> response = new HashMap<>();
-        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-            String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
-            response.put("status", "REDIRECT");
-            response.put("url", momoPayUrl);
-            response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
-        } else {
-            response.put("status", "SUCCESS");
-            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
-
-            // ==============================================================
-            // 🚨 BẮN THÔNG BÁO REAL-TIME CHO ADMIN KHI CÓ ĐƠN COD MỚI
-            // ==============================================================
-            NotificationMessage msg = new NotificationMessage(
-                    "Đơn hàng mới!",
-                    "Có một đơn hàng COD mới (Mã #" + orderId + ") đang chờ duyệt.",
-                    orderId);
-            messagingTemplate.convertAndSend("/topic/admin-notifications", msg);
-        }
-        return response;
-    }
 }

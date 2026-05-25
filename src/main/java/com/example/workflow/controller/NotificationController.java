@@ -1,10 +1,13 @@
 package com.example.workflow.controller;
 
+import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.entity.Notification;
 import com.example.workflow.repository.NotificationRepository;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,34 +15,31 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
+@Validated
 public class NotificationController {
 
     private final NotificationRepository notificationRepository;
 
-    // 1. API: Lấy danh sách thông báo khi User/Admin mở web
     @GetMapping("/{userId}")
-    public ResponseEntity<List<Notification>> getNotifications(
-            @PathVariable Long userId,
-            @RequestParam boolean isAdmin) {
-
+    public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(
+            @Positive(message = "User id must be positive") @PathVariable Long userId,
+            @RequestParam boolean isAdmin
+    ) {
         List<Notification> notifications;
         if (isAdmin) {
-            // Nếu là Admin -> Lấy các thông báo chung (targetUserId = null)
             notifications = notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(null);
         } else {
-            // Nếu là Khách -> Lấy thông báo cá nhân của họ
             notifications = notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId);
         }
-        return ResponseEntity.ok(notifications);
+        return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
-    // 2. API: Đánh dấu đã đọc tất cả khi người dùng bấm vào cái chuông
     @Transactional
     @PutMapping("/read-all/{userId}")
-    public ResponseEntity<String> markAllAsRead(
-            @PathVariable Long userId,
-            @RequestParam boolean isAdmin) {
-
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+            @Positive(message = "User id must be positive") @PathVariable Long userId,
+            @RequestParam boolean isAdmin
+    ) {
         List<Notification> notifications;
         if (isAdmin) {
             notifications = notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(null);
@@ -47,12 +47,11 @@ public class NotificationController {
             notifications = notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId);
         }
 
-        // Đổi trạng thái toàn bộ thành đã đọc
-        for (Notification n : notifications) {
-            n.setRead(true);
+        for (Notification notification : notifications) {
+            notification.setRead(true);
         }
 
         notificationRepository.saveAll(notifications);
-        return ResponseEntity.ok("Đã đánh dấu đọc toàn bộ!");
+        return ResponseEntity.ok(ApiResponse.success("Da danh dau doc toan bo!"));
     }
 }

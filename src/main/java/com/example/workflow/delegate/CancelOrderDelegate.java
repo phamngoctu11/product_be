@@ -1,10 +1,12 @@
 package com.example.workflow.delegate;
 
+import com.example.workflow.entity.InventoryTransaction;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderItem;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserVoucherRepository;
@@ -15,6 +17,8 @@ import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @RequiredArgsConstructor
 @Component("cancelOrderDelegate")
 public class CancelOrderDelegate implements JavaDelegate {
@@ -22,6 +26,7 @@ public class CancelOrderDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
     private final ProductVariantRepository variantRepository;
+    private final InventoryTransactionRepository inventoryRepo; // 🚨 THÊM REPO NÀY
     private final CacheManager cacheManager;
 
     @Override
@@ -31,21 +36,32 @@ public class CancelOrderDelegate implements JavaDelegate {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng ID: " + orderId));
 
-        // 1. Cập nhật trạng thái
         order.setStatus(OrderStatus.CANCELLED);
+        boolean stockDeducted = Boolean.TRUE.equals(execution.getVariable("stockDeducted"));
 
-        // 2. Hoàn Tồn kho
-        if (order.getItems() != null) {
+        // 🚨 HOÀN TỒN KHO VÀ GHI SỔ CÁI
+        if (stockDeducted && order.getItems() != null) {
             for (OrderItem item : order.getItems()) {
                 ProductVariant variant = item.getProductVariant();
                 if (variant != null) {
+                    // Tăng lại tồn kho trong Variant
                     variant.setQuantity(variant.getQuantity() + item.getQuantity());
                     variantRepository.save(variant);
+
+                    // Ghi Sổ Sao Kê Kho (Loại: Hoàn trả)
+                    InventoryTransaction tx = new InventoryTransaction();
+                    tx.setProductVariant(variant);
+                    tx.setOrder(order);
+                    tx.setUser(order.getUser());
+                    tx.setQuantityChange(item.getQuantity()); // Hoàn lại kho nên là số DƯƠNG
+                    tx.setRemainingStock(variant.getQuantity()); // Tồn kho thực tế lúc đó
+                    tx.setTransactionType("CANCEL_RETURN"); // Đánh dấu đây là giao dịch Hủy đơn
+                    tx.setCreatedAt(LocalDateTime.now());
+                    inventoryRepo.save(tx);
                 }
             }
         }
 
-        // 3. Hoàn Voucher
         UserVoucher appliedVoucher = order.getUserVoucher();
         if (appliedVoucher != null) {
             appliedVoucher.setUsed(false);
@@ -55,10 +71,9 @@ public class CancelOrderDelegate implements JavaDelegate {
 
         orderRepository.save(order);
 
-        // 4. Xóa cache để Admin thấy danh sách được cập nhật
         if (cacheManager.getCache("orders") != null) {
             cacheManager.getCache("orders").evict(order.getUser().getId());
         }
-        System.out.println(">>> Camunda: ADMIN từ chối -> Đã dọn dẹp kho & voucher cho Order " + orderId);
+        System.out.println(">>> Camunda: Đơn hàng bị HỦY -> Đã dọn dẹp kho, ghi sổ sao kê & hoàn voucher cho Order " + orderId);
     }
 }

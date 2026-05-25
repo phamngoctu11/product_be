@@ -1,116 +1,133 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.AdminReviewRequest;
+import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderDTO;
+import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
-import com.example.workflow.entity.Order;
-import com.example.workflow.mapper.OrderMapper;
+import com.example.workflow.exception.AppException;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.OrderService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Validated
 public class OrderController {
 
     private final OrderService orderService;
     private final OrderRepository orderRepository;
-    private final OrderMapper orderMapper;
-
-    // ==========================================
-    // CÁC API DÀNH CHO KHÁCH HÀNG (CUSTOMER)
-    // ==========================================
 
     @GetMapping("/user/{user_id}")
-    public ResponseEntity<List<OrderDTO>> getAllMyOrders(@PathVariable("user_id") Long user_id) {
-        return ResponseEntity.ok(orderService.getOrdersByUserId(user_id));
+    @PreAuthorize("hasAnyRole('USER', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<OrderListDTO>>> getAllMyOrders(
+            @Positive @PathVariable("user_id") Long userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getOrdersByUserId(userId)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<OrderDTO> getOrderById(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(orderService.getOrderById(id));
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<OrderDTO>> getOrderById(@Positive @PathVariable("id") Long id) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getOrderById(id)));
     }
 
     @GetMapping("/{order_id}/history")
-    public ResponseEntity<List<OrderStatusHistoryDTO>> getOrderHistory(@PathVariable("order_id") Long order_id) {
-        List<OrderStatusHistoryDTO> history = orderService.getOrderHistory(order_id);
-        return ResponseEntity.ok(history);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<OrderStatusHistoryDTO>>> getOrderHistory(
+            @Positive @PathVariable("order_id") Long orderId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getOrderHistory(orderId)));
     }
 
     @PutMapping("/{order_id}/cancel")
-    public ResponseEntity<String> cancelOrder(@PathVariable("order_id") Long order_id, @RequestParam("reason") String reason) {
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<Void>> cancelOrder(
+            @Positive @PathVariable("order_id") Long orderId,
+            @NotBlank @Size(max = 500) @RequestParam("reason") String reason
+    ) {
         try {
-            orderService.cancelOrder(order_id, reason, "CUSTOMER");
-            return ResponseEntity.ok("Bạn đã hủy đơn hàng thành công.");
+            orderService.cancelOrder(orderId, reason);
+            return ResponseEntity.ok(ApiResponse.success("Ban da huy don hang thanh cong."));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
-    // Khách hàng xác nhận đã nhận hàng (User Task Camunda)
     @PostMapping("/customer/confirm-receipt/{orderId}")
-    public ResponseEntity<?> confirmReceipt(
-            @PathVariable Long orderId,
-            @RequestParam String username) {
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<Void>> confirmReceipt(
+            @Positive @PathVariable Long orderId,
+            @RequestBody List<ItemCheckRequest> receiptData
+    ) {
         try {
-            orderService.confirmCustomerReceipt(orderId, username);
-            return ResponseEntity.ok("Xác nhận nhận hàng thành công. Cảm ơn bạn đã mua sắm!");
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            orderService.confirmCustomerReceipt(orderId, receiptData);
+            return ResponseEntity.ok(ApiResponse.success("Xac nhan nhan hang thanh cong. Cam on ban!"));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Lỗi hệ thống: " + e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
-    // ==========================================
-    // CÁC API DÀNH CHO QUẢN TRỊ VIÊN (ADMIN)
-    // ==========================================
-
-    // Lấy danh sách đơn hàng chờ duyệt
     @GetMapping("/admin/pending")
-    public ResponseEntity<?> getPendingOrders() {
+    @PreAuthorize("hasAnyRole('MANAGER', 'STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<OrderListDTO>>> getPendingOrders() {
+        List<OrderListDTO> pendingOrders = orderRepository.findListDtoByStatus(OrderStatus.PENDING_APPROVAL);
+        return ResponseEntity.ok(ApiResponse.success(pendingOrders));
+    }
+
+    @PostMapping("/manager/review-order/{orderId}")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> reviewOrder(
+            @Positive @PathVariable Long orderId,
+            @Valid @RequestBody AdminReviewRequest request
+    ) {
         try {
-            List<Order> pendingOrders = orderRepository.findByStatus(OrderStatus.PENDING_WAREHOUSE);
-            List<OrderDTO> response = pendingOrders.stream()
-                    .map(orderMapper::toDto)
-                    .collect(Collectors.toList());
-            return ResponseEntity.ok(response);
+            orderService.processAdminReview(orderId, request);
+            return ResponseEntity.ok(ApiResponse.success("Duyet don thanh cong!"));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("Lỗi khi tải danh sách đơn hàng chờ duyệt.");
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
-    // Admin Duyệt / Từ chối đơn hàng (User Task Camunda)
-    @PostMapping("/admin/review-order/{orderId}")
-    public ResponseEntity<?> reviewOrder(@PathVariable Long orderId, @RequestBody AdminReviewRequest request) {
+    @PostMapping("/manager/kcs-check/{orderId}")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> kcsCheck(
+            @Positive @PathVariable Long orderId,
+            @RequestParam("isPassed") boolean isPassed
+    ) {
         try {
-            // Lấy changerName từ Body DTO để tránh lỗi Required parameter not present
-            orderService.processAdminReview(orderId, request, request.getChanger());
-            return ResponseEntity.ok("Thao tác thành công!");
+            orderService.processManagerKcsCheck(orderId, isPassed);
+            return ResponseEntity.ok(ApiResponse.success("KCS hoan tat!"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
-    // Cập nhật trạng thái thông thường (Dành cho Admin nếu cần ghi đè)
-    @PutMapping("/{order_id}/status")
-    public ResponseEntity<String> updateStatus(
-            @PathVariable("order_id") Long order_id,
-            @RequestParam("status") String status) {
+
+    @PostMapping("/staff/export/{orderId}")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<Void>> exportOrder(
+            @Positive @PathVariable Long orderId,
+            @RequestBody List<ItemCheckRequest> exportData
+    ) {
         try {
-            orderService.updateStatus(order_id, status, "ADMIN");
-            return ResponseEntity.ok("Cập nhật trạng thái thành công!");
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            orderService.processStaffExport(orderId, exportData);
+            return ResponseEntity.ok(ApiResponse.success("Ghi nhan xuat kho thanh cong, dang cho quan ly KCS."));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Lỗi hệ thống: " + e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 }

@@ -23,7 +23,7 @@ public class AddNewItemDelegate implements JavaDelegate {
     @Transactional
     public void execute(DelegateExecution execution) throws Exception {
         Long cartId = (Long) execution.getVariable("cartId");
-        Long variantId = (Long) execution.getVariable("variantId"); // LẤY VARIANT ID
+        Long variantId = (Long) execution.getVariable("variantId");
         int quantity = (int) execution.getVariable("quantity");
 
         Cart cart = cartRepository.findById(cartId)
@@ -34,11 +34,12 @@ public class AddNewItemDelegate implements JavaDelegate {
 
         CartItem newItem = new CartItem();
         newItem.setCart(cart);
-        newItem.setProductVariant(variant); // GÁN VARIANT
+        newItem.setProductVariant(variant);
         newItem.setQuantity(quantity);
-        newItem.setPrice(variant.getPrice()); // LẤY GIÁ VARIANT
-        cart.getItems().add(newItem);
 
+        // 🚨 ĐÃ XÓA DÒNG: newItem.setPrice(variant.getPrice());
+
+        cart.getItems().add(newItem);
         cartRepository.save(cart);
 
         Long ownerId = cart.getUser().getId();
@@ -46,6 +47,6 @@ public class AddNewItemDelegate implements JavaDelegate {
             cacheManager.getCache("carts").evict(ownerId);
         }
 
-        System.out.println(">>> Camunda: Added NEW variant " + variantId + " to cart " + cartId + " - Evicted cache for User: " + ownerId);
+        System.out.println(">>> Camunda: Added NEW variant " + variantId + " to cart " + cartId);
     }
 }

@@ -1,18 +1,25 @@
 package com.example.workflow.controller;
 
+import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.MomoPaymentRequest;
+import com.example.workflow.exception.AppException;
 import com.example.workflow.service.MomoService;
 import com.example.workflow.service.OrderService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/payment")
+@Validated
 public class MomoController {
 
     private final MomoService momoService;
-    private final OrderService orderService; // Gọi OrderService để xử lý chung
+    private final OrderService orderService;
 
     public MomoController(MomoService momoService, OrderService orderService) {
         this.momoService = momoService;
@@ -20,34 +27,35 @@ public class MomoController {
     }
 
     @PostMapping("/momo-pay")
-    public ResponseEntity<?> createPayment(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(
+            @Valid @RequestBody MomoPaymentRequest request
+    ) {
         try {
-            String orderId = payload.get("orderId").toString();
-            long amount = Long.parseLong(payload.get("amount").toString());
-            String payUrl = momoService.createPayment(orderId, amount);
-            return ResponseEntity.ok(Map.of("payUrl", payUrl));
+            String payUrl = momoService.createPayment(request.getOrderId(), request.getAmount());
+            return ResponseEntity.ok(ApiResponse.success(Map.of("payUrl", payUrl)));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Lỗi: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi: " + e.getMessage());
         }
     }
 
     @PostMapping("/momo-callback")
-    public ResponseEntity<?> momoCallback(@RequestParam Map<String, String> allParams) {
+    public ResponseEntity<ApiResponse<Void>> momoCallback(@RequestParam Map<String, String> allParams) {
         try {
             boolean isValid = momoService.verifySignature(allParams);
-            if (!isValid) return ResponseEntity.badRequest().body("Chữ ký MoMo không hợp lệ!");
+            if (!isValid) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Chu ky MoMo khong hop le!");
+            }
 
             String rawOrderId = allParams.get("orderId");
             Long orderId = Long.parseLong(rawOrderId.split("_")[0]);
             String resultCode = allParams.get("resultCode");
 
-            // Đẩy sang OrderService xử lý Camunda và Bắn thông báo
             orderService.processMomoCallbackResult(orderId, resultCode);
-
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok(ApiResponse.success("Momo callback processed successfully"));
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("Lỗi Server: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi Server: " + e.getMessage());
         }
     }
 }

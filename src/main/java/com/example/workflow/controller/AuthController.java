@@ -1,9 +1,12 @@
 package com.example.workflow.controller;
 import com.example.workflow.config.JwtUtils;
+import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.AuthResponse;
 import com.example.workflow.dto.LoginRequest;
 import com.example.workflow.entity.User;
+import com.example.workflow.exception.AppException;
 import com.example.workflow.repository.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,14 +23,14 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         User user = userRepository.findByUsernameAndIsDeleteFalse(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
 
         if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             String token = jwtUtils.generateToken(user.getId(),user.getUsername(),user.getRole());
-            return ResponseEntity.ok(new AuthResponse(token,user.getId(), user.getUsername()));
+            return ResponseEntity.ok(ApiResponse.success(new AuthResponse(token,user.getId(), user.getUsername())));
         }
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
+        throw new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
     }
 }

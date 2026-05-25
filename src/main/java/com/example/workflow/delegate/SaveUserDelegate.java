@@ -42,6 +42,7 @@ public class SaveUserDelegate implements JavaDelegate {
         String avatar = (String) execution.getVariable("avatarUrl");
         String roleStr = (String) execution.getVariable("role");
         String email = (String) execution.getVariable("email");
+
         User user = new User();
         user.setUsername(username);
         user.setFirstname(firstname);
@@ -52,24 +53,34 @@ public class SaveUserDelegate implements JavaDelegate {
         user.setBirth(birth);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
+
+        // 🚨 CHỐNG LỖI ÉP KIỂU ROLE CHO HỆ THỐNG MỚI
         Role role;
         try {
             if (roleStr == null || roleStr.isEmpty()) {
                 role = Role.USER;
             } else {
-                role = Role.valueOf(roleStr.toUpperCase());
+                String upperRole = roleStr.toUpperCase();
+                // Map mã cũ sang mã mới
+                if (upperRole.equals("ADMIN")) {
+                    role = Role.ADMIN;
+                } else {
+                    role = Role.valueOf(upperRole);
+                }
             }
         } catch (IllegalArgumentException e) {
             role = Role.USER;
             System.err.println(">>> Role không hợp lệ: " + roleStr + ". Đã gán mặc định là USER.");
         }
         user.setRole(role);
+
         Cart cart = new Cart();
         cart.setUser(user);
         user.setCart(cart);
         user.setAvatarUrl(avatar);
         user.setReputation(50);
         user.setDelete(false);
+
         userRepository.save(user);
         cartRepository.save(cart);
 

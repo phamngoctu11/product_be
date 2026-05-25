@@ -2,11 +2,15 @@ package com.example.workflow.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "notifications")
-@Data
+@Setter
+@Getter
 public class Notification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

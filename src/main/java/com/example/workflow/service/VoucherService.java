@@ -27,18 +27,21 @@ public class VoucherService {
     private final UserVoucherRepository userVoucherRepository;
     private final UserRepository userRepository;
     private final VoucherMapper voucherMapper;
+
     public List<VoucherTemplateDTO> getActiveTemplates() {
         return templateRepository.findAvailableTemplates(LocalDateTime.now())
                 .stream()
                 .map(voucherMapper::toTemplateDto)
                 .collect(Collectors.toList());
     }
+
     public List<UserVoucherDTO> getMyWallet(Long userId) {
         return userVoucherRepository.findByUserIdAndIsUsedFalse(userId)
                 .stream()
                 .map(voucherMapper::toUserVoucherDto)
                 .collect(Collectors.toList());
     }
+
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "user", key = "#userId"),
@@ -46,24 +49,26 @@ public class VoucherService {
     })
     public UserVoucherDTO redeemVoucher(Long userId, Long templateId) {
         LocalDateTime now = LocalDateTime.now();
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User không tồn tại"));
-        VoucherTemplate template = templateRepository.findById(templateId).orElseThrow(() -> new RuntimeException("Voucher không tồn tại"));
-        if (template.getExpiryDate().isBefore(now)) {
-            throw new IllegalStateException("Rất tiếc! Chiến dịch giảm giá này đã kết thúc.");
-        }
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User does not exist"));
+        VoucherTemplate template = templateRepository.findById(templateId).orElseThrow(() -> new RuntimeException("Voucher does not exist"));
 
-        int updatedRows = templateRepository.decrementQuantity(templateId, now);
-        if (updatedRows == 0) {
-            throw new IllegalStateException("Rất tiếc! Đã có người đổi mất mã cuối cùng hoặc mã đã hết hạn.");
+        if (template.getExpiryDate().isBefore(now)) {
+            throw new IllegalStateException("Voucher campaign has expired.");
         }
 
         int remainingPoints = user.getReputation() - template.getPointCost();
         if (remainingPoints < 40) {
-            throw new IllegalStateException("Đổi thất bại! Quỹ điểm khả dụng của bạn không đủ.");
+            throw new IllegalStateException("Not enough available reputation points.");
+        }
+
+        int updatedRows = templateRepository.decrementQuantity(templateId, now);
+        if (updatedRows == 0) {
+            throw new IllegalStateException("Voucher is out of stock or expired.");
         }
 
         user.setReputation(remainingPoints);
         userRepository.save(user);
+
         UserVoucher userVoucher = new UserVoucher();
         userVoucher.setUser(user);
         userVoucher.setTemplate(template);
@@ -73,6 +78,7 @@ public class VoucherService {
 
         return voucherMapper.toUserVoucherDto(userVoucherRepository.save(userVoucher));
     }
+
     public VoucherTemplate createNewVoucherCampaign(VoucherTemplate request) {
         request.setId(null);
         request.setActive(true);

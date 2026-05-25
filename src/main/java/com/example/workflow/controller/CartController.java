@@ -1,20 +1,28 @@
 package com.example.workflow.controller;
 
+import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartResDTO;
-import com.example.workflow.dto.NotificationMessage;
 import com.example.workflow.entity.Notification;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
+import com.example.workflow.exception.AppException;
 import com.example.workflow.repository.NotificationRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.CartService;
 import com.example.workflow.service.EmailService;
 import com.example.workflow.service.MomoService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -24,6 +32,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/cart")
 @RequiredArgsConstructor
+@Validated
 public class CartController {
 
     private final CartService cartService;
@@ -31,56 +40,69 @@ public class CartController {
     private final OrderRepository orderRepository;
     private final MomoService momoService;
     private final NotificationRepository notificationRepository;
-
-    // Tiêm thêm 2 service này để lấy tên và gửi thông báo
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final EmailService emailService;
 
     @PostMapping("/add")
-    public ResponseEntity<String> addToCart(@RequestParam("userId") Long userId, @RequestParam("variantId") Long variantId, @RequestParam("quantity") int quantity) {
+    public ResponseEntity<ApiResponse<Void>> addToCart(
+            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @Positive(message = "Variant id must be positive") @RequestParam("variantId") Long variantId,
+            @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
+    ) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("userId", userId);
         variables.put("variantId", variantId);
         variables.put("quantity", quantity);
         runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
-        return ResponseEntity.ok("Đã đẩy lệnh thêm Giỏ hàng vào Workflow!");
+        return ResponseEntity.ok(ApiResponse.success("Da day lenh them gio hang vao Workflow!"));
     }
 
     @PutMapping("/update")
-    public String update(@RequestParam Long userId, @RequestParam Long variantId, @RequestParam int quantity) {
+    public ResponseEntity<ApiResponse<Void>> update(
+            @Positive(message = "User id must be positive") @RequestParam Long userId,
+            @Positive(message = "Variant id must be positive") @RequestParam Long variantId,
+            @Min(value = 0, message = "Quantity must be zero or positive") @RequestParam int quantity
+    ) {
         cartService.updateQuantity(userId, variantId, quantity);
-        return "Updated quantity";
+        return ResponseEntity.ok(ApiResponse.success("Updated quantity"));
     }
 
     @DeleteMapping("/remove")
-    public String remove(@RequestParam Long userId, @RequestParam Long productId) {
+    public ResponseEntity<ApiResponse<Void>> remove(
+            @Positive(message = "User id must be positive") @RequestParam Long userId,
+            @Positive(message = "Variant id must be positive") @RequestParam Long productId
+    ) {
         cartService.removeFromCart(userId, productId);
-        return "Removed from cart";
+        return ResponseEntity.ok(ApiResponse.success("Removed from cart"));
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<CartResDTO> getCart(@PathVariable Long userId) {
-        return ResponseEntity.ok(cartService.getCartByUserId(userId));
+    public ResponseEntity<ApiResponse<CartResDTO>> getCart(
+            @Positive(message = "User id must be positive") @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(cartService.getCartByUserId(userId)));
     }
 
     @PostMapping("/approve/{userId}")
-    public ResponseEntity<?> approveCart(
-            @PathVariable("userId") Long userId,
-            @RequestBody List<Long> productIdsToCheckout,
+    public ResponseEntity<ApiResponse<Map<String, String>>> approveCart(
+            @Positive(message = "User id must be positive") @PathVariable("userId") Long userId,
+            @Valid @NotEmpty(message = "Select at least one variant to checkout")
+            @RequestBody List<@Positive(message = "Variant id must be positive") Long> productIdsToCheckout,
+            @Positive(message = "User voucher id must be positive")
             @RequestParam(value = "userVoucherId", required = false) Long userVoucherId,
+            @Pattern(regexp = "(?i)COD|ONLINE", message = "Payment method must be COD or ONLINE")
             @RequestParam("paymentMethod") String paymentMethod,
-            @RequestParam(value = "note", required = false) String note) {
-
+            @RequestParam(value = "note", required = false) String note
+    ) {
         try {
             Long orderId = cartService.approve_cart_internal(userId, productIdsToCheckout, userVoucherId, paymentMethod, note);
 
             User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy User"));
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong tim thay User"));
             Order savedOrder = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy Order"));
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong tim thay Order"));
 
-            // 3. Khởi chạy quy trình Camunda
             Map<String, Object> variables = new HashMap<>();
             variables.put("orderId", orderId);
             variables.put("userId", userId);
@@ -88,70 +110,56 @@ public class CartController {
             variables.put("note", note);
             runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
 
-            // ==========================================
-            // 4A. NẾU LÀ THANH TOÁN ONLINE (MOMO)
-            // ==========================================
             if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
                 String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
 
                 Map<String, String> response = new HashMap<>();
                 response.put("status", "REDIRECT");
                 response.put("url", momoPayUrl);
-                response.put("message", "Vui lòng thanh toán qua MoMo để hoàn tất.");
-                return ResponseEntity.ok(response);
+                response.put("message", "Vui long thanh toan qua MoMo de hoan tat.");
+                return ResponseEntity.ok(ApiResponse.success(response));
             }
 
-            // ==========================================
-            // 4B. NẾU LÀ THANH TOÁN COD
-            // ==========================================
-
-            // Bước 1: Lưu DB và bắn WebSocket báo Admin
             saveAndSendNotification(
-                    "Đơn hàng mới từ " + user.getLastname(),
-                    "Khách hàng " + user.getLastname() + " vừa tạo đơn hàng COD (Mã #" + orderId + ").",
+                    "Don hang moi tu " + user.getLastname(),
+                    "Khach hang " + user.getLastname() + " vua tao don hang COD (Ma #" + orderId + ").",
                     orderId, null, "/topic/admin-notifications"
             );
 
-            // Bước 2: Lưu DB và bắn WebSocket báo Khách hàng
             saveAndSendNotification(
-                    "Đặt hàng thành công! 🎉",
-                    "Đơn hàng #" + orderId + " của bạn đang chờ Admin duyệt. Bạn có thể hủy đơn nếu muốn.",
+                    "Dat hang thanh cong!",
+                    "Don hang #" + orderId + " cua ban dang cho Admin duyet. Ban co the huy don neu muon.",
                     orderId, userId, "/topic/user-notifications/" + userId
             );
 
-            // Bước 3: Gửi Hóa Đơn Email Tự Động (Bọc trong Thread để chạy nền)
             if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
-                new Thread(() -> {
-                    emailService.sendOrderConfirmationEmail(
-                            user.getEmail(),
-                            user.getLastname(),
-                            orderId,
-                            savedOrder.getTotalPrice(),
-                            "Thanh toán khi nhận hàng (COD)"
-                    );
-                }).start();
+                new Thread(() -> emailService.sendOrderConfirmationEmail(
+                        user.getEmail(),
+                        user.getLastname(),
+                        orderId,
+                        savedOrder.getTotalPrice(),
+                        "Thanh toan khi nhan hang (COD)"
+                )).start();
             }
 
-            // Bước 4: Trả kết quả thành công cho Frontend
             Map<String, String> response = new HashMap<>();
             response.put("status", "SUCCESS");
-            response.put("message", "Tạo đơn COD thành công! Đang chờ xuất kho.");
-            return ResponseEntity.ok(response);
-
+            response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body(e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
-    // Hàm phụ trợ giúp Code gọn hơn (Lưu DB trước, gửi WebSockets sau)
     private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
         Notification notification = new Notification();
         notification.setTitle(title);
         notification.setContent(content);
         notification.setOrderId(orderId);
         notification.setTargetUserId(targetUserId);
-        notificationRepository.save(notification); // Lưu thẳng vào MySQL
-        messagingTemplate.convertAndSend(destination, notification); // Gửi thẳng Object này đi
+        notificationRepository.save(notification);
+        messagingTemplate.convertAndSend(destination, notification);
     }
 }

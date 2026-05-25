@@ -1,9 +1,6 @@
 package com.example.workflow.service;
 
-import com.example.workflow.dto.AdminReviewRequest;
-import com.example.workflow.dto.NotificationMessage;
-import com.example.workflow.dto.OrderDTO;
-import com.example.workflow.dto.OrderStatusHistoryDTO;
+import com.example.workflow.dto.*;
 import com.example.workflow.entity.*;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
@@ -18,6 +15,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,96 +41,158 @@ public class OrderService {
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationRepository notificationRepository;
     private final EmailService emailService;
+    private final UserVoucherRepository userVoucherRepository;
 
-    @Transactional
-    public void processMomoCallbackResult(Long orderId, String resultCode) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
-        User user = order.getUser();
-
-        if ("0".equals(resultCode)) {
-            try {
-                runtimeService.createMessageCorrelation("Msg_PaymentSuccess")
-                        .processInstanceVariableEquals("orderId", orderId)
-                        .correlate();
-            } catch (Exception e) { }
-            order.setStatus(OrderStatus.PENDING_WAREHOUSE);
-            orderRepository.save(order);
-            // SỬA THÀNH: Báo Admin kèm tên Khách
-            saveAndSendNotification(
-                    "Đơn hàng MoMo từ " + user.getLastname(),
-                    "Khách hàng " + user.getLastname() + " đã thanh toán MoMo cho đơn #" + orderId + ". Vui lòng duyệt!",
-                    orderId, null, "/topic/admin-notifications");
-
-            // SỬA THÀNH: Báo User
-            saveAndSendNotification(
-                    "Thanh toán thành công! 💳",
-                    "Đơn hàng #" + orderId + " của bạn đã được thanh toán và đang chờ Admin xét duyệt.",
-                    orderId, user.getId(), "/topic/user-notifications/" + user.getId());
-        }
+    // Lấy User đang đăng nhập an toàn tuyệt đối
+    private User getCurrentAuthenticatedUser() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByUsernameAndIsDeleteFalse(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin người dùng đăng nhập."));
     }
 
+    // ==========================================
+    // TRẠM 1: QUẢN LÝ DUYỆT ĐƠN
+    // ==========================================
     @Transactional
-    public void processAdminReview(Long orderId, AdminReviewRequest request, String adminName) {
+    public void processAdminReview(Long orderId, AdminReviewRequest request) {
         Order order = orderRepository.findById(orderId).orElseThrow();
-        Long customerId = order.getUser().getId();
+        User manager = getCurrentAuthenticatedUser(); // Lấy Chủ shop
 
         Task task = taskService.createTaskQuery()
                 .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("admin_xac_nhan")
+                .taskDefinitionKey("manager_approve_order")
                 .singleResult();
+        if (task == null) throw new RuntimeException("Đơn hàng không ở trạng thái chờ duyệt!");
 
-        if (task == null) throw new RuntimeException("Task không tồn tại");
+        order.setManager(manager); // Ghi nhận trách nhiệm Manager
 
         Map<String, Object> variables = new HashMap<>();
         if (request.isApproved()) {
-            order.setStatus(OrderStatus.SHIPPING);
+            order.setStatus(OrderStatus.PENDING_WAREHOUSE); // Chuyển xuống kho
             variables.put("isApproved", true);
-            // SỬA THÀNH: Báo User (Đơn được duyệt)
-            saveAndSendNotification(
-                    "Đơn hàng đang giao! 🚚",
-                    "Đơn hàng #" + orderId + " của bạn đã được duyệt bởi Admin " + adminName + " và đang giao đến bạn.",
-                    orderId, customerId, "/topic/user-notifications/" + customerId);
+            saveAndSendNotification("Đơn hàng đã duyệt", "Đơn #" + orderId + " đang được chuẩn bị.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         } else {
-            order.setCancelReason("Admin từ chối: " + request.getCancelReason());
+            order.setCancelReason("Quản lý từ chối: " + request.getCancelReason());
             variables.put("isApproved", false);
-            // SỬA THÀNH: Báo User (Đơn bị hủy)
-            saveAndSendNotification(
-                    "Đơn hàng bị hủy ❌",
-                    "Đơn hàng #" + orderId + " của bạn đã bị từ chối bởi Admin " + adminName + ". Lý do: " + request.getCancelReason(),
-                    orderId, customerId, "/topic/user-notifications/" + customerId);
-            if (order.getUser().getEmail() != null && !order.getUser().getEmail().trim().isEmpty()) {
-                new Thread(() -> {
-                    emailService.sendOrderCancellationEmail(
-                            order.getUser().getEmail(),
-                            order.getUser().getLastname(),
-                            orderId,
-                            "Admin từ chối: " + request.getCancelReason()
-                    );
-                }).start();
-            }
+            // Nếu từ chối, Delegate Cancel sẽ lo việc cập nhật status và hoàn kho
+            saveAndSendNotification("Đơn hàng bị từ chối", "Lý do: " + request.getCancelReason(), orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         }
 
         orderRepository.save(order);
         taskService.complete(task.getId(), variables);
     }
-    private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
-        Notification notification = new Notification();
-        notification.setTitle(title);
-        notification.setContent(content);
-        notification.setOrderId(orderId);
-        notification.setTargetUserId(targetUserId);
-        notificationRepository.save(notification);
-        messagingTemplate.convertAndSend(destination, notification);
-    }
-    @Transactional
-    public void cancelOrder(Long id, String reason, String changer) {
-        Order order = orderRepository.findById(id).orElseThrow();
 
-        if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
-            throw new IllegalStateException("Đơn hàng đã được xử lý, không thể tự hủy.");
+    // ==========================================
+    // TRẠM 2: NHÂN VIÊN XUẤT KHO
+    // ==========================================
+    @Transactional
+    public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        User staff = getCurrentAuthenticatedUser(); // Lấy nhân viên kho
+
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("staff_export_warehouse")
+                .singleResult();
+        if (task == null) throw new RuntimeException("Đơn hàng không ở trạng thái chờ xuất kho!");
+
+        order.setWarehouseStaff(staff); // Ghi nhận trách nhiệm Staff
+
+        // Cập nhật số lượng thực xuất
+        for (ItemCheckRequest req : exportData) {
+            order.getItems().stream()
+                    .filter(item -> item.getProductVariant().getId().equals(req.getVariantId()))
+                    .findFirst()
+                    .ifPresent(item -> item.setExportedQuantity(req.getQuantity()));
         }
 
-        User user = order.getUser();
+        orderRepository.save(order);
+        taskService.complete(task.getId());
+    }
+
+    // ==========================================
+    // TRẠM 3: QUẢN LÝ KCS ĐỐI SOÁT
+    // ==========================================
+    @Transactional
+    public void processManagerKcsCheck(Long orderId, boolean isPassed) {
+        Order order = orderRepository.findById(orderId).orElseThrow();
+
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("manager_kcs_check")
+                .singleResult();
+        if (task == null) throw new RuntimeException("Không có Task KCS cho đơn hàng này!");
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("kcsPassed", isPassed);
+
+        if (isPassed) {
+            order.setStatus(OrderStatus.SHIPPING); // Bắt đầu giao hàng
+            saveAndSendNotification("Đơn hàng đang giao 🚚", "Đơn hàng #" + orderId + " đã xuất kho và đang trên đường giao đến bạn.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+        } else {
+            // Trả về cho nhân viên nhặt lại (Không đổi status)
+            saveAndSendNotification("Cảnh báo KCS", "Đơn #" + orderId + " bị KCS đánh rớt, vui lòng kiểm tra lại số lượng xuất.", orderId, order.getWarehouseStaff().getId(), "/topic/admin-notifications");
+        }
+
+        orderRepository.save(order);
+        taskService.complete(task.getId(), variables); // Nếu passed, Camunda sẽ tự gọi DeductInventoryDelegate ghi Sổ sao kê
+    }
+
+    // ==========================================
+    // TRẠM 4: KHÁCH HÀNG NHẬN ĐƠN
+    // ==========================================
+    @Transactional
+    public void confirmCustomerReceipt(Long orderId, List<ItemCheckRequest> receiptData) {
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        User currentUser = getCurrentAuthenticatedUser();
+
+        if (!order.getUser().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Bạn không có quyền xác nhận đơn hàng của người khác!");
+        }
+
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("customer_confirm_receipt")
+                .singleResult();
+        if (task == null) throw new RuntimeException("Đơn hàng chưa được giao đến bạn!");
+
+        // Cập nhật số lượng thực nhận
+        for (ItemCheckRequest req : receiptData) {
+            order.getItems().stream()
+                    .filter(item -> item.getProductVariant().getId().equals(req.getVariantId()))
+                    .findFirst()
+                    .ifPresent(item -> item.setReceivedQuantity(req.getQuantity()));
+        }
+
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setEndOrderTime(LocalDateTime.now());
+
+        currentUser.setReputation(currentUser.getReputation() + 2);
+        userRepository.save(currentUser);
+        orderRepository.save(order);
+
+        saveAuditLog(order, oldStatus, OrderStatus.DELIVERED, currentUser.getId());
+
+        taskService.complete(task.getId()); // Sẽ gọi ReconciliationDelegate kiểm tra thất thoát
+    }
+
+    // ==========================================
+    // KHÁCH HÀNG TỰ HỦY ĐƠN (Cập nhật Security)
+    // ==========================================
+    @Transactional
+    public void cancelOrder(Long id, String reason) {
+        Order order = orderRepository.findById(id).orElseThrow();
+        User user = getCurrentAuthenticatedUser();
+
+        if (!order.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Bạn không có quyền hủy đơn hàng của người khác!");
+        }
+
+        if (order.getStatus() != OrderStatus.PENDING_APPROVAL && order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
+            throw new IllegalStateException("Đơn hàng đã được xử lý sâu, không thể tự hủy.");
+        }
+
         int deduction = (order.getTotalPrice() < 1000000) ? 1 : (order.getTotalPrice() <= 5000000) ? 2 : (order.getTotalPrice() <= 10000000) ? 3 : 5;
         if (user.getReputation() < deduction) {
             throw new IllegalStateException("Điểm uy tín của bạn không đủ để tự hủy đơn này.");
@@ -140,16 +200,18 @@ public class OrderService {
         user.setReputation(user.getReputation() - deduction);
         userRepository.save(user);
 
+        // Hủy Process Camunda
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .variableValueEquals("orderId", id)
+                .singleResult();
+        if (processInstance != null) {
+            runtimeService.deleteProcessInstance(processInstance.getId(), "Khách hàng chủ động hủy đơn");
+        }
+
+        // Tự động xử lý như Delegate
         List<ProductVariant> variantsToUpdate = new ArrayList<>();
-        if (order.getItems() != null) {
-            for (OrderItem item : order.getItems()) {
-                ProductVariant variant = item.getProductVariant();
-                if (variant != null) {
-                    variant.setQuantity(variant.getQuantity() + item.getQuantity());
-                    variantsToUpdate.add(variant);
-                }
-            }
-            productVariantRepository.saveAll(variantsToUpdate);
+        if (order.getItems() != null && order.getStatus() != OrderStatus.PENDING_APPROVAL) {
+            // (Chỉ hoàn kho nếu Camunda đã lỡ trừ, nhưng logic mới thì KCS mới trừ, nên chỗ này an toàn)
         }
 
         UserVoucher appliedVoucher = order.getUserVoucher();
@@ -163,70 +225,18 @@ public class OrderService {
         order.setEndOrderTime(LocalDateTime.now());
         orderRepository.save(order);
 
-        saveAuditLog(order, OrderStatus.PENDING_WAREHOUSE, OrderStatus.CANCELLED, changer);
+        saveAuditLog(order, order.getStatus(), OrderStatus.CANCELLED, user.getId());
         clearRelatedCaches(user.getId(), variantsToUpdate);
 
-        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                .variableValueEquals("orderId", id)
-                .singleResult();
-
-        if (processInstance != null) {
-            runtimeService.deleteProcessInstance(processInstance.getId(), "Khách hàng chủ động hủy đơn");
-        }
-        // SỬA THÀNH: Bắn 2 thông báo khi khách hàng tự hủy đơn
-        saveAndSendNotification(
-                "Khách hàng hủy đơn ⚠️",
-                "Khách hàng " + user.getLastname() + " đã tự hủy đơn hàng #" + id + ". Lý do: " + reason,
-                id, null, "/topic/admin-notifications");
-
-        saveAndSendNotification(
-                "Hủy đơn thành công",
-                "Bạn đã hủy đơn hàng #" + id + " thành công.",
-                id, user.getId(), "/topic/user-notifications/" + user.getId());
+        saveAndSendNotification("Khách hàng hủy đơn ⚠️", "Đơn hàng #" + id + " đã bị hủy.", id, null, "/topic/admin-notifications");
         saveAndSendNotification("Hủy đơn thành công", "Bạn đã hủy đơn hàng #" + id + " thành công.", id, user.getId(), "/topic/user-notifications/" + user.getId());
-
-        // ==============================================================
-        // 🚨 THÊM MỚI: BẮN EMAIL KHI KHÁCH TỰ HỦY
-        // ==============================================================
-        if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
-            new Thread(() -> {
-                emailService.sendOrderCancellationEmail(
-                        user.getEmail(),
-                        user.getLastname(),
-                        id,
-                        "Khách hàng chủ động hủy: " + reason
-                );
-            }).start();
-        }
     }
 
-    // Các hàm phụ trợ giữ nguyên
-    @Transactional
-    public void confirmCustomerReceipt(Long orderId, String username) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
-        if (order.getStatus() != OrderStatus.SHIPPING) throw new RuntimeException("Đơn hàng chưa được giao!");
-        Task task = taskService.createTaskQuery().processVariableValueEquals("orderId", orderId).taskDefinitionKey("khach_nhan_h_ang").singleResult();
-        if (task != null) taskService.complete(task.getId());
-        OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.DELIVERED);
-        order.setEndOrderTime(LocalDateTime.now());
-        User user = order.getUser();
-        user.setReputation(user.getReputation() + 2);
-        userRepository.save(user);
-        orderRepository.save(order);
-        saveAuditLog(order, oldStatus, OrderStatus.DELIVERED, username);
-    }
+    // (Giữ nguyên các hàm phụ trợ lấy danh sách Order và Cache của bạn ở dưới đây)
 
-    @Cacheable(value = "orders", key = "#user_id")
-    public List<OrderDTO> getOrdersByUserId(Long user_id) {
-        List<Order> orders = orderRepository.getOrdersByUserId(user_id);
-        List<OrderDTO> dtos = orders.stream().map(orderMapper::toDto).collect(Collectors.toList());
-        for (int i = 0; i < orders.size(); i++) injectImageUrls(orders.get(i), dtos.get(i));
-        return dtos;
-    }
 
     public OrderDTO getOrderById(Long id) {
-        Order order = orderRepository.getOrdersById(id);
+        Order order = orderRepository.findById(id).orElseThrow();
         OrderDTO dto = orderMapper.toDto(order);
         injectImageUrls(order, dto);
         return dto;
@@ -252,31 +262,13 @@ public class OrderService {
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }
 
-    @Transactional
-    public void updateStatus(Long id, String newStatusStr, String changer) {
-        Order order = orderRepository.findById(id).orElseThrow();
-        OrderStatus oldStatus = order.getStatus();
-        OrderStatus newStatus = OrderStatus.valueOf(newStatusStr.toUpperCase());
-        if (newStatus == OrderStatus.CANCELLED) throw new IllegalStateException("Vui lòng dùng API hủy đơn riêng biệt.");
-        if (newStatus == OrderStatus.DELIVERED) {
-            User user = order.getUser();
-            user.setReputation(user.getReputation() + 2);
-            order.setEndOrderTime(LocalDateTime.now());
-            userRepository.save(user);
-        }
-        order.setStatus(newStatus);
-        orderRepository.save(order);
-        saveAuditLog(order, oldStatus, newStatus, changer);
-        clearRelatedCaches(order.getUser().getId(), null);
-    }
-
-    private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
+    private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, Long changer) {
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(order);
         history.setOldstatus(oldStatus);
         history.setNewstatus(newStatus);
         history.setUpdatetime(LocalDateTime.now());
-        history.setChanger(changer);
+        history.setChangerId(changer);
         historyRepository.save(history);
     }
 
@@ -287,11 +279,119 @@ public class OrderService {
         if (usersCache != null) usersCache.clear();
         Cache userDetailCache = cacheManager.getCache("user");
         if (userDetailCache != null) userDetailCache.evict(userId);
-        if (updatedVariants != null && !updatedVariants.isEmpty()) {
-            Cache productDetailCache = cacheManager.getCache("product");
-            Cache productsListCache = cacheManager.getCache("products");
-            if (productDetailCache != null) updatedVariants.forEach(v -> productDetailCache.evict(v.getProduct().getId()));
-            if (productsListCache != null) productsListCache.clear();
+    }
+
+    private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
+        Notification notification = new Notification();
+        notification.setTitle(title);
+        notification.setContent(content);
+        notification.setOrderId(orderId);
+        notification.setTargetUserId(targetUserId);
+        notificationRepository.save(notification);
+        messagingTemplate.convertAndSend(destination, notification);
+    }
+    @Transactional
+    public void processMomoCallbackResult(Long orderId, String resultCode) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+
+        // 🚨 CẢI TIẾN 1: BẢO VỆ IDEMPOTENCY (Chống Webhook gọi 2 lần)
+        // Chỉ xử lý nếu đơn hàng đang ở đúng trạng thái chờ thanh toán
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            System.out.println("⚠️ Webhook MoMo: Đơn hàng #" + orderId + " đã được xử lý trước đó. Bỏ qua.");
+            return;
         }
+
+        if ("0".equals(resultCode)) {
+            // ==========================================
+            // KỊCH BẢN 1: THANH TOÁN THÀNH CÔNG
+            // ==========================================
+            OrderStatus oldStatus = order.getStatus();
+            order.setStatus(OrderStatus.PENDING_APPROVAL); // 🚨 CẢI TIẾN 2: Chuyển thẳng về cho Manager duyệt (Trạm 1)
+            orderRepository.save(order);
+
+            // Ghi sổ Audit Log (Truyền changerId = null vì đây là Hệ thống tự động làm)
+            saveAuditLog(order, oldStatus, OrderStatus.PENDING_APPROVAL, null);
+
+            // 🚨 CẢI TIẾN 3: Đánh thức luồng Camunda đang ngủ chờ thanh toán đi tiếp
+            try {
+                runtimeService.createMessageCorrelation("Msg_PaymentSuccess")
+                        .processInstanceVariableEquals("orderId", orderId)
+                        .correlate();
+                System.out.println(">>> Camunda: Đã nhận thanh toán MoMo, chuyển đơn #" + orderId + " sang Trạm Duyệt Đơn.");
+            } catch (Exception e) {
+                System.err.println("Lỗi khi đánh thức Camunda: " + e.getMessage());
+            }
+
+            // Bắn thông báo Real-time
+            saveAndSendNotification("Đơn Online mới (Đã thanh toán) 💰",
+                    "Đơn hàng #" + orderId + " đã thanh toán qua MoMo, đang chờ bạn duyệt.",
+                    orderId, null, "/topic/admin-notifications");
+
+            saveAndSendNotification("Thanh toán thành công 🎉",
+                    "Bạn đã thanh toán thành công đơn hàng #" + orderId + ". Cửa hàng đang chuẩn bị đơn.",
+                    orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+
+            // Gửi Hóa Đơn Email Tự Động (Chạy nền)
+            if (order.getUser().getEmail() != null && !order.getUser().getEmail().trim().isEmpty()) {
+                new Thread(() -> {
+                    emailService.sendOrderConfirmationEmail(
+                            order.getUser().getEmail(),
+                            order.getUser().getLastname(),
+                            orderId,
+                            order.getTotalPrice(),
+                            "Thanh toán Online qua MoMo"
+                    );
+                }).start();
+            }
+
+        } else {
+            // ==========================================
+            // KỊCH BẢN 2: THANH TOÁN THẤT BẠI HOẶC HỦY GIAO DỊCH
+            // ==========================================
+            OrderStatus oldStatus = order.getStatus();
+            order.setStatus(OrderStatus.CANCELLED);
+            order.setCancelReason("Thanh toán MoMo thất bại hoặc khách chủ động hủy (Mã lỗi MoMo: " + resultCode + ")");
+            order.setEndOrderTime(LocalDateTime.now());
+
+            // Hoàn trả Voucher lại cho khách (nếu có dùng)
+            UserVoucher appliedVoucher = order.getUserVoucher();
+            if (appliedVoucher != null) {
+                appliedVoucher.setUsed(false);
+                appliedVoucher.setUsedDate(null);
+                userVoucherRepository.save(appliedVoucher);
+            }
+            orderRepository.save(order);
+
+            // Ghi log
+            saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, null);
+
+            // 🚨 CẢI TIẾN 4: Hủy luôn Process Camunda để dọn dẹp bộ nhớ
+            ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                    .variableValueEquals("orderId", orderId)
+                    .singleResult();
+            if (processInstance != null) {
+                runtimeService.deleteProcessInstance(processInstance.getId(), "Thanh toán MoMo thất bại");
+            }
+
+            // Báo cho khách biết
+            saveAndSendNotification("Thanh toán thất bại ❌",
+                    "Giao dịch cho đơn hàng #" + orderId + " không thành công. Đơn hàng đã bị hủy.",
+                    orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+        }
+
+        clearRelatedCaches(order.getUser().getId(), null);
+    }
+    @Cacheable(value = "orders", key = "#user_id")
+    public List<OrderListDTO> getOrdersByUserId(Long user_id) {
+        // Lấy thẳng List DTO từ Repository, tốc độ ánh sáng!
+        return orderRepository.findListDtoByUserId(user_id);
+    }
+
+    // Hàm lấy danh sách chờ duyệt cho Manager
+    @Transactional(readOnly = true)
+    public List<OrderListDTO> getPendingOrders() {
+        // Lấy thẳng List DTO từ DB
+        return orderRepository.findListDtoByStatus(OrderStatus.PENDING_APPROVAL);
     }
 }
