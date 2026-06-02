@@ -9,7 +9,6 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
-import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -30,12 +29,10 @@ import java.util.stream.Collectors;
 @Transactional
 public class CartService {
     private final CartRepository cartRepository;
-    private final ProductVariantRepository productVariantRepository;
     private final UserRepository userRepository;
     private final CartMapper cartMapper;
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
-    private final CacheManager cacheManager;
     private final UserVoucherRepository userVoucherRepository;
 
     // TIÊM THÊM 2 SERVICE NÀY VÀO ĐỂ LÀM ORCHESTRATOR
@@ -109,7 +106,10 @@ public class CartService {
     @Caching(evict = {
             @CacheEvict(value = "carts", key = "#userId"),
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "orders", key = "#userId"),
+            @CacheEvict(value = "orders", allEntries = true),
+            @CacheEvict(value = "pendingOrders", allEntries = true),
+            @CacheEvict(value = "warehouseOrders", allEntries = true),
+            @CacheEvict(value = "staffOrders", allEntries = true),
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })

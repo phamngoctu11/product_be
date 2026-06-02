@@ -52,7 +52,7 @@ public class UserService {
 
             // Check xem người gọi API có quyền ADMIN hoặc MANAGER không
             boolean isCallerAdminOrManager = auth.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_MANAGER"));
+                    .anyMatch(a -> a.getAuthority().equals("ADMIN") || a.getAuthority().equals("MANAGER"));
 
             // Nếu đúng là Sếp tạo tài khoản và có truyền role -> Chấp nhận Role đó
             if (isCallerAdminOrManager && StringUtils.hasText(dto.getRole())) {

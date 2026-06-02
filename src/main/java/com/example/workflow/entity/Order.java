@@ -13,28 +13,28 @@ import java.util.List;
 @Setter
 @Entity
 @NoArgsConstructor
-@Table(name="orders")
+@Table(name = "orders")
 public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Long id;
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
-    User user;
+    private User user;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-    List<OrderItem> items;
+    private List<OrderItem> items;
 
-    double totalPrice;
-    LocalDateTime startOrderTime;
-    LocalDateTime endOrderTime;
+    private double totalPrice;
+    private LocalDateTime startOrderTime;
+    private LocalDateTime endOrderTime;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status",length = 50)
-    OrderStatus status;
+    @Column(name = "status", length = 50)
+    private OrderStatus status;
 
-    String cancelReason;
+    private String cancelReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_voucher_id")
@@ -46,30 +46,32 @@ public class Order {
     @Column(name = "final_price")
     private Double finalPrice = 0.0;
 
-    @Column(name="payment_method")
+    @Column(name = "payment_method")
     private String paymentMethod;
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
-    @Column(name="email")
+    @Column(name = "email")
     private String email;
-
-    // ==========================================
-    // 🚨 CÁC TRƯỜNG THÊM MỚI PHỤC VỤ ĐỐI SOÁT ERP
-    // ==========================================
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
-    private User manager; // Chủ shop/Quản lý duyệt đơn hàng này
+    private User manager;
+
+    @Column(name = "approved_by_id")
+    private Long approvedById;
+
+    @Column(name = "approved_by_full_name")
+    private String approvedByFullName;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_staff_id")
-    private User warehouseStaff; // Thợ/Nhân viên kho trực tiếp đóng gói xuất kho
+    private User warehouseStaff;
 
     @Column(name = "shipping_provider")
-    private String shippingProvider; // Tên đơn vị vận chuyển (VD: GHTK, Viettel Post)
+    private String shippingProvider;
 
     @Column(name = "tracking_code")
-    private String trackingCode; // Mã vận đơn
+    private String trackingCode;
 }

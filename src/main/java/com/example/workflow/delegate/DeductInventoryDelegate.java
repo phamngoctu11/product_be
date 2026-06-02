@@ -10,6 +10,8 @@ import com.example.workflow.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ import java.util.List;
 public class DeductInventoryDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
     private final ProductVariantRepository variantRepository;
+    private final CacheManager cacheManager;
     private final InventoryTransactionRepository inventoryRepo; // 🚨 BƠM SỔ CÁI VÀO ĐÂY
 
     @Override
@@ -62,6 +65,7 @@ public class DeductInventoryDelegate implements JavaDelegate {
 
         execution.setVariable("isStockSufficient", true);
         execution.setVariable("stockDeducted", true);
+        clearProductCaches();
     }
 
     private void restoreDeductedItems(List<OrderItem> deductedItems) {
@@ -78,5 +82,13 @@ public class DeductInventoryDelegate implements JavaDelegate {
             tx.setTransactionType("ROLLBACK");
             inventoryRepo.save(tx);
         }
+        clearProductCaches();
+    }
+
+    private void clearProductCaches() {
+        Cache productsCache = cacheManager.getCache("products");
+        if (productsCache != null) productsCache.clear();
+        Cache productCache = cacheManager.getCache("product");
+        if (productCache != null) productCache.clear();
     }
 }

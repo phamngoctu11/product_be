@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_0al8ew2" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.43.1">
   <bpmn:process id="ApproveCartProcess" name="ApproveCartProcess" isExecutable="true" camunda:historyTimeToLive="180">
-
     <bpmn:startEvent id="StartEvent_1" name="Nhan_don_hang">
       <bpmn:outgoing>Flow_1c54bu8</bpmn:outgoing>
     </bpmn:startEvent>
@@ -38,19 +37,16 @@
     </bpmn:intermediateCatchEvent>
     <bpmn:sequenceFlow id="Flow_0vtbik3" sourceRef="Gateway_019e67i" targetRef="Event_0yyuvok" />
     <bpmn:sequenceFlow id="Flow_0zwll0x" sourceRef="Event_0yyuvok" targetRef="Activity_19exb78" />
-
     <bpmn:exclusiveGateway id="Gateway_Join_Payment">
       <bpmn:incoming>Flow_07a1swb</bpmn:incoming>
       <bpmn:incoming>Flow_0ksbeoc</bpmn:incoming>
       <bpmn:outgoing>Flow_To_Manager_Approve</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-
     <bpmn:sequenceFlow id="Flow_To_Manager_Approve" sourceRef="Gateway_Join_Payment" targetRef="manager_approve_order" />
     <bpmn:userTask id="manager_approve_order" name="Quản lý Duyệt đơn" camunda:candidateGroups="MANAGER">
       <bpmn:incoming>Flow_To_Manager_Approve</bpmn:incoming>
       <bpmn:outgoing>Flow_Check_Approved</bpmn:outgoing>
     </bpmn:userTask>
-
     <bpmn:exclusiveGateway id="Gateway_Is_Approved" name="Duyệt?">
       <bpmn:incoming>Flow_Check_Approved</bpmn:incoming>
       <bpmn:outgoing>Flow_Not_Approved</bpmn:outgoing>
@@ -60,7 +56,6 @@
     <bpmn:sequenceFlow id="Flow_Not_Approved" name="Từ chối" sourceRef="Gateway_Is_Approved" targetRef="Activity_19exb78">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-
     <bpmn:serviceTask id="Activity_19exb78" name="Huy_don_hang" camunda:delegateExpression="${cancelOrderDelegate}">
       <bpmn:incoming>Flow_0zwll0x</bpmn:incoming>
       <bpmn:incoming>Flow_Not_Approved</bpmn:incoming>
@@ -70,7 +65,6 @@
       <bpmn:incoming>Flow_0r8wwzs</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_0r8wwzs" sourceRef="Activity_19exb78" targetRef="Event_1beu6gu" />
-
     <bpmn:sequenceFlow id="Flow_Approved" name="Đã duyệt" sourceRef="Gateway_Is_Approved" targetRef="staff_export_warehouse">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -79,13 +73,11 @@
       <bpmn:incoming>Flow_KCS_Failed</bpmn:incoming>
       <bpmn:outgoing>Flow_To_KCS</bpmn:outgoing>
     </bpmn:userTask>
-
     <bpmn:sequenceFlow id="Flow_To_KCS" sourceRef="staff_export_warehouse" targetRef="manager_kcs_check" />
     <bpmn:userTask id="manager_kcs_check" name="Quản lý KCS Chốt xuất" camunda:candidateGroups="MANAGER">
       <bpmn:incoming>Flow_To_KCS</bpmn:incoming>
       <bpmn:outgoing>Flow_Check_KCS</bpmn:outgoing>
     </bpmn:userTask>
-
     <bpmn:exclusiveGateway id="Gateway_KCS" name="Khớp số lượng?">
       <bpmn:incoming>Flow_Check_KCS</bpmn:incoming>
       <bpmn:outgoing>Flow_KCS_Failed</bpmn:outgoing>
@@ -95,7 +87,6 @@
     <bpmn:sequenceFlow id="Flow_KCS_Failed" name="Lệch, báo lại" sourceRef="Gateway_KCS" targetRef="staff_export_warehouse">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${kcsPassed == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-
     <bpmn:sequenceFlow id="Flow_KCS_Passed" name="OK" sourceRef="Gateway_KCS" targetRef="Activity_0rfojij">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${kcsPassed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -103,24 +94,198 @@
       <bpmn:incoming>Flow_KCS_Passed</bpmn:incoming>
       <bpmn:outgoing>Flow_To_Customer</bpmn:outgoing>
     </bpmn:serviceTask>
-
     <bpmn:sequenceFlow id="Flow_To_Customer" sourceRef="Activity_0rfojij" targetRef="customer_confirm_receipt" />
     <bpmn:userTask id="customer_confirm_receipt" name="Khách Xác Nhận Nhận Hàng" camunda:candidateGroups="USER">
       <bpmn:incoming>Flow_To_Customer</bpmn:incoming>
       <bpmn:outgoing>Flow_To_Reconciliation</bpmn:outgoing>
     </bpmn:userTask>
-
     <bpmn:sequenceFlow id="Flow_To_Reconciliation" sourceRef="customer_confirm_receipt" targetRef="reconciliation_delegate" />
     <bpmn:serviceTask id="reconciliation_delegate" name="Hệ thống Kiểm tra Thất thoát" camunda:delegateExpression="${reconciliationDelegate}">
       <bpmn:incoming>Flow_To_Reconciliation</bpmn:incoming>
       <bpmn:outgoing>Flow_To_End</bpmn:outgoing>
     </bpmn:serviceTask>
-
     <bpmn:sequenceFlow id="Flow_To_End" sourceRef="reconciliation_delegate" targetRef="Event_1s3q4kl" />
     <bpmn:endEvent id="Event_1s3q4kl" name="hoan_thanh_don_hang">
       <bpmn:incoming>Flow_To_End</bpmn:incoming>
     </bpmn:endEvent>
-
   </bpmn:process>
   <bpmn:message id="Message_30io1n5" name="Msg_PaymentSuccess" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_ApproveCart">
+    <bpmndi:BPMNPlane id="BPMNPlane_ApproveCart" bpmnElement="ApproveCartProcess">
+      <bpmndi:BPMNShape id="Gateway_019e67i_di" bpmnElement="Gateway_019e67i">
+        <dc:Bounds x="425" y="120" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_09wdlq7_di" bpmnElement="Event_09wdlq7">
+        <dc:Bounds x="580" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="556" y="89.5" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Is_Approved_di" bpmnElement="Gateway_Is_Approved" isMarkerVisible="true">
+        <dc:Bounds x="970" y="253" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="977" y="229" width="35" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0rfojij_di" bpmnElement="Activity_0rfojij">
+        <dc:Bounds x="1590" y="240" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="customer_confirm_receipt_di" bpmnElement="customer_confirm_receipt">
+        <dc:Bounds x="1750" y="240" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="reconciliation_delegate_di" bpmnElement="reconciliation_delegate">
+        <dc:Bounds x="1910" y="238" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1s3q4kl_di" bpmnElement="Event_1s3q4kl">
+        <dc:Bounds x="2080" y="260" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2057" y="296" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_KCS_di" bpmnElement="Gateway_KCS" isMarkerVisible="true">
+        <dc:Bounds x="1440" y="255" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1425" y="231" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manager_kcs_check_di" bpmnElement="manager_kcs_check">
+        <dc:Bounds x="1280" y="238" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="staff_export_warehouse_di" bpmnElement="staff_export_warehouse">
+        <dc:Bounds x="1120" y="238" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0yyuvok_di" bpmnElement="Event_0yyuvok">
+        <dc:Bounds x="580" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="568" y="418" width="61" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1beu6gu_di" bpmnElement="Event_1beu6gu">
+        <dc:Bounds x="1092" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1081" y="418" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19exb78_di" bpmnElement="Activity_19exb78">
+        <dc:Bounds x="945" y="360" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manager_approve_order_di" bpmnElement="manager_approve_order">
+        <dc:Bounds x="790" y="247" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Join_Payment_di" bpmnElement="Gateway_Join_Payment" isMarkerVisible="true">
+        <dc:Bounds x="635" y="262" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1exy6pl_di" bpmnElement="Gateway_1exy6pl" isMarkerVisible="true">
+        <dc:Bounds x="310" y="262" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="294" y="312" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="269" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="157" y="305" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1c54bu8_di" bpmnElement="Flow_1c54bu8">
+        <di:waypoint x="216" y="287" />
+        <di:waypoint x="310" y="287" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07a1swb_di" bpmnElement="Flow_07a1swb">
+        <di:waypoint x="360" y="287" />
+        <di:waypoint x="635" y="287" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="486" y="262" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0gbs28z_di" bpmnElement="Flow_0gbs28z">
+        <di:waypoint x="335" y="262" />
+        <di:waypoint x="335" y="145" />
+        <di:waypoint x="425" y="145" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="330" y="193" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1elkex4_di" bpmnElement="Flow_1elkex4">
+        <di:waypoint x="475" y="145" />
+        <di:waypoint x="580" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0ksbeoc_di" bpmnElement="Flow_0ksbeoc">
+        <di:waypoint x="598" y="163" />
+        <di:waypoint x="598" y="287" />
+        <di:waypoint x="635" y="287" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0vtbik3_di" bpmnElement="Flow_0vtbik3">
+        <di:waypoint x="450" y="170" />
+        <di:waypoint x="450" y="400" />
+        <di:waypoint x="580" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0zwll0x_di" bpmnElement="Flow_0zwll0x">
+        <di:waypoint x="616" y="400" />
+        <di:waypoint x="945" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_To_Manager_Approve_di" bpmnElement="Flow_To_Manager_Approve">
+        <di:waypoint x="685" y="287" />
+        <di:waypoint x="790" y="287" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Check_Approved_di" bpmnElement="Flow_Check_Approved">
+        <di:waypoint x="890" y="281" />
+        <di:waypoint x="973" y="281" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Not_Approved_di" bpmnElement="Flow_Not_Approved">
+        <di:waypoint x="995" y="303" />
+        <di:waypoint x="995" y="360" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="994" y="324" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0r8wwzs_di" bpmnElement="Flow_0r8wwzs">
+        <di:waypoint x="1045" y="400" />
+        <di:waypoint x="1092" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
+        <di:waypoint x="1020" y="278" />
+        <di:waypoint x="1120" y="278" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1050" y="253" width="44" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_To_KCS_di" bpmnElement="Flow_To_KCS">
+        <di:waypoint x="1220" y="278" />
+        <di:waypoint x="1280" y="278" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Check_KCS_di" bpmnElement="Flow_Check_KCS">
+        <di:waypoint x="1380" y="278" />
+        <di:waypoint x="1442" y="278" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KCS_Failed_di" bpmnElement="Flow_KCS_Failed">
+        <di:waypoint x="1465" y="305" />
+        <di:waypoint x="1465" y="450" />
+        <di:waypoint x="1170" y="450" />
+        <di:waypoint x="1170" y="318" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1286" y="425" width="63" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KCS_Passed_di" bpmnElement="Flow_KCS_Passed">
+        <di:waypoint x="1490" y="280" />
+        <di:waypoint x="1590" y="280" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1533" y="255" width="17" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_To_Customer_di" bpmnElement="Flow_To_Customer">
+        <di:waypoint x="1690" y="280" />
+        <di:waypoint x="1750" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_To_Reconciliation_di" bpmnElement="Flow_To_Reconciliation">
+        <di:waypoint x="1850" y="280" />
+        <di:waypoint x="1910" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_To_End_di" bpmnElement="Flow_To_End">
+        <di:waypoint x="2010" y="278" />
+        <di:waypoint x="2080" y="278" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

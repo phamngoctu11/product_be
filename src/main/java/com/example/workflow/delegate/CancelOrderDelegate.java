@@ -13,6 +13,7 @@ import com.example.workflow.repository.UserVoucherRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,6 +75,14 @@ public class CancelOrderDelegate implements JavaDelegate {
         if (cacheManager.getCache("orders") != null) {
             cacheManager.getCache("orders").evict(order.getUser().getId());
         }
+        clearCache("pendingOrders");
+        clearCache("products");
+        clearCache("product");
         System.out.println(">>> Camunda: Đơn hàng bị HỦY -> Đã dọn dẹp kho, ghi sổ sao kê & hoàn voucher cho Order " + orderId);
+    }
+
+    private void clearCache(String cacheName) {
+        Cache cache = cacheManager.getCache(cacheName);
+        if (cache != null) cache.clear();
     }
 }

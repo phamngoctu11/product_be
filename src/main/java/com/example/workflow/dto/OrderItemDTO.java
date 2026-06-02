@@ -6,9 +6,11 @@ import java.io.Serializable;
 
 @Data
 public class OrderItemDTO implements Serializable {
-    private Long productId;
-    private String productName;
+    private Long variantId;
+    private String variantName;
     private int quantity;
+    private Integer exportedQuantity;
+    private Integer receivedQuantity;
     private double price;
     @JsonProperty("image_url")
     private String imageUrl;

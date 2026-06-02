@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
@@ -24,7 +24,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         // 2. Chuyển đổi một Role duy nhất thành danh sách Authority của Spring Security
         // Vì user.getRole() bây giờ trả về 1 đối tượng đơn lẻ, không phải Collection, nên không dùng .stream() được
         List<SimpleGrantedAuthority> authorities = Collections.singletonList(
-                new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
+                new SimpleGrantedAuthority(toAuthority(user.getRole().name()))
         );
 
         // 3. Trả về đối tượng UserDetails cho Spring Security
@@ -33,5 +33,10 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getPassword(),
                 authorities
         );
+    }
+
+    private String toAuthority(String role) {
+        String normalizedRole = role == null ? "" : role.trim().toUpperCase();
+        return normalizedRole.startsWith("ROLE_") ? normalizedRole.substring("ROLE_".length()) : normalizedRole;
     }
 }

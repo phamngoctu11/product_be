@@ -1,10 +1,8 @@
 package com.example.workflow.dto;
-import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.nume.OrderStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -15,6 +13,7 @@ public class OrderDTO implements Serializable {
     private Long id;
     private Long user_id;
     private String lastname;
+    private String customerName;
     private List<OrderItemDTO> items;
     private double totalPrice;
     private double discountAmount;
@@ -26,4 +25,6 @@ public class OrderDTO implements Serializable {
     private String cancelReason;
     private String paymentMethod;
     private String note;
+    private Long approvedById;
+    private String approvedByFullName;
 }

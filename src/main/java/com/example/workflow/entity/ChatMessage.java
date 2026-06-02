@@ -19,7 +19,6 @@ public class ChatMessage {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    // Đổi tên để hợp với RBAC mới (Manager/Staff là người đại diện Shop trả lời)
     @Column(name = "is_shop_sender")
     private boolean isShopSender;
 
