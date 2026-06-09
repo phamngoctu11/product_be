@@ -6,6 +6,7 @@ import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.service.ManagerOrderService;
+import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -77,10 +78,11 @@ public class ManagerOrderController {
     @PreAuthorize("hasAuthority('MANAGER')")
     public ResponseEntity<ApiResponse<Void>> kcsCheck(
             @Positive @PathVariable Long orderId,
-            @RequestParam("isPassed") boolean isPassed
+            @RequestParam("isPassed") boolean isPassed,
+            @Nullable @RequestParam("cancelReason") String cancelReason
     ) {
         try {
-            managerOrderService.kcsCheck(orderId, isPassed);
+            managerOrderService.kcsCheck(orderId, isPassed,cancelReason);
             return ResponseEntity.ok(ApiResponse.success("KCS hoan tat!"));
         } catch (AppException e) {
             throw e;

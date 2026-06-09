@@ -27,7 +27,7 @@ public class Product {
     @Column(name = "tags")
     private String tags;
 
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
     private List<ProductVariant> variants = new ArrayList<>();
 
     @Column(name = "image_url")

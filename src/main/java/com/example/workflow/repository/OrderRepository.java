@@ -55,6 +55,47 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             Pageable pageable
     );
 
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+            "FROM Order o JOIN o.user u " +
+            "LEFT JOIN o.warehouseStaff staff " +
+            "WHERE u.id = :userId " +
+            "ORDER BY " +
+            "CASE " +
+            "WHEN o.status IN :oldestFirstStatuses THEN 0 " +
+            "WHEN o.status = :shippingStatus THEN 1 " +
+            "WHEN o.status = :deliveredStatus THEN 2 " +
+            "WHEN o.status = :cancelledStatus THEN 3 " +
+            "ELSE 4 END ASC, " +
+            "CASE WHEN o.status IN :oldestFirstStatuses THEN o.startOrderTime ELSE NULL END ASC, " +
+            "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
+            "o.startOrderTime DESC",
+            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId")
+    Page<OrderListDTO> findListDtoByUserId(
+            @Param("userId") Long userId,
+            @Param("oldestFirstStatuses") List<OrderStatus> oldestFirstStatuses,
+            @Param("shippingStatus") OrderStatus shippingStatus,
+            @Param("deliveredStatus") OrderStatus deliveredStatus,
+            @Param("cancelledStatus") OrderStatus cancelledStatus,
+            Pageable pageable
+    );
+
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+            "FROM Order o JOIN o.user u " +
+            "LEFT JOIN o.warehouseStaff staff " +
+            "WHERE u.id = :userId AND o.status = :status " +
+            "ORDER BY " +
+            "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
+            "o.startOrderTime DESC",
+            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId AND o.status = :status")
+    Page<OrderListDTO> findListDtoByUserIdAndStatus(
+            @Param("userId") Long userId,
+            @Param("status") OrderStatus status,
+            @Param("deliveredStatus") OrderStatus deliveredStatus,
+            Pageable pageable
+    );
+
     @Query("SELECT DISTINCT o FROM Order o " +
             "JOIN FETCH o.user u " +
             "LEFT JOIN FETCH o.items i " +
@@ -65,21 +106,25 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "WHERE o.id IN :orderIds")
     List<Order> findFullOrdersByIds(@Param("orderIds") List<Long> orderIds);
 
-    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, u.lastname, o.totalPrice, o.status, o.startOrderTime, o.paymentMethod) " +
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
             "FROM Order o JOIN o.user u " +
+            "LEFT JOIN o.warehouseStaff staff " +
             "WHERE o.status = :status " +
             "ORDER BY o.startOrderTime ASC",
             countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status")
     Page<OrderListDTO> findListDtoByStatusOldestFirst(@Param("status") OrderStatus status, Pageable pageable);
 
-    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, u.lastname, o.totalPrice, o.status, o.startOrderTime, o.paymentMethod) " +
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
             "FROM Order o JOIN o.user u " +
-            "WHERE o.status = :status AND o.warehouseStaff IS NULL " +
+            "LEFT JOIN o.warehouseStaff staff " +
+            "WHERE o.status = :status AND staff.id IS NULL " +
             "ORDER BY o.startOrderTime ASC",
             countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.warehouseStaff IS NULL")
     Page<OrderListDTO> findUnassignedListDtoByStatus(@Param("status") OrderStatus status, Pageable pageable);
 
-    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, u.lastname, o.totalPrice, o.status, o.startOrderTime, o.paymentMethod) " +
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, CONCAT(CONCAT(staff.lastname, ' '), staff.firstname)) " +
             "FROM Order o JOIN o.user u JOIN o.warehouseStaff staff " +
             "WHERE staff.id = :staffId AND o.status IN :statuses " +
             "ORDER BY " +
@@ -105,9 +150,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // 3. THỐNG KÊ
     // ==============================================================
 
-    @Query("SELECT SUM(o.totalPrice) FROM Order o WHERE o.status = :status")
+    @Query("SELECT SUM(o.finalPrice) FROM Order o WHERE o.status = :status")
     Double calculateTotalRevenue(@Param("status") OrderStatus status);
 
-    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status")
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status in :status")
     Long countOrdersByStatus(@Param("status") OrderStatus status);
 }

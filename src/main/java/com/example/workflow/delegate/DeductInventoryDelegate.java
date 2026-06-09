@@ -36,9 +36,14 @@ public class DeductInventoryDelegate implements JavaDelegate {
 
         for (OrderItem item : order.getItems()) {
             ProductVariant variant = item.getProductVariant();
+            int quantityToDeduct = resolveExportedQuantity(item);
+
+            if (quantityToDeduct == 0) {
+                continue;
+            }
 
             // 1. Kiểm tra tồn kho
-            if (variant.getQuantity() < item.getQuantity()) {
+            if (variant.getQuantity() < quantityToDeduct) {
                 restoreDeductedItems(deductedItems);
                 execution.setVariable("isStockSufficient", false);
                 execution.setVariable("stockDeducted", false);
@@ -46,7 +51,7 @@ public class DeductInventoryDelegate implements JavaDelegate {
             }
 
             // 2. Trừ kho trực tiếp
-            variant.setQuantity(variant.getQuantity() - item.getQuantity());
+            variant.setQuantity(variant.getQuantity() - quantityToDeduct);
             variantRepository.save(variant);
 
             // 3. 🚨 GHI VÀO SỔ CÁI SAO KÊ KHO (INVENTORY TRANSACTION)
@@ -54,7 +59,7 @@ public class DeductInventoryDelegate implements JavaDelegate {
             tx.setProductVariant(variant);
             tx.setOrder(order);
             tx.setUser(order.getUser());
-            tx.setQuantityChange(-item.getQuantity()); // Bán ra nên là số ÂM
+            tx.setQuantityChange(-quantityToDeduct); // Bán ra nên là số ÂM
             tx.setRemainingStock(variant.getQuantity()); // Tồn kho thực tế lúc đó
             tx.setTransactionType("SALE"); // Loại giao dịch
             tx.setCreatedAt(LocalDateTime.now());
@@ -72,12 +77,14 @@ public class DeductInventoryDelegate implements JavaDelegate {
         // Nếu thiếu hàng giữa chừng, phải hoàn lại và GHI SỔ CÁI HOÀN TRẢ
         for (OrderItem item : deductedItems) {
             ProductVariant variant = item.getProductVariant();
-            variant.setQuantity(variant.getQuantity() + item.getQuantity());
+            int quantityToRestore = resolveExportedQuantity(item);
+
+            variant.setQuantity(variant.getQuantity() + quantityToRestore);
             variantRepository.save(variant);
 
             InventoryTransaction tx = new InventoryTransaction();
             tx.setProductVariant(variant);
-            tx.setQuantityChange(item.getQuantity()); // Hoàn lại nên là số DƯƠNG
+            tx.setQuantityChange(quantityToRestore); // Hoàn lại nên là số DƯƠNG
             tx.setRemainingStock(variant.getQuantity());
             tx.setTransactionType("ROLLBACK");
             inventoryRepo.save(tx);
@@ -90,5 +97,12 @@ public class DeductInventoryDelegate implements JavaDelegate {
         if (productsCache != null) productsCache.clear();
         Cache productCache = cacheManager.getCache("product");
         if (productCache != null) productCache.clear();
+        Cache bestSellingProductsCache = cacheManager.getCache("bestSellingProducts");
+        if (bestSellingProductsCache != null) bestSellingProductsCache.clear();
+    }
+
+    private int resolveExportedQuantity(OrderItem item) {
+        Integer exportedQuantity = item.getExportedQuantity();
+        return exportedQuantity == null ? item.getQuantity() : Math.max(exportedQuantity, 0);
     }
 }

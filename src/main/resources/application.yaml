@@ -1,6 +1,7 @@
 server:
   port: 8080
 app:
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
   jwt:
     secret: ${JWT_SECRET:7b4f8c9d2a1e6b3f5d8c0a9e7b2f4d1c3a5e8b9d0f2c4a6e7b8d9f0a1c3b5e7d}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
@@ -12,8 +13,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME:tux2k4@gmail.com}
-    password: ${MAIL_PASSWORD:urdv fjdw fpzn chol}
+    username: ${MAIL_USERNAME:tup20658@gmail.com}
+    password: ${MAIL_PASSWORD:eoyi rxsi qquw xmhs}
     properties:
       mail:
         smtp:
@@ -68,4 +69,5 @@ momo:
   secretKey: ${MOMO_SECRET_KEY:at67qH6mk8w5Y1nAyMoYKMWACiEi2bsa}
   apiUrl: ${MOMO_API_URL:https://test-payment.momo.vn/v2/gateway/api/create}
   redirectUrl: ${MOMO_REDIRECT_URL:http://localhost:4200/payment-success}
-  ipnUrl: ${MOMO_IPN_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev/api/cart/momo-callback}
+  ipnUrl: ${MOMO_IPN_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev/api/payment/momo-callback}
+  mock-enabled: ${MOMO_MOCK_ENABLED:true}

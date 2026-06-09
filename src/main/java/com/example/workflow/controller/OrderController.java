@@ -2,9 +2,14 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.OrderDTO;
+import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
+import com.example.workflow.dto.ReceiptComplaintRequest;
+import com.example.workflow.dto.ReceiptConfirmRequest;
+import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.service.OrderService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,12 +40,22 @@ public class OrderController {
     private final OrderService orderService;
 
     @GetMapping("/user/{user_id}")
-    @PreAuthorize("hasAnyAuthority('USER', 'MANAGER', 'ADMIN')")
-    public ResponseEntity<ApiResponse<Page<OrderDTO>>> getAllMyOrders(
+    @PreAuthorize("hasAnyAuthority('USER', 'MANAGER', 'STAFF','ADMIN')")
+    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyOrders(
             @Positive @PathVariable("user_id") Long userId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        Page<OrderDTO> rs = orderService.getOrdersByUserId(userId, pageable);
+        Page<OrderListDTO> rs = orderService.getOrdersByUserId(userId, pageable);
+        return ResponseEntity.ok(ApiResponse.success(rs));
+    }
+
+    @GetMapping("/user/{user_id}/cancelled")
+    @PreAuthorize("hasAnyAuthority('USER', 'MANAGER','STAFF','ADMIN')")
+    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyCancelledOrders(
+            @Positive @PathVariable("user_id") Long userId,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Page<OrderListDTO> rs = orderService.getCancelledOrdersByUserId(userId, pageable);
         return ResponseEntity.ok(ApiResponse.success(rs));
     }
 
@@ -75,12 +91,31 @@ public class OrderController {
 
     @PostMapping("/customer/confirm-receipt/{orderId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<Void>> confirmReceipt(
-            @Positive @PathVariable Long orderId
+    public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> confirmReceipt(
+            @Positive @PathVariable Long orderId,
+            @Valid @RequestBody ReceiptConfirmRequest request
     ) {
         try {
-            orderService.confirmCustomerReceipt(orderId);
-            return ResponseEntity.ok(ApiResponse.success("Xac nhan nhan hang thanh cong. Cam on ban!"));
+            ReceiptConfirmResponse response = orderService.confirmCustomerReceipt(orderId, request);
+            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping("/customer/receipt-complaint/{orderId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> sendReceiptComplaint(
+            @Positive @PathVariable Long orderId,
+            @Valid @RequestBody ReceiptComplaintRequest request
+    ) {
+        try {
+            ReceiptConfirmResponse response = orderService.sendReceiptComplaint(orderId, request);
+            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
             throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

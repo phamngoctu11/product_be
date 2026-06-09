@@ -24,15 +24,18 @@ public class DashboardController {
         Double totalRev = orderRepository.calculateTotalRevenue(OrderStatus.DELIVERED);
         if (totalRev == null) totalRev = 0.0; // Xử lý trường hợp DB chưa có đơn nào
 
-        long total = orderRepository.count(); // Lệnh có sẵn của JpaRepository
-        long pending = orderRepository.countOrdersByStatus(OrderStatus.PENDING_WAREHOUSE);
-        long shipping = orderRepository.countOrdersByStatus(OrderStatus.SHIPPING);
-        long delivered = orderRepository.countOrdersByStatus(OrderStatus.DELIVERED);
-        long cancelled = orderRepository.countOrdersByStatus(OrderStatus.CANCELLED);
+        Long total = orderRepository.count(); // Lệnh có sẵn của JpaRepository
+        Long pendingWH = orderRepository.countOrdersByStatus(OrderStatus.PENDING_WAREHOUSE);
+        Long pendingAP = orderRepository.countOrdersByStatus(OrderStatus.PENDING_APPROVAL);
+        Long pendingPM = orderRepository.countOrdersByStatus(OrderStatus.PENDING_PAYMENT);
+        Long pendingKCS = orderRepository.countOrdersByStatus(OrderStatus.PENDING_KCS);
+        Long shipping = orderRepository.countOrdersByStatus(OrderStatus.SHIPPING);
+        Long delivered = orderRepository.countOrdersByStatus(OrderStatus.DELIVERED);
+        Long cancelled = orderRepository.countOrdersByStatus(OrderStatus.CANCELLED);
 
         // Đóng gói vào DTO
         DashboardStatsDTO stats = new DashboardStatsDTO(
-                totalRev, total, pending, shipping, delivered, cancelled
+                totalRev, total, pendingWH,pendingAP,pendingPM,pendingKCS, shipping, delivered, cancelled
         );
 
         return ResponseEntity.ok(ApiResponse.success(stats));

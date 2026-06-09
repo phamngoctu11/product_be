@@ -1,5 +1,6 @@
 package com.example.workflow.service;
 
+import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.dto.NotificationMessage;
 import com.example.workflow.entity.*;
@@ -82,20 +83,29 @@ public class CartService {
         CartResDTO dto = cartMapper.toDto(cart);
 
         if (dto.getItems() != null && cart.getItems() != null) {
+            List<CartItemDTO> activeItems = new ArrayList<>();
             for (int i = 0; i < cart.getItems().size(); i++) {
                 CartItem entityItem = cart.getItems().get(i);
                 var dtoItem = dto.getItems().get(i);
 
                 if (entityItem.getProductVariant() != null) {
                     ProductVariant variant = entityItem.getProductVariant();
+                    if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
+                        continue;
+                    }
                     if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) {
                         dtoItem.setImageUrl(variant.getImageUrl());
                     }
                     else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) {
                         dtoItem.setImageUrl(variant.getProduct().getImageUrl());
                     }
+                    activeItems.add(dtoItem);
                 }
             }
+            dto.setItems(activeItems);
+            dto.setTotalPrice(activeItems.stream()
+                    .mapToDouble(item -> item.getPrice() * item.getQuantity())
+                    .sum());
         }
         return dto;
     }
@@ -149,6 +159,9 @@ public class CartService {
         double totalPrice = 0;
         for (CartItem cartItem : itemsToCheckout) {
             ProductVariant variant = cartItem.getProductVariant();
+            if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Bien the san pham (ID: " + variant.getId() + ") da bi xoa hoac khong con duoc ban.");
+            }
             if (variant.getQuantity() < cartItem.getQuantity()) {
                 throw new AppException(HttpStatus.BAD_REQUEST, "Biến thể sản phẩm (ID: " + variant.getId() + ") đã hết hàng hoặc không đủ số lượng!");
             }

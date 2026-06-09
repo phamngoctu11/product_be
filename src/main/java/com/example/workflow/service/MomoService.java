@@ -7,9 +7,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +37,12 @@ public class MomoService {
     @Value("${momo.ipnUrl}")
     private String ipnUrl;
 
+    @Value("${momo.mock-enabled:false}")
+    private boolean mockPaymentEnabled;
+
+    @Value("${app.public-base-url:http://localhost:8080}")
+    private String publicBaseUrl;
+
     private String encodeHmacSHA256(String data, String key) throws Exception {
         Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
         SecretKeySpec secret_key = new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
@@ -50,6 +58,24 @@ public class MomoService {
     }
 
     public String createPayment(String dbOrderId, long amount) throws Exception {
+        Map<String, String> paymentData = createPaymentData(dbOrderId, amount);
+        String payUrl = paymentData.get("payUrl");
+        if (payUrl == null || payUrl.isBlank()) {
+            throw new RuntimeException("MoMo did not return a payUrl.");
+        }
+        return payUrl;
+    }
+
+    public Map<String, String> createPaymentData(String dbOrderId, long amount) throws Exception {
+        if (mockPaymentEnabled) {
+            String mockPaymentUrl = createMockPaymentUrl(dbOrderId);
+            Map<String, String> mockPaymentData = new HashMap<>();
+            mockPaymentData.put("payUrl", mockPaymentUrl);
+            mockPaymentData.put("qrCodeUrl", mockPaymentUrl);
+            mockPaymentData.put("provider", "MOMO_MOCK");
+            return mockPaymentData;
+        }
+
         String cleanPartnerCode = partnerCode.trim();
         String cleanAccessKey = accessKey.trim();
         String cleanSecretKey = secretKey.trim();
@@ -97,11 +123,59 @@ public class MomoService {
 
         ResponseEntity<Map> response = restTemplate.postForEntity(apiUrl, entity, Map.class);
 
-        if (response.getBody() != null && response.getBody().containsKey("payUrl")) {
-            return response.getBody().get("payUrl").toString();
-        } else {
-            throw new RuntimeException("Lỗi từ MoMo: " + response.getBody().get("message"));
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody != null && responseBody.containsKey("payUrl")) {
+            Map<String, String> paymentData = new HashMap<>();
+            putIfPresent(responseBody, paymentData, "payUrl");
+            putIfPresent(responseBody, paymentData, "deeplink");
+            putIfPresent(responseBody, paymentData, "qrCodeUrl");
+            paymentData.put("provider", "MOMO");
+            return paymentData;
         }
+
+        Object message = responseBody == null ? "Empty response" : responseBody.get("message");
+        throw new RuntimeException("Loi tu MoMo: " + message);
+    }
+
+    private void putIfPresent(Map<?, ?> source, Map<String, String> target, String key) {
+        Object value = source.get(key);
+        if (value != null) {
+            target.put(key, value.toString());
+        }
+    }
+
+    public boolean isMockPaymentEnabled() {
+        return mockPaymentEnabled;
+    }
+
+    public boolean verifyMockToken(String dbOrderId, String token) throws Exception {
+        if (!mockPaymentEnabled || dbOrderId == null || token == null || token.isBlank()) {
+            return false;
+        }
+
+        String expectedToken = createMockToken(dbOrderId);
+        return MessageDigest.isEqual(
+                expectedToken.getBytes(StandardCharsets.UTF_8),
+                token.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private String createMockPaymentUrl(String dbOrderId) throws Exception {
+        String cleanBaseUrl = publicBaseUrl.trim();
+        if (cleanBaseUrl.endsWith("/")) {
+            cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
+        }
+
+        return UriComponentsBuilder.fromHttpUrl(cleanBaseUrl)
+                .path("/api/payment/momo-mock-success")
+                .queryParam("orderId", dbOrderId)
+                .queryParam("token", createMockToken(dbOrderId))
+                .build()
+                .toUriString();
+    }
+
+    private String createMockToken(String dbOrderId) throws Exception {
+        return encodeHmacSHA256("mock-momo-success:" + dbOrderId, secretKey.trim());
     }
 
     public boolean verifySignature(Map<String, String> params) throws Exception {

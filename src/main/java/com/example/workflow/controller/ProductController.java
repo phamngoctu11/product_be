@@ -1,6 +1,7 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.service.ProductService;
 import jakarta.validation.Valid;
@@ -38,8 +39,11 @@ public class ProductController {
     }
 
     @GetMapping("/best-selling")
-    public ResponseEntity<ApiResponse<Page<ProductDTO>>> getBestSellingProducts(@PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(service.getBestSellingProducts(pageable)));
+    public ResponseEntity<ApiResponse<Page<BestSellerProductDTO>>> getBestSellingProducts(
+            @RequestParam(defaultValue = "day") String period,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(service.getBestSellingProducts(period, pageable)));
     }
 
     @GetMapping("/{id}")

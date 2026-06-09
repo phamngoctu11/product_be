@@ -33,4 +33,6 @@ public class ProductVariant {
 
     @Column(name = "image_url")
     private String imageUrl;
+    @Column(name = "is_delete", nullable = false)
+    private boolean isDelete = false;
 }

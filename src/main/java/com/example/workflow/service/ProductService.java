@@ -1,5 +1,6 @@
 package com.example.workflow.service;
 
+import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.entity.InventoryTransaction;
@@ -8,9 +9,9 @@ import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.ProductMapper;
-import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
+import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -23,8 +24,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 @Service
@@ -35,6 +41,7 @@ public class ProductService {
     private final ProductMapper mapper;
     private final InventoryTransactionRepository inventoryRepo;
     private final UserRepository userRepository;
+    private final ProductVariantRepository variantRepository;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #pageable.pageSize")
@@ -43,9 +50,9 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "bestSellingProducts", key = "#pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<ProductDTO> getBestSellingProducts(Pageable pageable) {
-        return repository.findBestSellingProducts(OrderStatus.DELIVERED, normalizePageable(pageable)).map(mapper::toDto);
+    public Page<BestSellerProductDTO> getBestSellingProducts(String period, Pageable pageable) {
+        BestSellerRange range = resolveBestSellerRange(period);
+        return inventoryRepo.findBestSellingProducts(range.fromTime(), range.toTime(), normalizePageable(pageable));
     }
 
     @Transactional(readOnly = true)
@@ -53,6 +60,9 @@ public class ProductService {
     public ProductDTO getProductById(Long id) {
         Product product = repository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product not found"));
+        if (product.isDelete()) {
+            throw new AppException(HttpStatus.NOT_FOUND, "Product not found");
+        }
         return mapper.toDto(product);
     }
 
@@ -66,10 +76,13 @@ public class ProductService {
         Product entity = mapper.toEntity(dto);
 
         if (entity.getVariants() != null) {
-            entity.getVariants().forEach(variant -> variant.setProduct(entity));
+            entity.getVariants().forEach(variant -> {
+                variant.setProduct(entity);
+                variant.setDelete(false);
+            });
         }
         entity.setDelete(false);
-        Product savedProduct = repository.save(entity);
+        Product savedProduct = repository.saveAndFlush(entity);
 
         if (savedProduct.getVariants() != null) {
             for (ProductVariant variant : savedProduct.getVariants()) {
@@ -92,6 +105,10 @@ public class ProductService {
         User actor = getActor(userId);
         Product existingProduct = repository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product not found"));
+        if (existingProduct.isDelete()) {
+            throw new AppException(HttpStatus.NOT_FOUND, "Product not found");
+        }
+        List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
 
         existingProduct.setProductName(dto.getProduct_name());
         existingProduct.setPrice(dto.getPrice());
@@ -104,31 +121,30 @@ public class ProductService {
                     .filter(Objects::nonNull)
                     .toList();
 
-            existingProduct.getVariants().removeIf(variant ->
-                    variant.getId() != null && !incomingVariantIds.contains(variant.getId())
-            );
+            existingProduct.getVariants().stream()
+                    .filter(variant -> variant.getId() != null && !incomingVariantIds.contains(variant.getId()))
+                    .forEach(variant -> variant.setDelete(true));
 
             for (ProductVariantDTO variantDto : dto.getVariants()) {
                 if (variantDto.getId() != null) {
                     ProductVariant existingVariant = existingProduct.getVariants().stream()
                             .filter(variant -> variantDto.getId().equals(variant.getId()))
                             .findFirst()
-                            .orElse(null);
+                            .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Variant does not belong to this product: " + variantDto.getId()));
 
-                    if (existingVariant != null) {
-                        int oldQuantity = existingVariant.getQuantity();
-                        int newQuantity = variantDto.getQuantity();
-                        int difference = newQuantity - oldQuantity;
+                    int oldQuantity = existingVariant.getQuantity();
+                    int newQuantity = variantDto.getQuantity();
+                    int difference = newQuantity - oldQuantity;
 
-                        existingVariant.setVariantName(variantDto.getVariantName());
-                        existingVariant.setPrice(variantDto.getPrice());
-                        existingVariant.setQuantity(newQuantity);
-                        existingVariant.setAttributes(variantDto.getAttributes());
-                        existingVariant.setImageUrl(variantDto.getImageUrl());
+                    existingVariant.setVariantName(variantDto.getVariantName());
+                    existingVariant.setPrice(variantDto.getPrice());
+                    existingVariant.setQuantity(newQuantity);
+                    existingVariant.setAttributes(variantDto.getAttributes());
+                    existingVariant.setImageUrl(variantDto.getImageUrl());
+                    existingVariant.setDelete(false);
 
-                        if (difference != 0) {
-                            saveInventoryTransaction(existingVariant, difference, "MANUAL_ADJUSTMENT", actor);
-                        }
+                    if (difference != 0) {
+                        inventoryLogs.add(new InventoryLogEntry(existingVariant, difference, "MANUAL_ADJUSTMENT"));
                     }
                 } else {
                     ProductVariant newVariant = new ProductVariant();
@@ -138,19 +154,25 @@ public class ProductService {
                     newVariant.setAttributes(variantDto.getAttributes());
                     newVariant.setImageUrl(variantDto.getImageUrl());
                     newVariant.setProduct(existingProduct);
+                    newVariant.setDelete(false);
 
-                    existingProduct.getVariants().add(newVariant);
+                    ProductVariant savedVariant = variantRepository.saveAndFlush(newVariant);
+                    existingProduct.getVariants().add(savedVariant);
 
-                    if (newVariant.getQuantity() > 0) {
-                        saveInventoryTransaction(newVariant, newVariant.getQuantity(), "INITIAL_STOCK", actor);
+                    if (savedVariant.getQuantity() > 0) {
+                        inventoryLogs.add(new InventoryLogEntry(savedVariant, savedVariant.getQuantity(), "INITIAL_STOCK"));
                     }
                 }
             }
         } else {
-            existingProduct.getVariants().clear();
+            existingProduct.getVariants().forEach(variant -> variant.setDelete(true));
         }
 
-        repository.save(existingProduct);
+        repository.saveAndFlush(existingProduct);
+
+        for (InventoryLogEntry log : inventoryLogs) {
+            saveInventoryTransaction(log.variant(), log.changeAmount(), log.type(), actor);
+        }
     }
 
     @Transactional
@@ -164,10 +186,20 @@ public class ProductService {
         Product product = repository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong co san pham"));
         product.setDelete(true);
+        if (product.getVariants() != null) {
+            product.getVariants().forEach(variant -> variant.setDelete(true));
+        }
         repository.save(product);
     }
 
     private void saveInventoryTransaction(ProductVariant variant, int changeAmount, String type, User actor) {
+        if (variant.getId() == null) {
+            if (variant.getProduct() == null || variant.getProduct().getId() == null) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Product variant must belong to a saved product before inventory transaction is logged");
+            }
+            variant = variantRepository.saveAndFlush(variant);
+        }
+
         InventoryTransaction tx = new InventoryTransaction();
         tx.setProductVariant(variant);
         tx.setUser(actor);
@@ -187,5 +219,34 @@ public class ProductService {
         int page = pageable == null ? 0 : pageable.getPageNumber();
         int size = pageable == null ? 20 : pageable.getPageSize();
         return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+    }
+
+    private BestSellerRange resolveBestSellerRange(String period) {
+        String normalizedPeriod = period == null ? "day" : period.trim().toLowerCase(Locale.ROOT);
+        LocalDate today = LocalDate.now();
+
+        return switch (normalizedPeriod) {
+            case "day", "daily", "ngay" -> {
+                LocalDate yesterday = today.minusDays(1);
+                yield new BestSellerRange(yesterday.atStartOfDay(), today.atStartOfDay());
+            }
+            case "week", "weekly", "tuan" -> {
+                LocalDate currentWeekMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                LocalDate previousWeekMonday = currentWeekMonday.minusWeeks(1);
+                yield new BestSellerRange(previousWeekMonday.atStartOfDay(), currentWeekMonday.atStartOfDay());
+            }
+            case "month", "monthly", "thang" -> {
+                LocalDate currentMonthStart = today.withDayOfMonth(1);
+                LocalDate previousMonthStart = currentMonthStart.minusMonths(1);
+                yield new BestSellerRange(previousMonthStart.atStartOfDay(), currentMonthStart.atStartOfDay());
+            }
+            default -> throw new AppException(HttpStatus.BAD_REQUEST, "Period must be one of: day, week, month");
+        };
+    }
+
+    private record BestSellerRange(LocalDateTime fromTime, LocalDateTime toTime) {
+    }
+
+    private record InventoryLogEntry(ProductVariant variant, int changeAmount, String type) {
     }
 }

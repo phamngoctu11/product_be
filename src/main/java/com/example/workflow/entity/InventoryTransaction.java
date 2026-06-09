@@ -51,10 +51,6 @@ public class InventoryTransaction {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    // Thời gian khách hàng xác nhận nhận hàng (Để biết chu kỳ 1 đơn hàng)
-    @Column(name = "delivered_at")
-    private LocalDateTime deliveredAt;
-
     // Tự động gán giờ chốt sao kê
     @PrePersist
     protected void onCreate() {

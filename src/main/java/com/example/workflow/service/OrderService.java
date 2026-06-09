@@ -3,7 +3,6 @@ package com.example.workflow.service;
 import com.example.workflow.dto.*;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
-import com.example.workflow.mapper.OrderItemMapper;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
@@ -40,7 +39,6 @@ import java.util.stream.Collectors;
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
-    private final OrderItemMapper orderItemMapper;
     private final UserRepository userRepository;
     private final OrderStatusHistoryRepository historyRepository;
     private final CacheManager cacheManager;
@@ -271,7 +269,7 @@ public class OrderService {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
-    public void processManagerKcsCheck(Long orderId, boolean isPassed) {
+    public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
         Order order = orderRepository.findById(orderId).orElseThrow();
 
         if (order.getStatus() != OrderStatus.PENDING_KCS) {
@@ -293,9 +291,11 @@ public class OrderService {
             saveAndSendNotification("Đơn hàng đang giao 🚚", "Đơn hàng #" + orderId + " đã xuất kho và đang trên đường giao đến bạn.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         } else {
             order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
+            String message = " vui long kiem tra lai so luong xuat.";
+            if(cancelReason!=null) message = "Lí do:"+ cancelReason;
             Long staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
             String destination = staffId == null ? "/topic/admin-notifications" : "/topic/user-notifications/" + staffId;
-            saveAndSendNotification("Canh bao KCS", "Don #" + orderId + " bi KCS danh rot, vui long kiem tra lai so luong xuat.", orderId, staffId, destination);
+            saveAndSendNotification("Canh bao KCS", "Don # bi KCS danh rot" + orderId + message, orderId, staffId, destination);
         }
 
         orderRepository.save(order);
@@ -314,27 +314,23 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true)
     })
-    public void confirmCustomerReceipt(Long orderId) {
+    public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
         Order order = orderRepository.findById(orderId).orElseThrow();
-        User currentUser = getCurrentAuthenticatedUser();
+        User currentUser = validateReceiptOwner(order);
+        Task task = findCustomerReceiptTask(orderId);
 
-        if (!order.getUser().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Bạn không có quyền xác nhận đơn hàng của người khác!");
+        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
+        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
+        if (!mismatches.isEmpty() && !request.isAcceptMismatch()) {
+            return new ReceiptConfirmResponse(
+                    false,
+                    false,
+                    "So luong thuc nhan khong khop voi so luong da xuat. Vui long xac nhan co muon khieu nai hay khong.",
+                    mismatches
+            );
         }
 
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("customer_confirm_receipt")
-                .singleResult();
-        if (task == null) throw new RuntimeException("Đơn hàng chưa được giao đến bạn!");
-
-        // Cập nhật số lượng thực nhận
-        for (ItemCheckRequest req : orderItemMapper.toCheckRequest(order.getItems())) {
-            order.getItems().stream()
-                    .filter(item -> item.getProductVariant().getId().equals(req.getVariantId()))
-                    .findFirst()
-                    .ifPresent(item -> item.setReceivedQuantity(req.getQuantity()));
-        }
+        applyReceivedQuantities(order, receivedByVariant);
 
         OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.DELIVERED);
@@ -345,10 +341,168 @@ public class OrderService {
         orderRepository.save(order);
 
         saveAuditLog(order, oldStatus, OrderStatus.DELIVERED, currentUser.getId());
-
         taskService.complete(task.getId());
+
+        boolean matched = mismatches.isEmpty();
+        String message = matched
+                ? "Xac nhan nhan hang thanh cong. Cam on ban!"
+                : "Xac nhan nhan hang thanh cong voi so luong thuc nhan bi lech da duoc chap nhan.";
+        return new ReceiptConfirmResponse(matched, true, message, mismatches);
     }
 
+    @Transactional
+    public ReceiptConfirmResponse sendReceiptComplaint(Long orderId, ReceiptComplaintRequest request) {
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        User currentUser = validateReceiptOwner(order);
+        findCustomerReceiptTask(orderId);
+
+        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
+        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
+        if (mismatches.isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "So luong thuc nhan dang khop voi so luong da xuat, khong co noi dung khieu nai.");
+        }
+
+        List<String> managerEmails = userRepository.findByRoleInAndIsDeleteFalseAndEmailIsNotNull(List.of(Role.MANAGER))
+                .stream()
+                .map(User::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+        if (managerEmails.isEmpty()) {
+            throw new AppException(HttpStatus.NOT_FOUND, "Khong tim thay email manager de gui khieu nai.");
+        }
+
+        emailService.sendReceiptComplaintEmail(
+                managerEmails,
+                orderId,
+                buildFullName(currentUser),
+                currentUser.getEmail(),
+                request.getNote(),
+                mismatches
+        );
+        saveAndSendNotification(
+                "Khieu nai lech so luong",
+                "Khach hang " + buildFullName(currentUser) + " khieu nai lech so luong don #" + orderId + ".",
+                orderId,
+                null,
+                "/topic/admin-notifications"
+        );
+
+        return new ReceiptConfirmResponse(
+                false,
+                false,
+                "Da gui khieu nai lech so luong den manager.",
+                mismatches
+        );
+    }
+
+    private User validateReceiptOwner(Order order) {
+        User currentUser = getCurrentAuthenticatedUser();
+        if (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId())) {
+            throw new AppException(HttpStatus.FORBIDDEN, "Ban khong co quyen xac nhan don hang cua nguoi khac.");
+        }
+        return currentUser;
+    }
+
+    private Task findCustomerReceiptTask(Long orderId) {
+        Task task = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey("customer_confirm_receipt")
+                .singleResult();
+        if (task == null) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Don hang chua den buoc khach xac nhan nhan hang.");
+        }
+        return task;
+    }
+
+    private Map<Long, Integer> buildReceivedQuantityMap(Order order, List<ItemCheckRequest> receivedItems) {
+        if (receivedItems == null || receivedItems.isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Danh sach so luong thuc nhan la bat buoc.");
+        }
+        Map<Long, OrderItem> orderItemsByVariant = buildOrderItemsByVariant(order);
+        Map<Long, Integer> receivedByVariant = new HashMap<>();
+
+        for (ItemCheckRequest requestItem : receivedItems) {
+            if (requestItem == null || requestItem.getVariantId() == null) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Moi item nhan hang phai co variantId.");
+            }
+            if (requestItem.getQuantity() < 0) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "So luong thuc nhan khong duoc am.");
+            }
+            if (!orderItemsByVariant.containsKey(requestItem.getVariantId())) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Variant khong thuoc don hang nay: " + requestItem.getVariantId());
+            }
+            if (receivedByVariant.put(requestItem.getVariantId(), requestItem.getQuantity()) != null) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Variant bi gui trung trong danh sach nhan hang: " + requestItem.getVariantId());
+            }
+        }
+
+        for (Long variantId : orderItemsByVariant.keySet()) {
+            if (!receivedByVariant.containsKey(variantId)) {
+                throw new AppException(HttpStatus.BAD_REQUEST, "Thieu so luong thuc nhan cho variant: " + variantId);
+            }
+        }
+        return receivedByVariant;
+    }
+
+    private Map<Long, OrderItem> buildOrderItemsByVariant(Order order) {
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Don hang khong co item de xac nhan.");
+        }
+
+        Map<Long, OrderItem> orderItemsByVariant = new HashMap<>();
+        for (OrderItem item : order.getItems()) {
+            Long variantId = getOrderItemVariantId(item);
+            if (orderItemsByVariant.put(variantId, item) != null) {
+                throw new AppException(HttpStatus.CONFLICT, "Don hang co nhieu item trung variant: " + variantId);
+            }
+        }
+        return orderItemsByVariant;
+    }
+
+    private List<ReceiptMismatchDTO> buildReceiptMismatches(Order order, Map<Long, Integer> receivedByVariant) {
+        List<ReceiptMismatchDTO> mismatches = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            Long variantId = getOrderItemVariantId(item);
+            int exportedQuantity = getExpectedReceiptQuantity(item);
+            int receivedQuantity = receivedByVariant.get(variantId);
+            if (receivedQuantity != exportedQuantity) {
+                mismatches.add(new ReceiptMismatchDTO(
+                        variantId,
+                        getVariantName(item),
+                        item.getQuantity(),
+                        exportedQuantity,
+                        receivedQuantity
+                ));
+            }
+        }
+        return mismatches;
+    }
+
+    private void applyReceivedQuantities(Order order, Map<Long, Integer> receivedByVariant) {
+        for (OrderItem item : order.getItems()) {
+            item.setReceivedQuantity(receivedByVariant.get(getOrderItemVariantId(item)));
+        }
+    }
+
+    private int getExpectedReceiptQuantity(OrderItem item) {
+        return item.getExportedQuantity() != null ? item.getExportedQuantity() : item.getQuantity();
+    }
+
+    private Long getOrderItemVariantId(OrderItem item) {
+        if (item == null || item.getProductVariant() == null || item.getProductVariant().getId() == null) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Order item khong co product variant hop le.");
+        }
+        return item.getProductVariant().getId();
+    }
+
+    private String getVariantName(OrderItem item) {
+        ProductVariant variant = item.getProductVariant();
+        if (variant == null || variant.getVariantName() == null || variant.getVariantName().isBlank()) {
+            return "Variant #" + getOrderItemVariantId(item);
+        }
+        return variant.getVariantName();
+    }
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
@@ -577,8 +731,8 @@ public class OrderService {
     }
     @Transactional(readOnly = true)
     @Cacheable(value = "orders", key = "#user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderDTO> getOrdersByUserId(Long user_id, Pageable pageable) {
-        Page<Long> orderIdPage = orderRepository.findOrderIdsByUserId(
+    public Page<OrderListDTO> getOrdersByUserId(Long user_id, Pageable pageable) {
+        return orderRepository.findListDtoByUserId(
                 user_id,
                 List.of(
                         OrderStatus.PENDING_PAYMENT,
@@ -592,24 +746,17 @@ public class OrderService {
                 OrderStatus.CANCELLED,
                 normalizePageable(pageable)
         );
+    }
 
-        if (orderIdPage.isEmpty()) {
-            return orderIdPage.map(orderId -> (OrderDTO) null);
-        }
-
-        List<Order> orders = orderRepository.findFullOrdersByIds(orderIdPage.getContent());
-        Map<Long, Order> ordersById = orders.stream()
-                .collect(Collectors.toMap(Order::getId, order -> order));
-
-        return orderIdPage.map(orderId -> {
-            Order order = ordersById.get(orderId);
-            if (order == null) {
-                throw new AppException(HttpStatus.NOT_FOUND, "Order not found with id: " + orderId);
-            }
-            OrderDTO dto = orderMapper.toDto(order);
-            injectImageUrls(order, dto);
-            return dto;
-        });
+    @Transactional(readOnly = true)
+    @Cacheable(value = "orders", key = "'cancelled-' + #user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<OrderListDTO> getCancelledOrdersByUserId(Long user_id, Pageable pageable) {
+        return orderRepository.findListDtoByUserIdAndStatus(
+                user_id,
+                OrderStatus.CANCELLED,
+                OrderStatus.DELIVERED,
+                normalizePageable(pageable)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -641,3 +788,4 @@ public class OrderService {
         return orderRepository.findListDtoByStatusOldestFirst(status, normalizePageable(pageable));
     }
 }
+

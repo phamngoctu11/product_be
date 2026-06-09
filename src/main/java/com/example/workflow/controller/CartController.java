@@ -71,9 +71,9 @@ public class CartController {
     @DeleteMapping("/remove")
     public ResponseEntity<ApiResponse<Void>> remove(
             @Positive(message = "User id must be positive") @RequestParam Long userId,
-            @Positive(message = "Variant id must be positive") @RequestParam Long productId
+            @Positive(message = "Variant id must be positive") @RequestParam Long variantId
     ) {
-        cartService.removeFromCart(userId, productId);
+        cartService.removeFromCart(userId, variantId);
         return ResponseEntity.ok(ApiResponse.success("Removed from cart"));
     }
 
@@ -111,12 +111,26 @@ public class CartController {
             runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
 
             if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-                String momoPayUrl = momoService.createPayment(String.valueOf(orderId), savedOrder.getFinalPrice().longValue());
+                Map<String, String> momoPaymentData = momoService.createPaymentData(
+                        String.valueOf(orderId),
+                        savedOrder.getFinalPrice().longValue()
+                );
+                String momoPayUrl = momoPaymentData.get("payUrl");
+                if (momoPayUrl == null || momoPayUrl.isBlank()) {
+                    throw new AppException(HttpStatus.BAD_REQUEST, "MoMo did not return a payUrl.");
+                }
 
                 Map<String, String> response = new HashMap<>();
+                response.putAll(momoPaymentData);
                 response.put("status", "REDIRECT");
                 response.put("url", momoPayUrl);
-                response.put("message", "Vui long thanh toan qua MoMo de hoan tat.");
+                response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
+                response.put(
+                        "message",
+                        momoService.isMockPaymentEnabled()
+                                ? "Mo URL mock de gia lap thanh toan thanh cong."
+                                : "Vui long thanh toan qua MoMo de hoan tat."
+                );
                 return ResponseEntity.ok(ApiResponse.success(response));
             }
 

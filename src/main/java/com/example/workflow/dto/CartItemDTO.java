@@ -10,8 +10,9 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 public class CartItemDTO implements Serializable {
-    private Long productId;
-    private String productName;
+
+    private Long variantId;
+    private String variantName;
     private int quantity;
     private double price;
     @JsonProperty("image_url")

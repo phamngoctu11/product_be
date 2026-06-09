@@ -1,6 +1,7 @@
 package com.example.workflow.delegate;
 import com.example.workflow.entity.Cart;
 import com.example.workflow.repository.CartRepository;
+import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class CheckUserAndCartDelegate implements JavaDelegate {
     private final UserRepository userRepository;
     private final CartRepository cartRepository;
+    private final ProductVariantRepository productVariantRepository;
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -21,6 +23,9 @@ public class CheckUserAndCartDelegate implements JavaDelegate {
         if (!userRepository.existsById(userId)) {
             throw new RuntimeException("User not found!!");
         }
+        productVariantRepository.findActiveById(variantId)
+                .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
+
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Not found cart!"));
 

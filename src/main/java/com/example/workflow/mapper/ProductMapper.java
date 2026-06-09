@@ -39,7 +39,14 @@ public interface ProductMapper {
     @AfterMapping
     default void calculateTotalQuantity(Product entity, @MappingTarget ProductDTO dto) {
         if (entity.getVariants() != null && !entity.getVariants().isEmpty()) {
-            int totalQty = entity.getVariants().stream()
+            var activeVariants = entity.getVariants().stream()
+                    .filter(variant -> !variant.isDelete())
+                    .toList();
+            dto.setVariants(activeVariants.stream()
+                    .map(this::variantToDto)
+                    .toList());
+
+            int totalQty = activeVariants.stream()
                     .mapToInt(ProductVariant::getQuantity)
                     .sum();
             dto.setQuantity(totalQty);

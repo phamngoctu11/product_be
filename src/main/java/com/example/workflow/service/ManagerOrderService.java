@@ -25,7 +25,7 @@ public class ManagerOrderService {
         orderService.assignStaffToOrder(orderId, staffId);
     }
 
-    public void kcsCheck(Long orderId, boolean isPassed) {
-        orderService.processManagerKcsCheck(orderId, isPassed);
+    public void kcsCheck(Long orderId, boolean isPassed,String cancelReason) {
+        orderService.processManagerKcsCheck(orderId, isPassed,cancelReason);
     }
 }

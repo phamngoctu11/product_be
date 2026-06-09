@@ -29,7 +29,7 @@ public class AddNewItemDelegate implements JavaDelegate {
         Cart cart = cartRepository.findById(cartId)
                 .orElseThrow(() -> new RuntimeException("Cart not found!"));
 
-        ProductVariant variant = productVariantRepository.findById(variantId)
+        ProductVariant variant = productVariantRepository.findActiveById(variantId)
                 .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
 
         CartItem newItem = new CartItem();
