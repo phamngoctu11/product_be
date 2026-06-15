@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,7 +28,8 @@ public class UserController {
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody UserCreDTO dto) {
         userService.startUserRegistrationProcess(dto);
-        return ResponseEntity.ok(ApiResponse.success("Quy trinh tao User da bat dau!"));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, "Tạo người dùng thành công"));
     }
 
     @GetMapping

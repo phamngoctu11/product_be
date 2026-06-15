@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.MomoPaymentRequest;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.MomoService;
 import com.example.workflow.service.OrderService;
 import jakarta.validation.Valid;
@@ -39,7 +40,7 @@ public class MomoController {
             Map<String, String> paymentData = momoService.createPaymentData(request.getOrderId(), request.getAmount());
             return ResponseEntity.ok(ApiResponse.success(paymentData));
         } catch (Exception e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.INTERNAL_ERROR, e.getMessage());
         }
     }
 
@@ -52,7 +53,7 @@ public class MomoController {
             Map<String, String> allParams = mergePaymentParams(queryParams, rawBody);
             boolean isValid = momoService.verifySignature(allParams);
             if (!isValid) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Chu ky MoMo khong hop le!");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_MOMO_SIGNATURE);
             }
 
             String rawOrderId = allParams.get("orderId");
@@ -64,7 +65,7 @@ public class MomoController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi Server: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 
@@ -95,10 +96,10 @@ public class MomoController {
     ) {
         try {
             if (!momoService.isMockPaymentEnabled()) {
-                throw new AppException(HttpStatus.NOT_FOUND, "Mock MoMo payment is disabled.");
+                throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.MOCK_MOMO_PAYMENT_DISABLED);
             }
             if (!momoService.verifyMockToken(orderId, token)) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Mock payment token is invalid.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_MOCK_PAYMENT_TOKEN);
             }
 
             Long parsedOrderId = Long.parseLong(orderId);
@@ -113,11 +114,11 @@ public class MomoController {
                     )
             ));
         } catch (NumberFormatException e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order id is invalid.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_ORDER_ID);
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi Server: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 }

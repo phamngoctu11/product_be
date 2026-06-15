@@ -4,6 +4,7 @@ import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +27,11 @@ public class UploadController {
     @PostMapping("/image")
     public ResponseEntity<ApiResponse<Map<String, String>>> uploadImage(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "File is required");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.FILE_REQUIRED);
         }
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Only image files are allowed");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.IMAGE_FILE_REQUIRED);
         }
 
         try {
@@ -38,7 +39,7 @@ public class UploadController {
             String imageUrl = uploadResult.get("url").toString();
             return ResponseEntity.ok(ApiResponse.success(Map.of("url", imageUrl)));
         } catch (IOException e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload image: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.IMAGE_UPLOAD_FAILED, e.getMessage());
         }
     }
 }

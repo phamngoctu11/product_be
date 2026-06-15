@@ -3,6 +3,7 @@ package com.example.workflow.service;
 import com.example.workflow.dto.*;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
@@ -59,9 +60,9 @@ public class OrderService {
 
     private User getManagerReviewer(Long changerId) {
         User manager = userRepository.findById(changerId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Reviewer not found with id: " + changerId));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.REVIEWER_NOT_FOUND, changerId));
         if (manager.getRole() != Role.MANAGER) {
-            throw new AppException(HttpStatus.FORBIDDEN, "Reviewer must have MANAGER role");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.REVIEWER_MANAGER_ROLE_REQUIRED);
         }
         return manager;
     }
@@ -69,7 +70,7 @@ public class OrderService {
     private User getCurrentManager() {
         User manager = getCurrentAuthenticatedUser();
         if (manager.getRole() != Role.MANAGER) {
-            throw new AppException(HttpStatus.FORBIDDEN, "Current user must have MANAGER role");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED);
         }
         return manager;
     }
@@ -77,16 +78,16 @@ public class OrderService {
     private User getCurrentStaff() {
         User staff = getCurrentAuthenticatedUser();
         if (staff.getRole() != Role.STAFF) {
-            throw new AppException(HttpStatus.FORBIDDEN, "Current user must have STAFF role");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         }
         return staff;
     }
 
     private User getStaffById(Long staffId) {
         User staff = userRepository.findById(staffId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Staff not found with id: " + staffId));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
         if (staff.getRole() != Role.STAFF || staff.isDelete()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Assigned user must be an active STAFF");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ACTIVE_STAFF_REQUIRED);
         }
         return staff;
     }
@@ -115,10 +116,10 @@ public class OrderService {
         User staff = getCurrentStaff();
 
         if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order is not waiting for warehouse staff");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_WAREHOUSE_STAFF);
         }
         if (order.getWarehouseStaff() != null) {
-            throw new AppException(HttpStatus.CONFLICT, "Order has already been assigned to a staff member");
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_ALREADY_ASSIGNED);
         }
 
         OrderStatus oldStatus = order.getStatus();
@@ -141,7 +142,7 @@ public class OrderService {
         User staff = getStaffById(staffId);
 
         if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE && order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order cannot be assigned at its current status");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_ASSIGNED);
         }
 
         OrderStatus oldStatus = order.getStatus();
@@ -220,16 +221,16 @@ public class OrderService {
         User staff = getCurrentStaff();
 
         if (order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order must be assigned to staff before export");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_STAFF_REQUIRED_BEFORE_EXPORT);
         }
         if (order.getWarehouseStaff() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order has no assigned warehouse staff");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_HAS_NO_ASSIGNED_STAFF);
         }
         if (!order.getWarehouseStaff().getId().equals(staff.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, "Only assigned staff can export this order");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ONLY_ASSIGNED_STAFF_CAN_EXPORT);
         }
         if (exportData == null || exportData.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Export data is required");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_DATA_REQUIRED);
         }
 
         Task task = taskService.createTaskQuery()
@@ -241,12 +242,12 @@ public class OrderService {
         // Cập nhật số lượng thực xuất
         for (ItemCheckRequest req : exportData) {
             if (req.getQuantity() < 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Export quantity cannot be negative");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_QUANTITY_NEGATIVE);
             }
             OrderItem orderItem = order.getItems().stream()
                     .filter(existingItem -> existingItem.getProductVariant().getId().equals(req.getVariantId()))
                     .findFirst()
-                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Variant does not belong to this order: " + req.getVariantId()));
+                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, req.getVariantId()));
             orderItem.setExportedQuantity(req.getQuantity());
         }
 
@@ -273,7 +274,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow();
 
         if (order.getStatus() != OrderStatus.PENDING_KCS) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order is not waiting for KCS");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_KCS);
         }
 
         Task task = taskService.createTaskQuery()
@@ -359,7 +360,7 @@ public class OrderService {
         Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
         List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
         if (mismatches.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "So luong thuc nhan dang khop voi so luong da xuat, khong co noi dung khieu nai.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_MATCHES_EXPORTED);
         }
 
         List<String> managerEmails = userRepository.findByRoleInAndIsDeleteFalseAndEmailIsNotNull(List.of(Role.MANAGER))
@@ -369,7 +370,7 @@ public class OrderService {
                 .distinct()
                 .collect(Collectors.toList());
         if (managerEmails.isEmpty()) {
-            throw new AppException(HttpStatus.NOT_FOUND, "Khong tim thay email manager de gui khieu nai.");
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.MANAGER_EMAIL_NOT_FOUND);
         }
 
         emailService.sendReceiptComplaintEmail(
@@ -399,7 +400,7 @@ public class OrderService {
     private User validateReceiptOwner(Order order) {
         User currentUser = getCurrentAuthenticatedUser();
         if (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, "Ban khong co quyen xac nhan don hang cua nguoi khac.");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ORDER_CONFIRMATION_FORBIDDEN);
         }
         return currentUser;
     }
@@ -410,36 +411,36 @@ public class OrderService {
                 .taskDefinitionKey("customer_confirm_receipt")
                 .singleResult();
         if (task == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Don hang chua den buoc khach xac nhan nhan hang.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_AWAITING_RECEIPT_CONFIRMATION);
         }
         return task;
     }
 
     private Map<Long, Integer> buildReceivedQuantityMap(Order order, List<ItemCheckRequest> receivedItems) {
         if (receivedItems == null || receivedItems.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Danh sach so luong thuc nhan la bat buoc.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_LIST_REQUIRED);
         }
         Map<Long, OrderItem> orderItemsByVariant = buildOrderItemsByVariant(order);
         Map<Long, Integer> receivedByVariant = new HashMap<>();
 
         for (ItemCheckRequest requestItem : receivedItems) {
             if (requestItem == null || requestItem.getVariantId() == null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Moi item nhan hang phai co variantId.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIPT_VARIANT_ID_REQUIRED);
             }
             if (requestItem.getQuantity() < 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "So luong thuc nhan khong duoc am.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_NEGATIVE);
             }
             if (!orderItemsByVariant.containsKey(requestItem.getVariantId())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Variant khong thuoc don hang nay: " + requestItem.getVariantId());
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIPT_VARIANT_NOT_IN_ORDER, requestItem.getVariantId());
             }
             if (receivedByVariant.put(requestItem.getVariantId(), requestItem.getQuantity()) != null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Variant bi gui trung trong danh sach nhan hang: " + requestItem.getVariantId());
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.DUPLICATE_RECEIPT_VARIANT, requestItem.getVariantId());
             }
         }
 
         for (Long variantId : orderItemsByVariant.keySet()) {
             if (!receivedByVariant.containsKey(variantId)) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Thieu so luong thuc nhan cho variant: " + variantId);
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_MISSING, variantId);
             }
         }
         return receivedByVariant;
@@ -447,14 +448,14 @@ public class OrderService {
 
     private Map<Long, OrderItem> buildOrderItemsByVariant(Order order) {
         if (order.getItems() == null || order.getItems().isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Don hang khong co item de xac nhan.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_ITEM_REQUIRED_FOR_CONFIRMATION);
         }
 
         Map<Long, OrderItem> orderItemsByVariant = new HashMap<>();
         for (OrderItem item : order.getItems()) {
             Long variantId = getOrderItemVariantId(item);
             if (orderItemsByVariant.put(variantId, item) != null) {
-                throw new AppException(HttpStatus.CONFLICT, "Don hang co nhieu item trung variant: " + variantId);
+                throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.DUPLICATE_ORDER_VARIANT, variantId);
             }
         }
         return orderItemsByVariant;
@@ -491,7 +492,7 @@ public class OrderService {
 
     private Long getOrderItemVariantId(OrderItem item) {
         if (item == null || item.getProductVariant() == null || item.getProductVariant().getId() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order item khong co product variant hop le.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_ITEM_VARIANT_INVALID);
         }
         return item.getProductVariant().getId();
     }
@@ -519,11 +520,11 @@ public class OrderService {
         User user = getCurrentAuthenticatedUser();
 
         if (!order.getUser().getId().equals(user.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, "You cannot cancel another user's order");
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CANNOT_CANCEL_ANOTHER_USERS_ORDER);
         }
 
         if (order.getStatus() != OrderStatus.PENDING_APPROVAL && order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Order was approved or processed and cannot be cancelled by user");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_CANCELLED);
         }
 
         OrderStatus oldStatus = order.getStatus();

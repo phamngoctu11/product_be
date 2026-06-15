@@ -19,6 +19,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<UserListDTO> findAllCustom(Pageable pageable);
 
     boolean existsByEmail(String email);
+    boolean existsByPhone(String phone);
 
     List<User> findByRoleInAndIsDeleteFalseAndEmailIsNotNull(List<Role> roles);
 }

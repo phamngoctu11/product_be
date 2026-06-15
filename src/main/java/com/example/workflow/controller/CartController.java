@@ -6,6 +6,7 @@ import com.example.workflow.entity.Notification;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.NotificationRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserRepository;
@@ -99,9 +100,9 @@ public class CartController {
             Long orderId = cartService.approve_cart_internal(userId, productIdsToCheckout, userVoucherId, paymentMethod, note);
 
             User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong tim thay User"));
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
             Order savedOrder = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong tim thay Order"));
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("orderId", orderId);
@@ -117,7 +118,7 @@ public class CartController {
                 );
                 String momoPayUrl = momoPaymentData.get("payUrl");
                 if (momoPayUrl == null || momoPayUrl.isBlank()) {
-                    throw new AppException(HttpStatus.BAD_REQUEST, "MoMo did not return a payUrl.");
+                    throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.MOMO_PAY_URL_MISSING);
                 }
 
                 Map<String, String> response = new HashMap<>();
@@ -163,7 +164,7 @@ public class CartController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 

@@ -5,6 +5,7 @@ import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.dto.NotificationMessage;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
@@ -53,11 +54,11 @@ public class CartService {
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(Long userId, Long variantId, int newQuantity) {
         Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Cart empty"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_EMPTY));
         CartItem item = cart.getItems().stream()
                 .filter(i -> i.getProductVariant().getId().equals(variantId))
                 .findFirst()
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product Variant not in cart"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_VARIANT_NOT_IN_CART));
         if (newQuantity <= 0) {
             cart.getItems().remove(item);
         } else {
@@ -69,7 +70,7 @@ public class CartService {
     @CacheEvict(value = "carts", key = "#userId")
     public void removeFromCart(Long userId, Long variantId) {
         Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Cart not found"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_NOT_FOUND));
         cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
         cartRepository.save(cart);
     }
@@ -78,7 +79,7 @@ public class CartService {
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(Long userId) {
         Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Giỏ hàng trống"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_EMPTY_VI));
 
         CartResDTO dto = cartMapper.toDto(cart);
 
@@ -126,15 +127,15 @@ public class CartService {
     // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
     public Long approve_cart_internal(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy User!"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_VI));
         if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Điểm uy tín của bạn quá thấp (< 20). Bắt buộc phải Thanh toán Online!");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
         }
         Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy giỏ hàng!"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_NOT_FOUND_VI));
 
         if (variantIdsToCheckout == null || variantIdsToCheckout.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Vui lòng chọn ít nhất 1 sản phẩm để thanh toán.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
         }
 
         List<CartItem> itemsToCheckout = cart.getItems().stream()
@@ -142,7 +143,7 @@ public class CartService {
                 .collect(Collectors.toList());
 
         if (itemsToCheckout.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "Các sản phẩm được chọn không tồn tại trong giỏ hàng.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.SELECTED_PRODUCTS_NOT_IN_CART);
         }
 
         Order order = new Order();
@@ -160,10 +161,10 @@ public class CartService {
         for (CartItem cartItem : itemsToCheckout) {
             ProductVariant variant = cartItem.getProductVariant();
             if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Bien the san pham (ID: " + variant.getId() + ") da bi xoa hoac khong con duoc ban.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_DELETED, variant.getId());
             }
             if (variant.getQuantity() < cartItem.getQuantity()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Biến thể sản phẩm (ID: " + variant.getId() + ") đã hết hàng hoặc không đủ số lượng!");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variant.getId());
             }
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
@@ -180,19 +181,19 @@ public class CartService {
 
         if (userVoucherId != null) {
             appliedVoucher = userVoucherRepository.findById(userVoucherId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Mã giảm giá không tồn tại."));
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
 
             if (appliedVoucher.isUsed()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Mã giảm giá này đã được sử dụng.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
             }
             if (appliedVoucher.getExpiryDate().isBefore(LocalDateTime.now())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Mã giảm giá đã hết hạn.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
             }
             if (!appliedVoucher.getUser().getId().equals(userId)) {
-                throw new AppException(HttpStatus.FORBIDDEN, "Mã giảm giá này không hợp lệ.");
+                throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.VOUCHER_INVALID);
             }
             if (totalPrice < appliedVoucher.getTemplate().getMinOrderValue()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
             }
             if (appliedVoucher.getTemplate().getDiscountPercent() > 0) {
                 discountAmount = (totalPrice * appliedVoucher.getTemplate().getDiscountPercent()) / 100;

@@ -42,9 +42,27 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGlobalException(Exception ex) {
+        AppException appException = findAppException(ex);
+        if (appException != null) {
+            return new ResponseEntity<>(
+                    ApiResponse.error(appException.getStatus(), appException.getMessage()),
+                    appException.getStatus()
+            );
+        }
         return new ResponseEntity<>(
                 ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage()),
                 HttpStatus.INTERNAL_SERVER_ERROR
         );
+    }
+
+    private AppException findAppException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AppException appException) {
+                return appException;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 }

@@ -3,11 +3,13 @@ package com.example.workflow.service;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
+import com.example.workflow.dto.StockImportRequest;
 import com.example.workflow.entity.InventoryTransaction;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
 import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
@@ -59,9 +61,9 @@ public class ProductService {
     @Cacheable(value = "product", key = "#id")
     public ProductDTO getProductById(Long id) {
         Product product = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
         if (product.isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, "Product not found");
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
         }
         return mapper.toDto(product);
     }
@@ -104,9 +106,9 @@ public class ProductService {
     public void updateProduct(Long id, ProductDTO dto, Long userId) {
         User actor = getActor(userId);
         Product existingProduct = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
         if (existingProduct.isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, "Product not found");
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
         }
         List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
 
@@ -130,7 +132,7 @@ public class ProductService {
                     ProductVariant existingVariant = existingProduct.getVariants().stream()
                             .filter(variant -> variantDto.getId().equals(variant.getId()))
                             .findFirst()
-                            .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Variant does not belong to this product: " + variantDto.getId()));
+                            .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_PRODUCT, variantDto.getId()));
 
                     int oldQuantity = existingVariant.getQuantity();
                     int newQuantity = variantDto.getQuantity();
@@ -178,13 +180,78 @@ public class ProductService {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
+            @CacheEvict(value = "product", key = "#id")
+    })
+    public void updateProductBasicInfo(Long id, ProductDTO dto) {
+        Product product = getActiveProduct(id);
+
+        product.setProductName(dto.getProduct_name());
+        product.setPrice(dto.getPrice());
+        product.setTags(dto.getTags());
+        product.setImageUrl(dto.getImage_url());
+
+        repository.save(product);
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "products", allEntries = true),
+            @CacheEvict(value = "bestSellingProducts", allEntries = true),
+            @CacheEvict(value = "product", key = "#productId")
+    })
+    public ProductDTO addVariant(Long productId, ProductVariantDTO dto, Long userId) {
+        User actor = getActor(userId);
+        Product product = getActiveProduct(productId);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+        variant.setVariantName(dto.getVariantName());
+        variant.setPrice(dto.getPrice());
+        variant.setQuantity(dto.getQuantity());
+        variant.setAttributes(dto.getAttributes());
+        variant.setImageUrl(dto.getImageUrl());
+        variant.setDelete(false);
+
+        ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
+        if (product.getVariants() == null) {
+            product.setVariants(new ArrayList<>());
+        }
+        product.getVariants().add(savedVariant);
+
+        if (savedVariant.getQuantity() > 0) {
+            saveInventoryTransaction(savedVariant, savedVariant.getQuantity(), "INITIAL_STOCK", actor);
+        }
+
+        return mapper.toDto(repository.saveAndFlush(product));
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "products", allEntries = true),
+            @CacheEvict(value = "bestSellingProducts", allEntries = true),
+            @CacheEvict(value = "product", allEntries = true)
+    })
+    public ProductVariantDTO importStock(Long variantId, StockImportRequest request, Long userId) {
+        User actor = getActor(userId);
+        ProductVariant variant = getActiveVariant(variantId);
+
+        variant.setQuantity(variant.getQuantity() + request.getQuantity());
+        ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
+        saveInventoryTransaction(savedVariant, request.getQuantity(), "RESTOCK", actor);
+
+        return mapper.variantToDto(savedVariant);
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
             @CacheEvict(value = "product", key = "#id")
     })
     public void deleteProduct(Long id, Long userId) {
         getActor(userId);
         Product product = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Khong co san pham"));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.NO_PRODUCTS_FOUND));
         product.setDelete(true);
         if (product.getVariants() != null) {
             product.getVariants().forEach(variant -> variant.setDelete(true));
@@ -192,10 +259,28 @@ public class ProductService {
         repository.save(product);
     }
 
+    private Product getActiveProduct(Long productId) {
+        Product product = repository.findById(productId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
+        if (product.isDelete()) {
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return product;
+    }
+
+    private ProductVariant getActiveVariant(Long variantId) {
+        ProductVariant variant = variantRepository.findById(variantId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND));
+        if (variant.isDelete() || variant.getProduct() == null || variant.getProduct().isDelete()) {
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND);
+        }
+        return variant;
+    }
+
     private void saveInventoryTransaction(ProductVariant variant, int changeAmount, String type, User actor) {
         if (variant.getId() == null) {
             if (variant.getProduct() == null || variant.getProduct().getId() == null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, "Product variant must belong to a saved product before inventory transaction is logged");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_MUST_BE_SAVED);
             }
             variant = variantRepository.saveAndFlush(variant);
         }
@@ -212,7 +297,7 @@ public class ProductService {
 
     private User getActor(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found with id: " + userId));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, userId));
     }
 
     private Pageable normalizePageable(Pageable pageable) {
@@ -240,7 +325,7 @@ public class ProductService {
                 LocalDate previousMonthStart = currentMonthStart.minusMonths(1);
                 yield new BestSellerRange(previousMonthStart.atStartOfDay(), currentMonthStart.atStartOfDay());
             }
-            default -> throw new AppException(HttpStatus.BAD_REQUEST, "Period must be one of: day, week, month");
+            default -> throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_BEST_SELLER_PERIOD);
         };
     }
 

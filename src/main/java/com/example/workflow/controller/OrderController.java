@@ -8,6 +8,7 @@ import com.example.workflow.dto.ReceiptComplaintRequest;
 import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -86,7 +87,7 @@ public class OrderController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 
@@ -102,7 +103,7 @@ public class OrderController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 
@@ -118,7 +119,7 @@ public class OrderController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 }

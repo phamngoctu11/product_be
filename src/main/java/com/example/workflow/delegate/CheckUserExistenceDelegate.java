@@ -1,42 +1,36 @@
-package com.example.workflow.delegate; // Sửa lại package cho đúng dự án của bạn
+package com.example.workflow.delegate;
 
+import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component("checkUserExistenceDelegate")
 @RequiredArgsConstructor
 public class CheckUserExistenceDelegate implements JavaDelegate {
-
     private final UserRepository userRepository;
 
     @Override
-    public void execute(DelegateExecution execution) throws Exception {
+    public void execute(DelegateExecution execution) {
         String username = (String) execution.getVariable("username");
         String email = (String) execution.getVariable("email");
+        String phone = (String) execution.getVariable("phone");
 
-        boolean isUsernameExist = userRepository.existsByUsername(username);
-        boolean isEmailExist = userRepository.existsByEmail(email);
-
-        // Nếu 1 trong 2 cái bị trùng, thì coi như User đã tồn tại
-        boolean isExisted = isUsernameExist || isEmailExist;
-        execution.setVariable("userExisted", isExisted);
-
-        if (isExisted) {
-            String errorMsg = "";
-            if (isUsernameExist) {
-                errorMsg = "Tên đăng nhập '" + username + "' đã tồn tại!";
-                System.out.println(">>> Camunda: " + errorMsg);
-            } else if (isEmailExist) {
-                errorMsg = "Email '" + email + "' đã được sử dụng!";
-                System.out.println(">>> Camunda: " + errorMsg);
-            }
-            // Lưu lý do lỗi vào Camunda để văng ra cho Frontend biết
-            execution.setVariable("errorMessage", errorMsg);
-        } else {
-            System.out.println(">>> Camunda: Thông tin Username và Email đều HỢP LỆ (Chưa có).");
+        if (userRepository.existsByUsername(username)) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.USERNAME_ALREADY_EXISTS);
         }
+        if (StringUtils.hasText(email) && userRepository.existsByEmail(email)) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.EMAIL_ALREADY_EXISTS);
+        }
+        if (userRepository.existsByPhone(phone)) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PHONE_ALREADY_EXISTS);
+        }
+
+        execution.setVariable("userExisted", false);
     }
 }

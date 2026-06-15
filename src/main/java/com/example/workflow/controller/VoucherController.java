@@ -5,6 +5,7 @@ import com.example.workflow.dto.UserVoucherDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
 import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.VoucherService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -45,9 +46,9 @@ public class VoucherController {
             voucherService.redeemVoucher(userId, templateId);
             return ResponseEntity.ok(ApiResponse.success("Doi ma giam gia thanh cong! Da them vao vi cua ban."));
         } catch (IllegalStateException e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         } catch (Exception e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, "Loi he thong: " + e.getMessage());
+            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.SYSTEM_ERROR, e.getMessage());
         }
     }
 

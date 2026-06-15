@@ -3,6 +3,8 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
+import com.example.workflow.dto.ProductVariantDTO;
+import com.example.workflow.dto.StockImportRequest;
 import com.example.workflow.service.ProductService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -63,7 +65,38 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Product updated successfully"));
     }
 
-    // 🚨 BẢO MẬT: Chỉ MANAGER hoặc ADMIN mới được xóa
+    // STAFF can update basic product info, add variants, and import stock; product create/delete stays manager/admin only.
+    @PatchMapping("/{id}/staff-info")
+    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> updateProductBasicInfo(
+            @Positive(message = "Product id must be positive") @PathVariable Long id,
+            @Valid @RequestBody ProductDTO dto
+    ) {
+        service.updateProductBasicInfo(id, dto);
+        return ResponseEntity.ok(ApiResponse.success("Product information updated successfully"));
+    }
+
+    @PostMapping("/{id}/variants")
+    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ProductDTO>> addVariant(
+            @Positive(message = "Product id must be positive") @PathVariable Long id,
+            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @Valid @RequestBody ProductVariantDTO dto
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Variant created successfully", service.addVariant(id, dto, userId)));
+    }
+
+    @PostMapping("/variants/{variantId}/restock")
+    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ProductVariantDTO>> importStock(
+            @Positive(message = "Variant id must be positive") @PathVariable Long variantId,
+            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @Valid @RequestBody StockImportRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Stock imported successfully", service.importStock(variantId, request, userId)));
+    }
+
+    // Only MANAGER or ADMIN can delete products.
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteProduct(

@@ -4,6 +4,7 @@ import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.StaffOrderService;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +58,7 @@ public class StaffOrderController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 
@@ -73,7 +74,7 @@ public class StaffOrderController {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
     }
 }
