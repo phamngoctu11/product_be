@@ -19,6 +19,7 @@ public class Notification {
     private String title;
     private String content;
     private Long orderId;
+    private Long consultationRequestId;
 
     // Lưu ID của người nhận. Nếu là null thì mặc định hiểu là gửi cho toàn bộ Admin
     private Long targetUserId;

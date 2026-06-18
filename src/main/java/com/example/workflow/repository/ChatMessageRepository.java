@@ -1,15 +1,22 @@
 package com.example.workflow.repository;
 
 import com.example.workflow.entity.ChatMessage;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 
-public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
-
-    // Lấy toàn bộ lịch sử chat của 1 khách hàng, sắp xếp theo thời gian (cũ -> mới)
+public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
     List<ChatMessage> findByUserIdOrderByTimestampAsc(Long userId);
-    @Query("SELECT DISTINCT c.userId FROM ChatMessage c")
-    List<Long> findAllChattedUserIds();
+
+    List<ChatMessage> findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(Long userId);
+
+    List<ChatMessage> findByConsultationRequestIdOrderByTimestampAsc(Long consultationRequestId);
+
+    List<ChatMessage> findByConsultationRequestIdAndProductIdOrderByTimestampAsc(Long consultationRequestId, Long productId);
+
+    long deleteByConsultationRequestId(Long consultationRequestId);
+
+    boolean existsByConsultationRequestIdAndSenderRole(Long consultationRequestId, String senderRole);
+
+    boolean existsByLegacyMysqlId(Long legacyMysqlId);
 }

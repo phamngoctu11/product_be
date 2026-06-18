@@ -1,32 +1,47 @@
 package com.example.workflow.entity;
 
-import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "chat_messages")
+@Document(collection = "chat_messages")
+@CompoundIndex(name = "chat_user_timestamp_idx", def = "{'userId': 1, 'timestamp': 1}")
+@CompoundIndex(name = "chat_consultation_timestamp_idx", def = "{'consultationRequestId': 1, 'timestamp': 1}")
 @Getter
 @Setter
 public class ChatMessage {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
+
+    @Indexed(sparse = true)
+    private Long legacyMysqlId;
+
+    private Long consultationRequestId;
 
     private Long userId;
 
-    @Column(name = "content", columnDefinition = "TEXT")
+    private Long senderId;
+
+    private String senderRole;
+
+    private String senderName;
+
+    private Long assignedStaffId;
+
+    private String assignedStaffName;
+
     private String content;
 
-    @Column(name = "is_shop_sender")
     private boolean isShopSender;
 
     private LocalDateTime timestamp = LocalDateTime.now();
 
-    @Column(name = "message_type")
     private String messageType = "TEXT";
 
-    @Column(name = "product_id")
     private Long productId;
 }

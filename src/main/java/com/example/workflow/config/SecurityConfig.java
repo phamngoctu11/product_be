@@ -47,7 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payment/momo-callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/momo-mock-success").permitAll()
                         .requestMatchers("/ws/**", "/camunda/**").permitAll()
-                        .requestMatchers("/api/chat/users").hasAnyAuthority("ADMIN", "MANAGER", "STAFF")
+                        .requestMatchers("/api/chat/users").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 )
