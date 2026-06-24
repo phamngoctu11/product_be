@@ -131,7 +131,9 @@ public class UserService {
 
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", key = "#id")
+            @CacheEvict(value = "user", key = "#id"),
+            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
     public UserResDTO updateUser(Long id, UserCreDTO request) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
@@ -142,7 +144,9 @@ public class UserService {
 
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", key = "#id")
+            @CacheEvict(value = "user", key = "#id"),
+            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
     public void deleteUser(Long id) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);

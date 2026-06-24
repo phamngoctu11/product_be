@@ -82,7 +82,8 @@ public class ProductService {
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
+            @CacheEvict(value = "product", key = "#id"),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
     public void updateProduct(Long id, ProductDTO dto, Long userId) {
         User actor = getActor(userId);
@@ -141,7 +142,8 @@ public class ProductService {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
+            @CacheEvict(value = "product", key = "#id"),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);

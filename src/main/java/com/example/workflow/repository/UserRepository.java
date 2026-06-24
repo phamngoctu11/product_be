@@ -24,6 +24,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "FROM User u WHERE u.id IN :ids AND u.isDelete = false")
     List<ChatUserDTO> findChatUserDtosByIds(@Param("ids") List<Long> ids);
 
+    Page<User> findByRoleAndIsDeleteFalse(Role role, Pageable pageable);
+
+    List<User> findByRoleAndIsDeleteFalse(Role role);
+
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
 
