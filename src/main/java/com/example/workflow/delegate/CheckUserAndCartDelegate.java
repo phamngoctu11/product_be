@@ -1,4 +1,5 @@
 package com.example.workflow.delegate;
+
 import com.example.workflow.entity.Cart;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.ProductVariantRepository;
@@ -16,25 +17,38 @@ public class CheckUserAndCartDelegate implements JavaDelegate {
     private final ProductVariantRepository productVariantRepository;
 
     @Override
-    public void execute(DelegateExecution execution) throws Exception {
+    public void execute(DelegateExecution execution) {
         Long userId = (Long) execution.getVariable("userId");
-        Long variantId = (Long) execution.getVariable("variantId"); // LẤY VARIANT ID
+        Long variantId = (Long) execution.getVariable("variantId");
 
+        validateUserExists(userId);
+        validateActiveVariantExists(variantId);
+        Cart cart = getCartByUserOrThrow(userId);
+
+        boolean existed = cartContainsVariant(cart, variantId);
+        execution.setVariable("isExisted", existed);
+        execution.setVariable("cartId", cart.getId());
+        System.out.println(">>> CheckUserAndCart: isExisted = " + existed);
+    }
+
+    private void validateUserExists(Long userId) {
         if (!userRepository.existsById(userId)) {
             throw new RuntimeException("User not found!!");
         }
+    }
+
+    private void validateActiveVariantExists(Long variantId) {
         productVariantRepository.findActiveById(variantId)
                 .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
+    }
 
-        Cart cart = cartRepository.findByUserId(userId)
+    private Cart getCartByUserOrThrow(Long userId) {
+        return cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Not found cart!"));
+    }
 
-        // KIỂM TRA VARIANT CÓ TỒN TẠI TRONG GIỎ CHƯA
-        boolean isExisted = cart.getItems().stream()
+    private boolean cartContainsVariant(Cart cart, Long variantId) {
+        return cart.getItems().stream()
                 .anyMatch(item -> item.getProductVariant().getId().equals(variantId));
-
-        execution.setVariable("isExisted", isExisted);
-        execution.setVariable("cartId", cart.getId());
-        System.out.println(">>> CheckUserAndCart: isExisted = " + isExisted);
     }
 }

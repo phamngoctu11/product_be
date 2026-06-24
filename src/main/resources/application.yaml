@@ -11,6 +11,9 @@ chat:
   migration:
     mysql-to-mongo:
       enabled: ${CHAT_MIGRATION_MYSQL_TO_MONGO_ENABLED:false}
+consultation:
+  bonus:
+    percent: ${CONSULTATION_BONUS_PERCENT:5}
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
   realm: ${KEYCLOAK_REALM:my-workflow}

@@ -2,10 +2,12 @@ package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderItem;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 @Component("reconciliationDelegate")
@@ -14,25 +16,33 @@ public class ReconciliationDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
 
     @Override
-    public void execute(DelegateExecution execution) throws Exception {
+    public void execute(DelegateExecution execution) {
         Long orderId = (Long) execution.getVariable("orderId");
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
 
-        boolean isLost = false;
+        if (hasShippingLoss(order)) {
+            System.err.println("Shipping loss detected for order #" + orderId);
+        } else {
+            System.out.println("Reconciliation completed for order #" + orderId);
+        }
+    }
+
+    private Order getOrderOrThrow(Long orderId) {
+        return orderRepository.findById(orderId).orElseThrow();
+    }
+
+    private boolean hasShippingLoss(Order order) {
         for (OrderItem item : order.getItems()) {
-            // Nếu số lượng khách nhận < số lượng kho xuất ra -> Thất thoát đi đường!
-            if (item.getReceivedQuantity() != null && item.getExportedQuantity() != null &&
-                    item.getReceivedQuantity() < item.getExportedQuantity()) {
-                isLost = true;
-                break;
+            if (isLostItem(item)) {
+                return true;
             }
         }
+        return false;
+    }
 
-        if (isLost) {
-            System.err.println("🚨 BÁO ĐỘNG: Đơn hàng #" + orderId + " bị thất thoát trong quá trình vận chuyển!");
-            // (Tương lai có thể viết code trừ lương Shipper ở đây)
-        } else {
-            System.out.println("✅ Đối soát thành công: Đơn hàng #" + orderId + " giao đủ số lượng.");
-        }
+    private boolean isLostItem(OrderItem item) {
+        return item.getReceivedQuantity() != null
+                && item.getExportedQuantity() != null
+                && item.getReceivedQuantity() < item.getExportedQuantity();
     }
 }

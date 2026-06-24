@@ -2,7 +2,6 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
-import com.example.workflow.dto.NotificationMessage;
 import com.example.workflow.entity.*;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -15,9 +14,10 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -39,8 +39,11 @@ public class CartService {
 
     // TIÊM THÊM 2 SERVICE NÀY VÀO ĐỂ LÀM ORCHESTRATOR
     private final RuntimeService runtimeService;
+    private final ConsultationAttributionService consultationAttributionService;
     private final MomoService momoService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final EmailService emailService;
+    private final NotificationService notificationService;
+    private final TransactionTemplate transactionTemplate;
 
     // LOGIC CAMUNDA THÊM GIỎ HÀNG
     public void startAddToCartProcess(Long userId, Long variantId, int quantity) {
@@ -53,12 +56,8 @@ public class CartService {
 
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(Long userId, Long variantId, int newQuantity) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_EMPTY));
-        CartItem item = cart.getItems().stream()
-                .filter(i -> i.getProductVariant().getId().equals(variantId))
-                .findFirst()
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_VARIANT_NOT_IN_CART));
+        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY);
+        CartItem item = findCartItemOrThrow(cart, variantId);
         if (newQuantity <= 0) {
             cart.getItems().remove(item);
         } else {
@@ -69,8 +68,7 @@ public class CartService {
 
     @CacheEvict(value = "carts", key = "#userId")
     public void removeFromCart(Long userId, Long variantId) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_NOT_FOUND));
+        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
         cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
         cartRepository.save(cart);
     }
@@ -78,8 +76,7 @@ public class CartService {
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(Long userId) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_EMPTY_VI));
+        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY_VI);
 
         CartResDTO dto = cartMapper.toDto(cart);
 
@@ -115,25 +112,78 @@ public class CartService {
     // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
     // ==============================================================================
     @Caching(evict = {
-            @CacheEvict(value = "carts", key = "#userId"),
-            @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
+            @CacheEvict(value = "carts", key = "#userId", beforeInvocation = true),
+            @CacheEvict(value = "users", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "orders", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "pendingOrders", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "warehouseOrders", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "staffOrders", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "products", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "product", allEntries = true, beforeInvocation = true)
     })
     // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
-    public Long approve_cart_internal(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId,String paymentMethod,String note) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_VI));
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Map<String, String> approveCart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
+        try {
+            Long orderId = transactionTemplate.execute(status ->
+                    createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note)
+            );
+            Order savedOrder = getOrderOrThrow(orderId);
+            User user = getUserOrThrow(userId);
+
+            startApproveCartProcess(orderId, userId, paymentMethod, note);
+
+            if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+                return buildOnlinePaymentResponse(savedOrder);
+            }
+
+            sendCodOrderNotifications(user, savedOrder);
+            sendOrderConfirmationEmail(user, savedOrder);
+
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "SUCCESS");
+            response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
+            return response;
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
+        }
+    }
+
+    private Long createOrderFromCart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
+        User user = getUserOrThrow(userId);
         if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
         }
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_NOT_FOUND_VI));
+        Cart cart = getCheckoutCart(userId);
 
+        List<CartItem> itemsToCheckout = resolveCheckoutItems(cart, variantIdsToCheckout);
+        Order order = createOrder(user, paymentMethod, note);
+        double totalPrice = addCheckoutItems(order, itemsToCheckout);
+
+        UserVoucher appliedVoucher = applyVoucherForCheckout(userVoucherId, userId, totalPrice);
+        double discountAmount = calculateDiscountAmount(appliedVoucher, totalPrice);
+        applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
+
+        Order savedOrder = orderRepository.saveAndFlush(order);
+        consultationAttributionService.recordOrderAttributions(savedOrder);
+
+        cartItemRepository.deleteAll(itemsToCheckout);
+        cart.getItems().removeAll(itemsToCheckout);
+        cartRepository.save(cart);
+
+        return savedOrder.getId();
+    }
+
+    private CartItem findCartItemOrThrow(Cart cart, Long variantId) {
+        return cart.getItems().stream()
+                .filter(item -> item.getProductVariant().getId().equals(variantId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_VARIANT_NOT_IN_CART));
+    }
+
+    private List<CartItem> resolveCheckoutItems(Cart cart, List<Long> variantIdsToCheckout) {
         if (variantIdsToCheckout == null || variantIdsToCheckout.isEmpty()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
         }
@@ -141,89 +191,200 @@ public class CartService {
         List<CartItem> itemsToCheckout = cart.getItems().stream()
                 .filter(cartItem -> variantIdsToCheckout.contains(cartItem.getProductVariant().getId()))
                 .collect(Collectors.toList());
-
         if (itemsToCheckout.isEmpty()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.SELECTED_PRODUCTS_NOT_IN_CART);
         }
+        return itemsToCheckout;
+    }
 
+    private Order createOrder(User user, String paymentMethod, String note) {
         Order order = new Order();
         order.setUser(user);
         order.setNote(note);
         order.setStartOrderTime(LocalDateTime.now());
         order.setPaymentMethod(paymentMethod);
-        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-            order.setStatus(OrderStatus.PENDING_PAYMENT);
-        } else {
-            order.setStatus(OrderStatus.PENDING_APPROVAL);
-        }
+        order.setStatus(resolveInitialOrderStatus(paymentMethod));
         order.setItems(new ArrayList<>());
+        return order;
+    }
+
+    private double addCheckoutItems(Order order, List<CartItem> itemsToCheckout) {
         double totalPrice = 0;
         for (CartItem cartItem : itemsToCheckout) {
-            ProductVariant variant = cartItem.getProductVariant();
-            if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_DELETED, variant.getId());
-            }
-            if (variant.getQuantity() < cartItem.getQuantity()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variant.getId());
-            }
-            OrderItem orderItem = new OrderItem();
-            orderItem.setOrder(order);
-            orderItem.setProductVariant(variant);
-            orderItem.setQuantity(cartItem.getQuantity());
-            orderItem.setPrice(variant.getPrice());
-
-            totalPrice += (cartItem.getQuantity() * variant.getPrice());
+            validateCheckoutItem(cartItem);
+            OrderItem orderItem = createOrderItem(order, cartItem);
+            totalPrice += calculateCartItemAmount(cartItem);
             order.getItems().add(orderItem);
         }
+        return totalPrice;
+    }
 
-        double discountAmount = 0.0;
-        UserVoucher appliedVoucher = null;
-
-        if (userVoucherId != null) {
-            appliedVoucher = userVoucherRepository.findById(userVoucherId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
-
-            if (appliedVoucher.isUsed()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
-            }
-            if (appliedVoucher.getExpiryDate().isBefore(LocalDateTime.now())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
-            }
-            if (!appliedVoucher.getUser().getId().equals(userId)) {
-                throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.VOUCHER_INVALID);
-            }
-            if (totalPrice < appliedVoucher.getTemplate().getMinOrderValue()) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
-            }
-            if (appliedVoucher.getTemplate().getDiscountPercent() > 0) {
-                discountAmount = (totalPrice * appliedVoucher.getTemplate().getDiscountPercent()) / 100;
-                if (appliedVoucher.getTemplate().getMaxDiscountAmount() > 0 && discountAmount > appliedVoucher.getTemplate().getMaxDiscountAmount()) {
-                    discountAmount = appliedVoucher.getTemplate().getMaxDiscountAmount();
-                }
-            } else {
-                discountAmount = appliedVoucher.getTemplate().getMaxDiscountAmount();
-            }
-
-            appliedVoucher.setUsed(true);
-            appliedVoucher.setUsedDate(LocalDateTime.now());
-            userVoucherRepository.save(appliedVoucher);
-        }
-
-        double finalPrice = totalPrice - discountAmount;
-        if (finalPrice < 0) finalPrice = 0;
-
+    private void applyOrderTotals(Order order, double totalPrice, double discountAmount, UserVoucher appliedVoucher) {
+        double finalPrice = Math.max(0, totalPrice - discountAmount);
         order.setTotalPrice(totalPrice);
         order.setDiscountAmount(discountAmount);
         order.setFinalPrice(finalPrice);
         order.setUserVoucher(appliedVoucher);
+    }
 
-        Order savedOrder = orderRepository.save(order);
+    private void startApproveCartProcess(Long orderId, Long userId, String paymentMethod, String note) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("orderId", orderId);
+        variables.put("userId", userId);
+        variables.put("paymentMethod", paymentMethod);
+        variables.put("note", note);
+        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
+    }
 
-        cartItemRepository.deleteAll(itemsToCheckout);
-        cart.getItems().removeAll(itemsToCheckout);
-        cartRepository.save(cart);
+    private Map<String, String> buildOnlinePaymentResponse(Order savedOrder) throws Exception {
+        Long orderId = savedOrder.getId();
+        Map<String, String> momoPaymentData = momoService.createPaymentData(
+                String.valueOf(orderId),
+                savedOrder.getFinalPrice().longValue()
+        );
+        String momoPayUrl = momoPaymentData.get("payUrl");
+        if (momoPayUrl == null || momoPayUrl.isBlank()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.MOMO_PAY_URL_MISSING);
+        }
 
-        return savedOrder.getId();
+        Map<String, String> response = new HashMap<>();
+        response.putAll(momoPaymentData);
+        response.put("status", "REDIRECT");
+        response.put("url", momoPayUrl);
+        response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
+        response.put(
+                "message",
+                momoService.isMockPaymentEnabled()
+                        ? "Mo URL mock de gia lap thanh toan thanh cong."
+                        : "Vui long thanh toan qua MoMo de hoan tat."
+        );
+        return response;
+    }
+
+    private void sendCodOrderNotifications(User user, Order savedOrder) {
+        Long orderId = savedOrder.getId();
+        notificationService.sendNotification(
+                "Don hang moi tu " + user.getLastname(),
+                "Khach hang " + user.getLastname() + " vua tao don hang COD (Ma #" + orderId + ").",
+                orderId,
+                null,
+                null,
+                "/topic/admin-notifications"
+        );
+
+        notificationService.sendNotification(
+                "Dat hang thanh cong!",
+                "Don hang #" + orderId + " cua ban dang cho Admin duyet. Ban co the huy don neu muon.",
+                orderId,
+                user.getId(),
+                null,
+                "/topic/user-notifications/" + user.getId()
+        );
+    }
+
+    private void sendOrderConfirmationEmail(User user, Order savedOrder) {
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            return;
+        }
+        new Thread(() -> emailService.sendOrderConfirmationEmail(
+                user.getEmail(),
+                user.getLastname(),
+                savedOrder.getId(),
+                savedOrder.getTotalPrice(),
+                "Thanh toan khi nhan hang (COD)"
+        )).start();
+    }
+
+    private User getUserOrThrow(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_VI));
+    }
+
+    private Order getOrderOrThrow(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private Cart getCheckoutCart(Long userId) {
+        return getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND_VI);
+    }
+
+    private Cart getCartOrThrow(Long userId, ConstantErrorCode errorCode) {
+        return cartRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode));
+    }
+
+    private OrderStatus resolveInitialOrderStatus(String paymentMethod) {
+        return "ONLINE".equalsIgnoreCase(paymentMethod)
+                ? OrderStatus.PENDING_PAYMENT
+                : OrderStatus.PENDING_APPROVAL;
+    }
+
+    private void validateCheckoutItem(CartItem cartItem) {
+        ProductVariant variant = cartItem.getProductVariant();
+        if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_DELETED, variant.getId());
+        }
+        if (variant.getQuantity() < cartItem.getQuantity()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variant.getId());
+        }
+    }
+
+    private OrderItem createOrderItem(Order order, CartItem cartItem) {
+        ProductVariant variant = cartItem.getProductVariant();
+        OrderItem orderItem = new OrderItem();
+        orderItem.setOrder(order);
+        orderItem.setProductVariant(variant);
+        orderItem.setQuantity(cartItem.getQuantity());
+        orderItem.setPrice(variant.getPrice());
+        return orderItem;
+    }
+
+    private double calculateCartItemAmount(CartItem cartItem) {
+        return cartItem.getQuantity() * cartItem.getProductVariant().getPrice();
+    }
+
+    private UserVoucher applyVoucherForCheckout(Long userVoucherId, Long userId, double totalPrice) {
+        if (userVoucherId == null) {
+            return null;
+        }
+
+        UserVoucher voucher = userVoucherRepository.findById(userVoucherId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
+        validateVoucherForCheckout(voucher, userId, totalPrice);
+        voucher.setUsed(true);
+        voucher.setUsedDate(LocalDateTime.now());
+        return userVoucherRepository.save(voucher);
+    }
+
+    private void validateVoucherForCheckout(UserVoucher voucher, Long userId, double totalPrice) {
+        if (voucher.isUsed()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
+        }
+        if (voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
+        }
+        if (!voucher.getUser().getId().equals(userId)) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.VOUCHER_INVALID);
+        }
+        if (totalPrice < voucher.getTemplate().getMinOrderValue()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
+        }
+    }
+
+    private double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
+        if (voucher == null) {
+            return 0.0;
+        }
+        if (voucher.getTemplate().getDiscountPercent() <= 0) {
+            return voucher.getTemplate().getMaxDiscountAmount();
+        }
+
+        double discountAmount = (totalPrice * voucher.getTemplate().getDiscountPercent()) / 100;
+        if (voucher.getTemplate().getMaxDiscountAmount() > 0 && discountAmount > voucher.getTemplate().getMaxDiscountAmount()) {
+            return voucher.getTemplate().getMaxDiscountAmount();
+        }
+        return discountAmount;
     }
 
 }

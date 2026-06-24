@@ -23,7 +23,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,16 +45,16 @@ public class OrderService {
     private final OrderStatusHistoryMapper historyMapper;
     private final TaskService taskService;
     private final RuntimeService runtimeService;
-    private final SimpMessagingTemplate messagingTemplate;
-    private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
     private final EmailService emailService;
     private final UserVoucherRepository userVoucherRepository;
+    private final ConsultationAttributionService consultationAttributionService;
 
-    // Lấy User đang đăng nhập an toàn tuyệt đối
+    // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsernameAndIsDeleteFalse(username)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin người dùng đăng nhập."));
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
     }
 
     private User getManagerReviewer(Long changerId) {
@@ -104,6 +103,71 @@ public class OrderService {
         return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
     }
 
+    private Order getOrderOrThrow(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private Task findWorkflowTask(Long orderId, String taskDefinitionKey, String missingMessage) {
+        Task task = queryWorkflowTask(orderId, taskDefinitionKey);
+        if (task == null) {
+            throw new RuntimeException(missingMessage);
+        }
+        return task;
+    }
+
+    private Task queryWorkflowTask(Long orderId, String taskDefinitionKey) {
+        return taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .taskDefinitionKey(taskDefinitionKey)
+                .singleResult();
+    }
+
+    private void saveOrderAndAuditStatusChange(Order order, OrderStatus oldStatus, Long changerId) {
+        orderRepository.save(order);
+        if (oldStatus != order.getStatus()) {
+            saveAuditLog(order, oldStatus, order.getStatus(), changerId);
+        }
+    }
+
+    private void restoreVoucher(UserVoucher appliedVoucher) {
+        if (appliedVoucher == null) {
+            return;
+        }
+        appliedVoucher.setUsed(false);
+        appliedVoucher.setUsedDate(null);
+        userVoucherRepository.save(appliedVoucher);
+    }
+
+    private void deleteOrderProcessIfExists(Long orderId, String reason) {
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .variableValueEquals("orderId", orderId)
+                .singleResult();
+        if (processInstance != null) {
+            runtimeService.deleteProcessInstance(processInstance.getId(), reason);
+        }
+    }
+
+    private OrderItem findOrderItemByVariant(Order order, Long variantId) {
+        return order.getItems().stream()
+                .filter(existingItem -> existingItem.getProductVariant().getId().equals(variantId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, variantId));
+    }
+
+    private void sendOrderConfirmationEmailAsync(User user, Order order, String paymentMethodLabel) {
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            return;
+        }
+        new Thread(() -> emailService.sendOrderConfirmationEmail(
+                user.getEmail(),
+                user.getLastname(),
+                order.getId(),
+                order.getTotalPrice(),
+                paymentMethodLabel
+        )).start();
+    }
+
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
@@ -112,7 +176,7 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void claimWarehouseOrder(Long orderId) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User staff = getCurrentStaff();
 
         if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
@@ -125,8 +189,7 @@ public class OrderService {
         OrderStatus oldStatus = order.getStatus();
         order.setWarehouseStaff(staff);
         order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
-        orderRepository.save(order);
-        saveAuditLog(order, oldStatus, OrderStatus.WAREHOUSE_ASSIGNED, staff.getId());
+        saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
     }
 
     @Transactional
@@ -137,7 +200,7 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void assignStaffToOrder(Long orderId, Long staffId) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User manager = getCurrentManager();
         User staff = getStaffById(staffId);
 
@@ -148,16 +211,12 @@ public class OrderService {
         OrderStatus oldStatus = order.getStatus();
         order.setWarehouseStaff(staff);
         order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
-        orderRepository.save(order);
-
-        if (oldStatus != OrderStatus.WAREHOUSE_ASSIGNED) {
-            saveAuditLog(order, oldStatus, OrderStatus.WAREHOUSE_ASSIGNED, manager.getId());
-        }
+        saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
         saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc manager giao cho ban phu trach xuat kho.", orderId, staff.getId(), "/topic/user-notifications/" + staff.getId());
     }
 
     // ==========================================
-    // TRẠM 1: QUẢN LÝ DUYỆT ĐƠN
+    // Station 1: manager review
     // ==========================================
     @Transactional
     @Caching(evict = {
@@ -167,15 +226,11 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processAdminReview(Long orderId, AdminReviewRequest request, Long changerId, Long staffId) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User manager = getManagerReviewer(changerId);
         User assignedStaff = request.isApproved() && staffId != null ? getStaffById(staffId) : null;
 
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("manager_approve_order")
-                .singleResult();
-        if (task == null) throw new RuntimeException("Đơn hàng không ở trạng thái chờ duyệt!");
+        Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
 
         OrderStatus oldStatus = order.getStatus();
         order.setManager(manager);
@@ -190,24 +245,25 @@ public class OrderService {
             if (assignedStaff != null) {
                 saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc giao cho ban phu trach xuat kho.", orderId, assignedStaff.getId(), "/topic/user-notifications/" + assignedStaff.getId());
             }
-            saveAndSendNotification("Đơn hàng đã duyệt", "Đơn #" + orderId + " đang được chuẩn bị.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            saveAndSendNotification("Don hang da duyet", "Don #" + orderId + " dang duoc chuan bi.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         } else {
             order.setWarehouseStaff(null);
-            order.setCancelReason("Quản lý từ chối: " + request.getCancelReason());
+            order.setCancelReason("Quan ly tu choi: " + request.getCancelReason());
             variables.put("isApproved", false);
-            // Nếu từ chối, Delegate Cancel sẽ lo việc cập nhật status và hoàn kho
-            saveAndSendNotification("Đơn hàng bị từ chối", "Lý do: " + request.getCancelReason(), orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            // Rejected orders are cancelled by the workflow delegate.
+            saveAndSendNotification("Don hang bi tu choi", "Ly do: " + request.getCancelReason(), orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         }
 
-        orderRepository.save(order);
         if (request.isApproved()) {
-            saveAuditLog(order, oldStatus, order.getStatus(), manager.getId());
+            saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
+        } else {
+            saveOrderAndAuditStatusChange(order, oldStatus, null);
         }
         taskService.complete(task.getId(), variables);
     }
 
     // ==========================================
-    // TRẠM 2: NHÂN VIÊN XUẤT KHO
+    // Station 2: warehouse export
     // ==========================================
     @Transactional
     @Caching(evict = {
@@ -217,7 +273,7 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User staff = getCurrentStaff();
 
         if (order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
@@ -233,33 +289,24 @@ public class OrderService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_DATA_REQUIRED);
         }
 
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("staff_export_warehouse")
-                .singleResult();
-        if (task == null) throw new RuntimeException("Đơn hàng không ở trạng thái chờ xuất kho!");
+        Task task = findWorkflowTask(orderId, "staff_export_warehouse", "Order is not waiting for warehouse export!");
 
-        // Cập nhật số lượng thực xuất
+        // Apply actual exported quantities.
         for (ItemCheckRequest req : exportData) {
             if (req.getQuantity() < 0) {
                 throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_QUANTITY_NEGATIVE);
             }
-            OrderItem orderItem = order.getItems().stream()
-                    .filter(existingItem -> existingItem.getProductVariant().getId().equals(req.getVariantId()))
-                    .findFirst()
-                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, req.getVariantId()));
-            orderItem.setExportedQuantity(req.getQuantity());
+            findOrderItemByVariant(order, req.getVariantId()).setExportedQuantity(req.getQuantity());
         }
 
         OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.PENDING_KCS);
-        orderRepository.save(order);
-        saveAuditLog(order, oldStatus, OrderStatus.PENDING_KCS, staff.getId());
+        saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
         taskService.complete(task.getId());
     }
 
     // ==========================================
-    // TRẠM 3: QUẢN LÝ KCS ĐỐI SOÁT
+    // Station 3: manager KCS reconciliation
     // ==========================================
     @Transactional
     @Caching(evict = {
@@ -271,41 +318,36 @@ public class OrderService {
             @CacheEvict(value = "product", allEntries = true)
     })
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
 
         if (order.getStatus() != OrderStatus.PENDING_KCS) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_KCS);
         }
 
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("manager_kcs_check")
-                .singleResult();
-        if (task == null) throw new RuntimeException("Không có Task KCS cho đơn hàng này!");
+        Task task = findWorkflowTask(orderId, "manager_kcs_check", "KCS task not found for this order!");
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("kcsPassed", isPassed);
 
         OrderStatus oldStatus = order.getStatus();
         if (isPassed) {
-            order.setStatus(OrderStatus.SHIPPING); // Bắt đầu giao hàng
-            saveAndSendNotification("Đơn hàng đang giao 🚚", "Đơn hàng #" + orderId + " đã xuất kho và đang trên đường giao đến bạn.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            order.setStatus(OrderStatus.SHIPPING);
+            saveAndSendNotification("Don hang dang giao", "Don hang #" + orderId + " da xuat kho va dang tren duong giao den ban.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
         } else {
             order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
             String message = " vui long kiem tra lai so luong xuat.";
-            if(cancelReason!=null) message = "Lí do:"+ cancelReason;
+            if (cancelReason != null) message = "Ly do: " + cancelReason;
             Long staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
             String destination = staffId == null ? "/topic/admin-notifications" : "/topic/user-notifications/" + staffId;
             saveAndSendNotification("Canh bao KCS", "Don # bi KCS danh rot" + orderId + message, orderId, staffId, destination);
         }
 
-        orderRepository.save(order);
-        saveAuditLog(order, oldStatus, order.getStatus(), null);
-        taskService.complete(task.getId(), variables); // Nếu passed, Camunda sẽ tự gọi DeductInventoryDelegate ghi Sổ sao kê
+        saveOrderAndAuditStatusChange(order, oldStatus, null);
+        taskService.complete(task.getId(), variables);
     }
 
     // ==========================================
-    // TRẠM 4: KHÁCH HÀNG NHẬN ĐƠN
+    // Station 4: customer receipt confirmation
     // ==========================================
     @Transactional
     @Caching(evict = {
@@ -316,7 +358,7 @@ public class OrderService {
             @CacheEvict(value = "bestSellingProducts", allEntries = true)
     })
     public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User currentUser = validateReceiptOwner(order);
         Task task = findCustomerReceiptTask(orderId);
 
@@ -339,9 +381,9 @@ public class OrderService {
 
         currentUser.setReputation(currentUser.getReputation() + 2);
         userRepository.save(currentUser);
-        orderRepository.save(order);
+        saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
+        consultationAttributionService.confirmOrderAttributions(order.getId());
 
-        saveAuditLog(order, oldStatus, OrderStatus.DELIVERED, currentUser.getId());
         taskService.complete(task.getId());
 
         boolean matched = mismatches.isEmpty();
@@ -353,7 +395,7 @@ public class OrderService {
 
     @Transactional
     public ReceiptConfirmResponse sendReceiptComplaint(Long orderId, ReceiptComplaintRequest request) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
+        Order order = getOrderOrThrow(orderId);
         User currentUser = validateReceiptOwner(order);
         findCustomerReceiptTask(orderId);
 
@@ -406,10 +448,7 @@ public class OrderService {
     }
 
     private Task findCustomerReceiptTask(Long orderId) {
-        Task task = taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey("customer_confirm_receipt")
-                .singleResult();
+        Task task = queryWorkflowTask(orderId, "customer_confirm_receipt");
         if (task == null) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_AWAITING_RECEIPT_CONFIRMATION);
         }
@@ -504,6 +543,29 @@ public class OrderService {
         }
         return variant.getVariantName();
     }
+
+    private int calculateCancellationReputationDeduction(Order order) {
+        double totalPrice = order.getTotalPrice();
+        if (totalPrice < 1_000_000) {
+            return 1;
+        }
+        if (totalPrice <= 5_000_000) {
+            return 2;
+        }
+        if (totalPrice <= 10_000_000) {
+            return 3;
+        }
+        return 5;
+    }
+
+    private void deductUserReputation(User user, int deduction) {
+        if (user.getReputation() < deduction) {
+            throw new IllegalStateException("Diem uy tin cua ban khong du de tu huy don nay.");
+        }
+        user.setReputation(user.getReputation() - deduction);
+        userRepository.save(user);
+    }
+
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
@@ -516,7 +578,7 @@ public class OrderService {
             @CacheEvict(value = "product", allEntries = true)
     })
     public void cancelOrder(Long id, String reason) {
-        Order order = orderRepository.findById(id).orElseThrow();
+        Order order = getOrderOrThrow(id);
         User user = getCurrentAuthenticatedUser();
 
         if (!order.getUser().getId().equals(user.getId())) {
@@ -528,51 +590,24 @@ public class OrderService {
         }
 
         OrderStatus oldStatus = order.getStatus();
+        deductUserReputation(user, calculateCancellationReputationDeduction(order));
+        deleteOrderProcessIfExists(id, "Customer cancelled order");
+        restoreVoucher(order.getUserVoucher());
 
-        int deduction = (order.getTotalPrice() < 1000000) ? 1 : (order.getTotalPrice() <= 5000000) ? 2 : (order.getTotalPrice() <= 10000000) ? 3 : 5;
-        if (user.getReputation() < deduction) {
-            throw new IllegalStateException("Điểm uy tín của bạn không đủ để tự hủy đơn này.");
-        }
-        user.setReputation(user.getReputation() - deduction);
-        userRepository.save(user);
-
-        // Hủy Process Camunda
-        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                .variableValueEquals("orderId", id)
-                .singleResult();
-        if (processInstance != null) {
-            runtimeService.deleteProcessInstance(processInstance.getId(), "Khách hàng chủ động hủy đơn");
-        }
-
-        // Tự động xử lý như Delegate
-        List<ProductVariant> variantsToUpdate = new ArrayList<>();
-        if (order.getItems() != null && order.getStatus() != OrderStatus.PENDING_APPROVAL) {
-            // (Chỉ hoàn kho nếu Camunda đã lỡ trừ, nhưng logic mới thì KCS mới trừ, nên chỗ này an toàn)
-        }
-
-        UserVoucher appliedVoucher = order.getUserVoucher();
-        if (appliedVoucher != null) {
-            appliedVoucher.setUsed(false);
-            appliedVoucher.setUsedDate(null);
-        }
-
-        order.setCancelReason("Khách hàng tự hủy: " + reason);
+        order.setCancelReason("Khach hang tu huy: " + reason);
         order.setStatus(OrderStatus.CANCELLED);
         order.setEndOrderTime(LocalDateTime.now());
-        orderRepository.save(order);
+        saveOrderAndAuditStatusChange(order, oldStatus, user.getId());
+        consultationAttributionService.cancelOrderAttributions(order.getId());
 
-        saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, user.getId());
-        clearRelatedCaches(user.getId(), variantsToUpdate);
+        clearRelatedCaches(user.getId());
 
-        saveAndSendNotification("Khách hàng hủy đơn ⚠️", "Đơn hàng #" + id + " đã bị hủy.", id, null, "/topic/admin-notifications");
-        saveAndSendNotification("Hủy đơn thành công", "Bạn đã hủy đơn hàng #" + id + " thành công.", id, user.getId(), "/topic/user-notifications/" + user.getId());
+        saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
+        saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
     }
 
-    // (Giữ nguyên các hàm phụ trợ lấy danh sách Order và Cache của bạn ở dưới đây)
-
-
     public OrderDTO getOrderById(Long id) {
-        Order order = orderRepository.findById(id).orElseThrow();
+        Order order = getOrderOrThrow(id);
         OrderDTO dto = orderMapper.toDto(order);
         injectImageUrls(order, dto);
         return dto;
@@ -608,7 +643,7 @@ public class OrderService {
         historyRepository.save(history);
     }
 
-    private void clearRelatedCaches(Long userId, List<ProductVariant> updatedVariants) {
+    private void clearRelatedCaches(Long userId) {
         Cache ordersCache = cacheManager.getCache("orders");
         if (ordersCache != null) ordersCache.clear();
         Cache pendingOrdersCache = cacheManager.getCache("pendingOrders");
@@ -624,13 +659,7 @@ public class OrderService {
     }
 
     private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
-        Notification notification = new Notification();
-        notification.setTitle(title);
-        notification.setContent(content);
-        notification.setOrderId(orderId);
-        notification.setTargetUserId(targetUserId);
-        notificationRepository.save(notification);
-        messagingTemplate.convertAndSend(destination, notification);
+        notificationService.sendNotification(title, content, orderId, targetUserId, null, destination);
     }
     @Transactional
     @Caching(evict = {
@@ -640,96 +669,78 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processMomoCallbackResult(Long orderId, String resultCode) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
-
-        // 🚨 CẢI TIẾN 1: BẢO VỆ IDEMPOTENCY (Chống Webhook gọi 2 lần)
-        // Chỉ xử lý nếu đơn hàng đang ở đúng trạng thái chờ thanh toán
+        Order order = getOrderOrThrow(orderId);
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            System.out.println("⚠️ Webhook MoMo: Đơn hàng #" + orderId + " đã được xử lý trước đó. Bỏ qua.");
+            System.out.println("MoMo callback skipped because order #" + orderId + " was already processed.");
             return;
         }
 
         if ("0".equals(resultCode)) {
-            // ==========================================
-            // KỊCH BẢN 1: THANH TOÁN THÀNH CÔNG
-            // ==========================================
-            OrderStatus oldStatus = order.getStatus();
-            order.setStatus(OrderStatus.PENDING_APPROVAL); // 🚨 CẢI TIẾN 2: Chuyển thẳng về cho Manager duyệt (Trạm 1)
-            orderRepository.save(order);
-
-            // Ghi sổ Audit Log (Truyền changerId = null vì đây là Hệ thống tự động làm)
-            saveAuditLog(order, oldStatus, OrderStatus.PENDING_APPROVAL, null);
-
-            // 🚨 CẢI TIẾN 3: Đánh thức luồng Camunda đang ngủ chờ thanh toán đi tiếp
-            try {
-                runtimeService.createMessageCorrelation("Msg_PaymentSuccess")
-                        .processInstanceVariableEquals("orderId", orderId)
-                        .correlate();
-                System.out.println(">>> Camunda: Đã nhận thanh toán MoMo, chuyển đơn #" + orderId + " sang Trạm Duyệt Đơn.");
-            } catch (Exception e) {
-                System.err.println("Lỗi khi đánh thức Camunda: " + e.getMessage());
-            }
-
-            // Bắn thông báo Real-time
-            saveAndSendNotification("Đơn Online mới (Đã thanh toán) 💰",
-                    "Đơn hàng #" + orderId + " đã thanh toán qua MoMo, đang chờ bạn duyệt.",
-                    orderId, null, "/topic/admin-notifications");
-
-            saveAndSendNotification("Thanh toán thành công 🎉",
-                    "Bạn đã thanh toán thành công đơn hàng #" + orderId + ". Cửa hàng đang chuẩn bị đơn.",
-                    orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
-
-            // Gửi Hóa Đơn Email Tự Động (Chạy nền)
-            if (order.getUser().getEmail() != null && !order.getUser().getEmail().trim().isEmpty()) {
-                new Thread(() -> {
-                    emailService.sendOrderConfirmationEmail(
-                            order.getUser().getEmail(),
-                            order.getUser().getLastname(),
-                            orderId,
-                            order.getTotalPrice(),
-                            "Thanh toán Online qua MoMo"
-                    );
-                }).start();
-            }
-
+            handleSuccessfulMomoPayment(order);
         } else {
-            // ==========================================
-            // KỊCH BẢN 2: THANH TOÁN THẤT BẠI HOẶC HỦY GIAO DỊCH
-            // ==========================================
-            OrderStatus oldStatus = order.getStatus();
-            order.setStatus(OrderStatus.CANCELLED);
-            order.setCancelReason("Thanh toán MoMo thất bại hoặc khách chủ động hủy (Mã lỗi MoMo: " + resultCode + ")");
-            order.setEndOrderTime(LocalDateTime.now());
-
-            // Hoàn trả Voucher lại cho khách (nếu có dùng)
-            UserVoucher appliedVoucher = order.getUserVoucher();
-            if (appliedVoucher != null) {
-                appliedVoucher.setUsed(false);
-                appliedVoucher.setUsedDate(null);
-                userVoucherRepository.save(appliedVoucher);
-            }
-            orderRepository.save(order);
-
-            // Ghi log
-            saveAuditLog(order, oldStatus, OrderStatus.CANCELLED, null);
-
-            // 🚨 CẢI TIẾN 4: Hủy luôn Process Camunda để dọn dẹp bộ nhớ
-            ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                    .variableValueEquals("orderId", orderId)
-                    .singleResult();
-            if (processInstance != null) {
-                runtimeService.deleteProcessInstance(processInstance.getId(), "Thanh toán MoMo thất bại");
-            }
-
-            // Báo cho khách biết
-            saveAndSendNotification("Thanh toán thất bại ❌",
-                    "Giao dịch cho đơn hàng #" + orderId + " không thành công. Đơn hàng đã bị hủy.",
-                    orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            handleFailedMomoPayment(order, resultCode);
         }
 
-        clearRelatedCaches(order.getUser().getId(), null);
+        clearRelatedCaches(order.getUser().getId());
     }
+
+    private void handleSuccessfulMomoPayment(Order order) {
+        Long orderId = order.getId();
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.PENDING_APPROVAL);
+        saveOrderAndAuditStatusChange(order, oldStatus, null);
+
+        correlatePaymentSuccess(orderId);
+
+        saveAndSendNotification(
+                "Don Online moi da thanh toan",
+                "Don hang #" + orderId + " da thanh toan qua MoMo va dang cho duyet.",
+                orderId,
+                null,
+                "/topic/admin-notifications"
+        );
+        saveAndSendNotification(
+                "Thanh toan thanh cong",
+                "Ban da thanh toan thanh cong don hang #" + orderId + ". Cua hang dang chuan bi don.",
+                orderId,
+                order.getUser().getId(),
+                "/topic/user-notifications/" + order.getUser().getId()
+        );
+        sendOrderConfirmationEmailAsync(order.getUser(), order, "Thanh toan Online qua MoMo");
+    }
+
+    private void handleFailedMomoPayment(Order order, String resultCode) {
+        Long orderId = order.getId();
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setCancelReason("Thanh toan MoMo that bai hoac khach huy giao dich (Ma loi MoMo: " + resultCode + ")");
+        order.setEndOrderTime(LocalDateTime.now());
+
+        restoreVoucher(order.getUserVoucher());
+        saveOrderAndAuditStatusChange(order, oldStatus, null);
+        consultationAttributionService.cancelOrderAttributions(orderId);
+        deleteOrderProcessIfExists(orderId, "MoMo payment failed");
+
+        saveAndSendNotification(
+                "Thanh toan that bai",
+                "Giao dich cho don hang #" + orderId + " khong thanh cong. Don hang da bi huy.",
+                orderId,
+                order.getUser().getId(),
+                "/topic/user-notifications/" + order.getUser().getId()
+        );
+    }
+
+    private void correlatePaymentSuccess(Long orderId) {
+        try {
+            runtimeService.createMessageCorrelation("Msg_PaymentSuccess")
+                    .processInstanceVariableEquals("orderId", orderId)
+                    .correlate();
+            System.out.println(">>> Camunda: Received MoMo payment for order #" + orderId + ".");
+        } catch (Exception e) {
+            System.err.println("Could not correlate MoMo payment success: " + e.getMessage());
+        }
+    }
+
     @Transactional(readOnly = true)
     @Cacheable(value = "orders", key = "#user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
     public Page<OrderListDTO> getOrdersByUserId(Long user_id, Pageable pageable) {
@@ -781,11 +792,11 @@ public class OrderService {
         );
     }
 
-    // Hàm lấy danh sách chờ duyệt cho Manager
+    // Get pending order list for manager.
     @Transactional(readOnly = true)
     @Cacheable(value = "pendingOrders", key = "#status.name() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
     public Page<OrderListDTO> getPendingOrders(OrderStatus status,Pageable pageable) {
-        // Lấy thẳng List DTO từ DB
+        // Read list DTOs directly from DB.
         return orderRepository.findListDtoByStatusOldestFirst(status, normalizePageable(pageable));
     }
 }

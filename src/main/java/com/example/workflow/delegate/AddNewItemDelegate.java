@@ -8,6 +8,7 @@ import com.example.workflow.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,32 +22,43 @@ public class AddNewItemDelegate implements JavaDelegate {
 
     @Override
     @Transactional
-    public void execute(DelegateExecution execution) throws Exception {
+    public void execute(DelegateExecution execution) {
         Long cartId = (Long) execution.getVariable("cartId");
         Long variantId = (Long) execution.getVariable("variantId");
         int quantity = (int) execution.getVariable("quantity");
 
-        Cart cart = cartRepository.findById(cartId)
-                .orElseThrow(() -> new RuntimeException("Cart not found!"));
+        Cart cart = getCartOrThrow(cartId);
+        ProductVariant variant = getActiveVariantOrThrow(variantId);
 
-        ProductVariant variant = productVariantRepository.findActiveById(variantId)
-                .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
-
-        CartItem newItem = new CartItem();
-        newItem.setCart(cart);
-        newItem.setProductVariant(variant);
-        newItem.setQuantity(quantity);
-
-        // 🚨 ĐÃ XÓA DÒNG: newItem.setPrice(variant.getPrice());
-
-        cart.getItems().add(newItem);
+        cart.getItems().add(createCartItem(cart, variant, quantity));
         cartRepository.save(cart);
+        evictCartCache(cart);
 
-        Long ownerId = cart.getUser().getId();
-        if (cacheManager.getCache("carts") != null) {
-            cacheManager.getCache("carts").evict(ownerId);
+        System.out.println(">>> Camunda: Added new variant " + variantId + " to cart " + cartId);
+    }
+
+    private Cart getCartOrThrow(Long cartId) {
+        return cartRepository.findById(cartId)
+                .orElseThrow(() -> new RuntimeException("Cart not found!"));
+    }
+
+    private ProductVariant getActiveVariantOrThrow(Long variantId) {
+        return productVariantRepository.findActiveById(variantId)
+                .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
+    }
+
+    private CartItem createCartItem(Cart cart, ProductVariant variant, int quantity) {
+        CartItem item = new CartItem();
+        item.setCart(cart);
+        item.setProductVariant(variant);
+        item.setQuantity(quantity);
+        return item;
+    }
+
+    private void evictCartCache(Cart cart) {
+        Cache cache = cacheManager.getCache("carts");
+        if (cache != null) {
+            cache.evict(cart.getUser().getId());
         }
-
-        System.out.println(">>> Camunda: Added NEW variant " + variantId + " to cart " + cartId);
     }
 }

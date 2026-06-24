@@ -2,31 +2,20 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartResDTO;
-import com.example.workflow.entity.Notification;
-import com.example.workflow.entity.Order;
-import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.repository.NotificationRepository;
-import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.CartService;
-import com.example.workflow.service.EmailService;
-import com.example.workflow.service.MomoService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,13 +26,6 @@ import java.util.Map;
 public class CartController {
 
     private final CartService cartService;
-    private final RuntimeService runtimeService;
-    private final OrderRepository orderRepository;
-    private final MomoService momoService;
-    private final NotificationRepository notificationRepository;
-    private final UserRepository userRepository;
-    private final SimpMessagingTemplate messagingTemplate;
-    private final EmailService emailService;
 
     @PostMapping("/add")
     public ResponseEntity<ApiResponse<Void>> addToCart(
@@ -51,11 +33,7 @@ public class CartController {
             @Positive(message = "Variant id must be positive") @RequestParam("variantId") Long variantId,
             @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
     ) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("userId", userId);
-        variables.put("variantId", variantId);
-        variables.put("quantity", quantity);
-        runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
+        cartService.startAddToCartProcess(userId, variantId, quantity);
         return ResponseEntity.ok(ApiResponse.success("Da day lenh them gio hang vao Workflow!"));
     }
 
@@ -97,84 +75,18 @@ public class CartController {
             @RequestParam(value = "note", required = false) String note
     ) {
         try {
-            Long orderId = cartService.approve_cart_internal(userId, productIdsToCheckout, userVoucherId, paymentMethod, note);
-
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
-            Order savedOrder = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("orderId", orderId);
-            variables.put("userId", userId);
-            variables.put("paymentMethod", paymentMethod);
-            variables.put("note", note);
-            runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
-
-            if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-                Map<String, String> momoPaymentData = momoService.createPaymentData(
-                        String.valueOf(orderId),
-                        savedOrder.getFinalPrice().longValue()
-                );
-                String momoPayUrl = momoPaymentData.get("payUrl");
-                if (momoPayUrl == null || momoPayUrl.isBlank()) {
-                    throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.MOMO_PAY_URL_MISSING);
-                }
-
-                Map<String, String> response = new HashMap<>();
-                response.putAll(momoPaymentData);
-                response.put("status", "REDIRECT");
-                response.put("url", momoPayUrl);
-                response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
-                response.put(
-                        "message",
-                        momoService.isMockPaymentEnabled()
-                                ? "Mo URL mock de gia lap thanh toan thanh cong."
-                                : "Vui long thanh toan qua MoMo de hoan tat."
-                );
-                return ResponseEntity.ok(ApiResponse.success(response));
-            }
-
-            saveAndSendNotification(
-                    "Don hang moi tu " + user.getLastname(),
-                    "Khach hang " + user.getLastname() + " vua tao don hang COD (Ma #" + orderId + ").",
-                    orderId, null, "/topic/admin-notifications"
+            Map<String, String> response = cartService.approveCart(
+                    userId,
+                    productIdsToCheckout,
+                    userVoucherId,
+                    paymentMethod,
+                    note
             );
-
-            saveAndSendNotification(
-                    "Dat hang thanh cong!",
-                    "Don hang #" + orderId + " cua ban dang cho Admin duyet. Ban co the huy don neu muon.",
-                    orderId, userId, "/topic/user-notifications/" + userId
-            );
-
-            if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
-                new Thread(() -> emailService.sendOrderConfirmationEmail(
-                        user.getEmail(),
-                        user.getLastname(),
-                        orderId,
-                        savedOrder.getTotalPrice(),
-                        "Thanh toan khi nhan hang (COD)"
-                )).start();
-            }
-
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "SUCCESS");
-            response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
-    }
-
-    private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
-        Notification notification = new Notification();
-        notification.setTitle(title);
-        notification.setContent(content);
-        notification.setOrderId(orderId);
-        notification.setTargetUserId(targetUserId);
-        notificationRepository.save(notification);
-        messagingTemplate.convertAndSend(destination, notification);
     }
 }

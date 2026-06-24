@@ -47,14 +47,43 @@ public class SaveUserDelegate implements JavaDelegate {
         String email = (String) execution.getVariable("email");
         Role role = parseRole(roleValue);
 
+        UserCreDTO keycloakUser = createKeycloakUser(username, password, firstname, lastname, email);
+        String keycloakUserId = keycloakIdentityService.createUser(keycloakUser, role);
+
+        User user = createUser(username, firstname, lastname, gender, phone, birth, address, avatar, email, role);
+        Cart cart = createCartFor(user);
+
+        try {
+            userRepository.save(user);
+            cartRepository.save(cart);
+        } catch (RuntimeException ex) {
+            keycloakIdentityService.deleteUserById(keycloakUserId);
+            throw ex;
+        }
+    }
+
+    private UserCreDTO createKeycloakUser(String username, String password, String firstname, String lastname, String email) {
         UserCreDTO keycloakUser = new UserCreDTO();
         keycloakUser.setUsername(username);
         keycloakUser.setPassword(password);
         keycloakUser.setFirstname(firstname);
         keycloakUser.setLastname(lastname);
         keycloakUser.setEmail(email);
-        String keycloakUserId = keycloakIdentityService.createUser(keycloakUser, role);
+        return keycloakUser;
+    }
 
+    private User createUser(
+            String username,
+            String firstname,
+            String lastname,
+            String gender,
+            String phone,
+            LocalDate birth,
+            String address,
+            String avatar,
+            String email,
+            Role role
+    ) {
         User user = new User();
         user.setUsername(username);
         user.setFirstname(firstname);
@@ -68,20 +97,15 @@ public class SaveUserDelegate implements JavaDelegate {
         user.setAvatarUrl(avatar);
         user.setReputation(50);
         user.setDelete(false);
-        // Authentication is owned by Keycloak. This random hash cannot be used to log in.
         user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        return user;
+    }
 
+    private Cart createCartFor(User user) {
         Cart cart = new Cart();
         cart.setUser(user);
         user.setCart(cart);
-
-        try {
-            userRepository.save(user);
-            cartRepository.save(cart);
-        } catch (RuntimeException ex) {
-            keycloakIdentityService.deleteUserById(keycloakUserId);
-            throw ex;
-        }
+        return cart;
     }
 
     private Role parseRole(String roleValue) {

@@ -38,6 +38,15 @@ public class UserService {
 
     public void startUserRegistrationProcess(UserCreDTO dto) {
         normalizeRegistrationData(dto);
+        validateRegistrationRequest(dto);
+        String finalRole = resolveRegistrationRole(dto);
+        Map<String, Object> variables = buildRegistrationVariables(dto, finalRole);
+
+        // The process has no async continuation, so this returns only after all delegates succeed.
+        runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
+    }
+
+    private void validateRegistrationRequest(UserCreDTO dto) {
         if (!StringUtils.hasText(dto.getPassword())) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PASSWORD_REQUIRED);
         }
@@ -50,17 +59,26 @@ public class UserService {
         if (userRepository.existsByPhone(dto.getPhone())) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PHONE_ALREADY_EXISTS);
         }
+    }
 
+    private String resolveRegistrationRole(UserCreDTO dto) {
         String finalRole = Role.USER.name();
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)) {
-            boolean canAssignRole = auth.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equals("ADMIN") || a.getAuthority().equals("MANAGER"));
-            if (canAssignRole && StringUtils.hasText(dto.getRole())) {
-                finalRole = parseRole(dto.getRole()).name();
-            }
+        if (canCurrentUserAssignRole() && StringUtils.hasText(dto.getRole())) {
+            finalRole = parseRole(dto.getRole()).name();
         }
+        return finalRole;
+    }
 
+    private boolean canCurrentUserAssignRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken)
+                && auth.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ADMIN") || authority.getAuthority().equals("MANAGER"));
+    }
+
+    private Map<String, Object> buildRegistrationVariables(UserCreDTO dto, String finalRole) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("username", dto.getUsername());
         variables.put("password", dto.getPassword());
@@ -73,9 +91,7 @@ public class UserService {
         variables.put("phone", dto.getPhone());
         variables.put("email", dto.getEmail());
         variables.put("avatarUrl", dto.getAvatarUrl());
-
-        // The process has no async continuation, so this returns only after all delegates succeed.
-        runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
+        return variables;
     }
 
     private void normalizeRegistrationData(UserCreDTO dto) {
@@ -110,9 +126,7 @@ public class UserService {
     @Transactional(readOnly = true)
     @Cacheable(value = "user", key = "#id")
     public UserResDTO getUserById(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, id));
-        return userMapper.toResponse(user);
+        return userMapper.toResponse(getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, id));
     }
 
     @Caching(evict = {
@@ -120,8 +134,7 @@ public class UserService {
             @CacheEvict(value = "user", key = "#id")
     })
     public UserResDTO updateUser(Long id, UserCreDTO request) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE));
+        User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
         keycloakIdentityService.updateUser(user.getUsername(), request);
         userMapper.updateUser(user, request);
         return userMapper.toResponse(userRepository.save(user));
@@ -132,10 +145,14 @@ public class UserService {
             @CacheEvict(value = "user", key = "#id")
     })
     public void deleteUser(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE));
+        User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
         keycloakIdentityService.disableUser(user.getUsername());
         user.setDelete(true);
         userRepository.save(user);
+    }
+
+    private User getUserOrThrow(Long id, ConstantErrorCode errorCode, Object... args) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode, args));
     }
 }

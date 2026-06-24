@@ -20,17 +20,20 @@ public class CheckUserExistenceDelegate implements JavaDelegate {
         String username = (String) execution.getVariable("username");
         String email = (String) execution.getVariable("email");
         String phone = (String) execution.getVariable("phone");
+        execution.setVariable("userExisted", validateUniqueUserIdentity(username, email, phone));
+    }
 
+    private boolean validateUniqueUserIdentity(String username, String email, String phone) {
+        boolean exist = false;
         if (userRepository.existsByUsername(username)) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.USERNAME_ALREADY_EXISTS);
+            exist = true;
         }
         if (StringUtils.hasText(email) && userRepository.existsByEmail(email)) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.EMAIL_ALREADY_EXISTS);
-        }
+            exist = true;
+       }
         if (userRepository.existsByPhone(phone)) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PHONE_ALREADY_EXISTS);
+            exist = true;
         }
-
-        execution.setVariable("userExisted", false);
-    }
+        return exist;
+}
 }

@@ -49,17 +49,12 @@ public class VoucherService {
     })
     public UserVoucherDTO redeemVoucher(Long userId, Long templateId) {
         LocalDateTime now = LocalDateTime.now();
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User does not exist"));
-        VoucherTemplate template = templateRepository.findById(templateId).orElseThrow(() -> new RuntimeException("Voucher does not exist"));
+        User user = getUserOrThrow(userId);
+        VoucherTemplate template = getTemplateOrThrow(templateId);
 
-        if (template.getExpiryDate().isBefore(now)) {
-            throw new IllegalStateException("Voucher campaign has expired.");
-        }
-
+        validateTemplateForRedeem(template, now);
         int remainingPoints = user.getReputation() - template.getPointCost();
-        if (remainingPoints < 40) {
-            throw new IllegalStateException("Not enough available reputation points.");
-        }
+        validateRemainingPoints(remainingPoints);
 
         int updatedRows = templateRepository.decrementQuantity(templateId, now);
         if (updatedRows == 0) {
@@ -69,13 +64,7 @@ public class VoucherService {
         user.setReputation(remainingPoints);
         userRepository.save(user);
 
-        UserVoucher userVoucher = new UserVoucher();
-        userVoucher.setUser(user);
-        userVoucher.setTemplate(template);
-        userVoucher.setUsed(false);
-        userVoucher.setRedeemDate(now);
-        userVoucher.setExpiryDate(template.getExpiryDate());
-
+        UserVoucher userVoucher = createUserVoucher(user, template, now);
         return voucherMapper.toUserVoucherDto(userVoucherRepository.save(userVoucher));
     }
 
@@ -83,5 +72,37 @@ public class VoucherService {
         request.setId(null);
         request.setActive(true);
         return templateRepository.save(request);
+    }
+
+    private User getUserOrThrow(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User does not exist"));
+    }
+
+    private VoucherTemplate getTemplateOrThrow(Long templateId) {
+        return templateRepository.findById(templateId)
+                .orElseThrow(() -> new RuntimeException("Voucher does not exist"));
+    }
+
+    private void validateTemplateForRedeem(VoucherTemplate template, LocalDateTime now) {
+        if (template.getExpiryDate().isBefore(now)) {
+            throw new IllegalStateException("Voucher campaign has expired.");
+        }
+    }
+
+    private void validateRemainingPoints(int remainingPoints) {
+        if (remainingPoints < 40) {
+            throw new IllegalStateException("Not enough available reputation points.");
+        }
+    }
+
+    private UserVoucher createUserVoucher(User user, VoucherTemplate template, LocalDateTime redeemTime) {
+        UserVoucher userVoucher = new UserVoucher();
+        userVoucher.setUser(user);
+        userVoucher.setTemplate(template);
+        userVoucher.setUsed(false);
+        userVoucher.setRedeemDate(redeemTime);
+        userVoucher.setExpiryDate(template.getExpiryDate());
+        return userVoucher;
     }
 }

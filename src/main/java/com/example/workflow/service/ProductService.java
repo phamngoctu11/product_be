@@ -4,7 +4,6 @@ import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.dto.StockImportRequest;
-import com.example.workflow.entity.InventoryTransaction;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
@@ -44,6 +43,7 @@ public class ProductService {
     private final InventoryTransactionRepository inventoryRepo;
     private final UserRepository userRepository;
     private final ProductVariantRepository variantRepository;
+    private final InventoryTransactionService inventoryTransactionService;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #pageable.pageSize")
@@ -60,12 +60,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     @Cacheable(value = "product", key = "#id")
     public ProductDTO getProductById(Long id) {
-        Product product = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
-        if (product.isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
-        }
-        return mapper.toDto(product);
+        return mapper.toDto(getActiveProduct(id));
     }
 
     @Transactional
@@ -76,23 +71,9 @@ public class ProductService {
     public ProductDTO createProduct(ProductDTO dto, Long userId) {
         User actor = getActor(userId);
         Product entity = mapper.toEntity(dto);
-
-        if (entity.getVariants() != null) {
-            entity.getVariants().forEach(variant -> {
-                variant.setProduct(entity);
-                variant.setDelete(false);
-            });
-        }
-        entity.setDelete(false);
+        prepareProductForCreate(entity);
         Product savedProduct = repository.saveAndFlush(entity);
-
-        if (savedProduct.getVariants() != null) {
-            for (ProductVariant variant : savedProduct.getVariants()) {
-                if (variant.getQuantity() > 0) {
-                    saveInventoryTransaction(variant, variant.getQuantity(), "INITIAL_STOCK", actor);
-                }
-            }
-        }
+        recordInitialStock(savedProduct.getVariants(), actor);
 
         return mapper.toDto(savedProduct);
     }
@@ -105,17 +86,10 @@ public class ProductService {
     })
     public void updateProduct(Long id, ProductDTO dto, Long userId) {
         User actor = getActor(userId);
-        Product existingProduct = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
-        if (existingProduct.isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
-        }
+        Product existingProduct = getActiveProduct(id);
         List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
 
-        existingProduct.setProductName(dto.getProduct_name());
-        existingProduct.setPrice(dto.getPrice());
-        existingProduct.setTags(dto.getTags());
-        existingProduct.setImageUrl(dto.getImage_url());
+        applyProductBasicInfo(existingProduct, dto);
 
         if (dto.getVariants() != null) {
             List<Long> incomingVariantIds = dto.getVariants().stream()
@@ -138,26 +112,13 @@ public class ProductService {
                     int newQuantity = variantDto.getQuantity();
                     int difference = newQuantity - oldQuantity;
 
-                    existingVariant.setVariantName(variantDto.getVariantName());
-                    existingVariant.setPrice(variantDto.getPrice());
-                    existingVariant.setQuantity(newQuantity);
-                    existingVariant.setAttributes(variantDto.getAttributes());
-                    existingVariant.setImageUrl(variantDto.getImageUrl());
-                    existingVariant.setDelete(false);
+                    applyVariantInfo(existingVariant, variantDto, existingProduct);
 
                     if (difference != 0) {
                         inventoryLogs.add(new InventoryLogEntry(existingVariant, difference, "MANUAL_ADJUSTMENT"));
                     }
                 } else {
-                    ProductVariant newVariant = new ProductVariant();
-                    newVariant.setVariantName(variantDto.getVariantName());
-                    newVariant.setPrice(variantDto.getPrice());
-                    newVariant.setQuantity(variantDto.getQuantity());
-                    newVariant.setAttributes(variantDto.getAttributes());
-                    newVariant.setImageUrl(variantDto.getImageUrl());
-                    newVariant.setProduct(existingProduct);
-                    newVariant.setDelete(false);
-
+                    ProductVariant newVariant = createVariant(existingProduct, variantDto);
                     ProductVariant savedVariant = variantRepository.saveAndFlush(newVariant);
                     existingProduct.getVariants().add(savedVariant);
 
@@ -185,10 +146,7 @@ public class ProductService {
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);
 
-        product.setProductName(dto.getProduct_name());
-        product.setPrice(dto.getPrice());
-        product.setTags(dto.getTags());
-        product.setImageUrl(dto.getImage_url());
+        applyProductBasicInfo(product, dto);
 
         repository.save(product);
     }
@@ -203,24 +161,14 @@ public class ProductService {
         User actor = getActor(userId);
         Product product = getActiveProduct(productId);
 
-        ProductVariant variant = new ProductVariant();
-        variant.setProduct(product);
-        variant.setVariantName(dto.getVariantName());
-        variant.setPrice(dto.getPrice());
-        variant.setQuantity(dto.getQuantity());
-        variant.setAttributes(dto.getAttributes());
-        variant.setImageUrl(dto.getImageUrl());
-        variant.setDelete(false);
-
+        ProductVariant variant = createVariant(product, dto);
         ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
         if (product.getVariants() == null) {
             product.setVariants(new ArrayList<>());
         }
         product.getVariants().add(savedVariant);
 
-        if (savedVariant.getQuantity() > 0) {
-            saveInventoryTransaction(savedVariant, savedVariant.getQuantity(), "INITIAL_STOCK", actor);
-        }
+        recordInitialStock(List.of(savedVariant), actor);
 
         return mapper.toDto(repository.saveAndFlush(product));
     }
@@ -250,13 +198,59 @@ public class ProductService {
     })
     public void deleteProduct(Long id, Long userId) {
         getActor(userId);
-        Product product = repository.findById(id)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.NO_PRODUCTS_FOUND));
+        Product product = getActiveProduct(id);
         product.setDelete(true);
         if (product.getVariants() != null) {
             product.getVariants().forEach(variant -> variant.setDelete(true));
         }
         repository.save(product);
+    }
+
+    private void applyProductBasicInfo(Product product, ProductDTO dto) {
+        product.setProductName(dto.getProduct_name());
+        product.setPrice(dto.getPrice());
+        product.setTags(dto.getTags());
+        product.setImageUrl(dto.getImage_url());
+    }
+
+    private void prepareProductForCreate(Product product) {
+        product.setDelete(false);
+        if (product.getVariants() == null) {
+            return;
+        }
+        product.getVariants().forEach(variant -> applyVariantOwnership(product, variant));
+    }
+
+    private void applyVariantOwnership(Product product, ProductVariant variant) {
+        variant.setProduct(product);
+        variant.setDelete(false);
+    }
+
+    private void recordInitialStock(List<ProductVariant> variants, User actor) {
+        if (variants == null) {
+            return;
+        }
+        for (ProductVariant variant : variants) {
+            if (variant.getQuantity() > 0) {
+                saveInventoryTransaction(variant, variant.getQuantity(), "INITIAL_STOCK", actor);
+            }
+        }
+    }
+
+    private ProductVariant createVariant(Product product, ProductVariantDTO dto) {
+        ProductVariant variant = new ProductVariant();
+        applyVariantInfo(variant, dto, product);
+        return variant;
+    }
+
+    private void applyVariantInfo(ProductVariant variant, ProductVariantDTO dto, Product product) {
+        variant.setProduct(product);
+        variant.setVariantName(dto.getVariantName());
+        variant.setPrice(dto.getPrice());
+        variant.setQuantity(dto.getQuantity());
+        variant.setAttributes(dto.getAttributes());
+        variant.setImageUrl(dto.getImageUrl());
+        variant.setDelete(false);
     }
 
     private Product getActiveProduct(Long productId) {
@@ -285,14 +279,7 @@ public class ProductService {
             variant = variantRepository.saveAndFlush(variant);
         }
 
-        InventoryTransaction tx = new InventoryTransaction();
-        tx.setProductVariant(variant);
-        tx.setUser(actor);
-        tx.setQuantityChange(changeAmount);
-        tx.setRemainingStock(variant.getQuantity());
-        tx.setTransactionType(type);
-        tx.setCreatedAt(LocalDateTime.now());
-        inventoryRepo.save(tx);
+        inventoryTransactionService.record(null, variant, actor, changeAmount, type);
     }
 
     private User getActor(Long userId) {
