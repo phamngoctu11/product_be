@@ -1,0 +1,96 @@
+package com.example.workflow.exception;
+
+public enum ConstantErrorCode {
+    INVALID_CREDENTIALS("Thông tin đăng nhập không hợp lệ"),
+    USER_NOT_FOUND("Không tìm thấy người dùng"),
+    ORDER_NOT_FOUND("Không tìm thấy đơn hàng"),
+    MOMO_PAY_URL_MISSING("MoMo không trả về đường dẫn thanh toán."),
+    BAD_REQUEST_DETAIL("Yêu cầu không hợp lệ: %s"),
+    INTERNAL_ERROR("Đã xảy ra lỗi: %s"),
+    INVALID_MOMO_SIGNATURE("Chữ ký MoMo không hợp lệ!"),
+    INTERNAL_SERVER_ERROR("Lỗi máy chủ: %s"),
+    MOCK_MOMO_PAYMENT_DISABLED("Chức năng giả lập thanh toán MoMo đang bị tắt."),
+    INVALID_MOCK_PAYMENT_TOKEN("Mã xác thực thanh toán giả lập không hợp lệ."),
+    INVALID_ORDER_ID("Mã đơn hàng không hợp lệ."),
+    FILE_REQUIRED("Vui lòng chọn tệp để tải lên"),
+    IMAGE_FILE_REQUIRED("Chỉ chấp nhận tệp hình ảnh"),
+    IMAGE_UPLOAD_FAILED("Tải hình ảnh lên thất bại: %s"),
+    SYSTEM_ERROR("Lỗi hệ thống: %s"),
+
+    CART_EMPTY("Giỏ hàng trống"),
+    PRODUCT_VARIANT_NOT_IN_CART("Biến thể sản phẩm không có trong giỏ hàng"),
+    CART_NOT_FOUND("Không tìm thấy giỏ hàng"),
+    CART_EMPTY_VI("Giỏ hàng trống"),
+    USER_NOT_FOUND_VI("Không tìm thấy người dùng!"),
+    LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT("Điểm uy tín của bạn quá thấp (< 20). Bạn bắt buộc phải thanh toán trực tuyến!"),
+    CART_NOT_FOUND_VI("Không tìm thấy giỏ hàng!"),
+    CHECKOUT_ITEM_REQUIRED("Vui lòng chọn ít nhất 1 sản phẩm để thanh toán."),
+    SELECTED_PRODUCTS_NOT_IN_CART("Các sản phẩm được chọn không tồn tại trong giỏ hàng."),
+    PRODUCT_VARIANT_DELETED("Biến thể sản phẩm có mã %s đã bị xóa hoặc không còn được bán."),
+    PRODUCT_VARIANT_OUT_OF_STOCK("Biến thể sản phẩm có mã %s đã hết hàng hoặc không đủ số lượng!"),
+    VOUCHER_NOT_FOUND("Mã giảm giá không tồn tại."),
+    VOUCHER_ALREADY_USED("Mã giảm giá này đã được sử dụng."),
+    VOUCHER_EXPIRED("Mã giảm giá đã hết hạn."),
+    VOUCHER_INVALID("Mã giảm giá này không hợp lệ."),
+    ORDER_MINIMUM_NOT_MET("Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này."),
+
+    REVIEWER_NOT_FOUND("Không tìm thấy người duyệt có mã: %s"),
+    REVIEWER_MANAGER_ROLE_REQUIRED("Người duyệt phải có vai trò quản lý"),
+    CURRENT_USER_MANAGER_ROLE_REQUIRED("Người dùng hiện tại phải có vai trò quản lý"),
+    CURRENT_USER_STAFF_ROLE_REQUIRED("Người dùng hiện tại phải có vai trò nhân viên"),
+    STAFF_NOT_FOUND("Không tìm thấy nhân viên có mã: %s"),
+    ACTIVE_STAFF_REQUIRED("Người được phân công phải là nhân viên đang hoạt động"),
+    ORDER_NOT_WAITING_FOR_WAREHOUSE_STAFF("Đơn hàng không ở trạng thái chờ nhân viên kho"),
+    ORDER_ALREADY_ASSIGNED("Đơn hàng đã được phân công cho một nhân viên"),
+    ORDER_CANNOT_BE_ASSIGNED("Không thể phân công đơn hàng ở trạng thái hiện tại"),
+    ORDER_STAFF_REQUIRED_BEFORE_EXPORT("Đơn hàng phải được phân công cho nhân viên trước khi xuất kho"),
+    ORDER_HAS_NO_ASSIGNED_STAFF("Đơn hàng chưa được phân công cho nhân viên kho"),
+    ONLY_ASSIGNED_STAFF_CAN_EXPORT("Chỉ nhân viên được phân công mới có thể xuất kho đơn hàng này"),
+    EXPORT_DATA_REQUIRED("Dữ liệu xuất kho là bắt buộc"),
+    EXPORT_QUANTITY_NEGATIVE("Số lượng xuất kho không được âm"),
+    VARIANT_NOT_IN_ORDER("Biến thể sản phẩm không thuộc đơn hàng này: %s"),
+    ORDER_NOT_WAITING_FOR_KCS("Đơn hàng không ở trạng thái chờ kiểm tra chất lượng"),
+    RECEIVED_QUANTITY_MATCHES_EXPORTED("Số lượng thực nhận khớp với số lượng đã xuất, không có nội dung khiếu nại."),
+    MANAGER_EMAIL_NOT_FOUND("Không tìm thấy địa chỉ thư điện tử của quản lý để gửi khiếu nại."),
+    ORDER_CONFIRMATION_FORBIDDEN("Bạn không có quyền xác nhận đơn hàng của người khác."),
+    ORDER_NOT_AWAITING_RECEIPT_CONFIRMATION("Đơn hàng chưa đến bước khách hàng xác nhận nhận hàng."),
+    RECEIVED_QUANTITY_LIST_REQUIRED("Danh sách số lượng thực nhận là bắt buộc."),
+    RECEIPT_VARIANT_ID_REQUIRED("Mỗi sản phẩm nhận hàng phải có mã biến thể."),
+    RECEIVED_QUANTITY_NEGATIVE("Số lượng thực nhận không được âm."),
+    RECEIPT_VARIANT_NOT_IN_ORDER("Biến thể sản phẩm không thuộc đơn hàng này: %s"),
+    DUPLICATE_RECEIPT_VARIANT("Biến thể sản phẩm bị gửi trùng trong danh sách nhận hàng: %s"),
+    RECEIVED_QUANTITY_MISSING("Thiếu số lượng thực nhận của biến thể sản phẩm: %s"),
+    ORDER_ITEM_REQUIRED_FOR_CONFIRMATION("Đơn hàng không có sản phẩm để xác nhận."),
+    DUPLICATE_ORDER_VARIANT("Đơn hàng có nhiều sản phẩm trùng biến thể: %s"),
+    ORDER_ITEM_VARIANT_INVALID("Sản phẩm trong đơn hàng không có biến thể hợp lệ."),
+    CANNOT_CANCEL_ANOTHER_USERS_ORDER("Bạn không thể hủy đơn hàng của người dùng khác"),
+    ORDER_CANNOT_BE_CANCELLED("Đơn hàng đã được duyệt hoặc xử lý nên người dùng không thể hủy"),
+
+    PRODUCT_NOT_FOUND("Không tìm thấy sản phẩm"),
+    VARIANT_NOT_IN_PRODUCT("Biến thể không thuộc sản phẩm này: %s"),
+    NO_PRODUCTS_FOUND("Không có sản phẩm"),
+    VARIANT_NOT_FOUND("Không tìm thấy biến thể sản phẩm"),
+    PRODUCT_VARIANT_MUST_BE_SAVED("Biến thể phải thuộc một sản phẩm đã được lưu trước khi ghi nhận giao dịch kho"),
+    USER_NOT_FOUND_WITH_ID("Không tìm thấy người dùng có mã: %s"),
+    INVALID_BEST_SELLER_PERIOD("Khoảng thời gian phải là một trong các giá trị: ngày, tuần, tháng"),
+
+    PASSWORD_REQUIRED("Mật khẩu là bắt buộc"),
+    USERNAME_ALREADY_EXISTS("Tên đăng nhập đã tồn tại"),
+    EMAIL_ALREADY_EXISTS("Địa chỉ thư điện tử đã tồn tại"),
+    PHONE_ALREADY_EXISTS("Số điện thoại đã tồn tại"),
+    INVALID_ROLE("Vai trò người dùng không hợp lệ"),
+    USER_NOT_FOUND_TO_UPDATE("Không tìm thấy người dùng cần cập nhật"),
+    KEYCLOAK_UNAVAILABLE("Không thể kết nối tới Keycloak"),
+    KEYCLOAK_USER_SYNC_FAILED("Không thể đồng bộ người dùng với Keycloak"),
+    KEYCLOAK_USER_NOT_FOUND("Không tìm thấy người dùng trong Keycloak");
+
+    private final String messageTemplate;
+
+    ConstantErrorCode(String messageTemplate) {
+        this.messageTemplate = messageTemplate;
+    }
+
+    public String format(Object... args) {
+        return messageTemplate.formatted(args);
+    }
+}

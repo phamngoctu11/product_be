@@ -1,0 +1,90 @@
+{
+  "realm": "my-workflow",
+  "enabled": true,
+  "displayName": "My Workflow Local",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "ADMIN" },
+      { "name": "MANAGER" },
+      { "name": "STAFF" },
+      { "name": "USER" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "workflow-frontend",
+      "name": "Workflow Frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:4200/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4200"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:4200/*",
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin-local",
+      "enabled": true,
+      "email": "admin-local@example.com",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "admin123", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "manager-local",
+      "enabled": true,
+      "email": "manager-local@example.com",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Manager",
+      "credentials": [
+        { "type": "password", "value": "manager123", "temporary": false }
+      ],
+      "realmRoles": ["MANAGER"]
+    },
+    {
+      "username": "staff-local",
+      "enabled": true,
+      "email": "staff-local@example.com",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Staff",
+      "credentials": [
+        { "type": "password", "value": "staff123", "temporary": false }
+      ],
+      "realmRoles": ["STAFF"]
+    },
+    {
+      "username": "user-local",
+      "enabled": true,
+      "email": "user-local@example.com",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "user123", "temporary": false }
+      ],
+      "realmRoles": ["USER"]
+    }
+  ]
+}
