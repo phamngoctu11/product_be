@@ -5,8 +5,10 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.io.Serializable;
+
 @Data
-public class ConsultationReviewRequest {
+public class ConsultationReviewRequest implements Serializable {
     @Min(1)
     @Max(5)
     private int productRating;

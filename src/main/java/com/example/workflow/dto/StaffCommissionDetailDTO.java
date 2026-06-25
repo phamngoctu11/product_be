@@ -5,12 +5,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class StaffCommissionDetailDTO {
+public class StaffCommissionDetailDTO implements Serializable {
     private Long attributionId;
     private Long staffId;
     private String staffName;
