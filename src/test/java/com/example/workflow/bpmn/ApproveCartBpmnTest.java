@@ -21,6 +21,27 @@ class ApproveCartBpmnTest {
     }
 
     @Test
+    void inventoryAndReconciliationTasksUseDelegateExpressions() throws Exception {
+        String xml = Files.readString(Path.of("src/main/resources/approve-cart.bpmn"));
+
+        assertThat(xml).contains("camunda:delegateExpression=\"${deductInventoryDelegate}\"");
+        assertThat(xml).contains("camunda:delegateExpression=\"${reconciliationDelegate}\"");
+        assertThat(xml).doesNotContain("camunda:expression=\"${deductInventoryDelegate}\"");
+        assertThat(xml).doesNotContain("camunda:expression=\"${reconciliationDelegate}\"");
+    }
+
+    @Test
+    void processHasExpectedExecutableId() throws Exception {
+        Document document = parseBpmn();
+        var processes = document.getElementsByTagName("bpmn:process");
+
+        assertThat(processes.getLength()).isEqualTo(1);
+        var process = processes.item(0);
+        assertThat(process.getAttributes().getNamedItem("id").getNodeValue()).isEqualTo("ApproveCartProcess");
+        assertThat(process.getAttributes().getNamedItem("isExecutable").getNodeValue()).isEqualTo("true");
+    }
+
+    @Test
     void customerReceiptTaskKeyMatchesOrderService() throws Exception {
         Document document = parseBpmn();
         var tasks = document.getElementsByTagName("bpmn:userTask");

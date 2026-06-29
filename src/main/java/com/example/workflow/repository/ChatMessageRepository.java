@@ -1,5 +1,7 @@
 package com.example.workflow.repository;
 
+import com.example.workflow.service.*;
+
 import com.example.workflow.entity.ChatMessage;
 import org.springframework.data.mongodb.repository.MongoRepository;
 

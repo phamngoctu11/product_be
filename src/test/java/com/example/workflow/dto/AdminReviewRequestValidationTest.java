@@ -27,4 +27,13 @@ class AdminReviewRequestValidationTest {
 
         assertThat(violations).isEmpty();
     }
+
+    @Test
+    void rejectedReviewAllowsNonBlankCancelReason() {
+        AdminReviewRequest request = new AdminReviewRequest(false, "Out of stock");
+
+        var violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
 }
