@@ -41,7 +41,7 @@ public class OrderController {
     private final OrderService orderService;
 
     @GetMapping("/user/{user_id}")
-    @PreAuthorize("hasAnyAuthority('USER', 'MANAGER', 'STAFF','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyOrders(
             @Positive @PathVariable("user_id") Long userId,
             @PageableDefault(size = 20) Pageable pageable
@@ -52,7 +52,7 @@ public class OrderController {
 
 
     @GetMapping("/user/{user_id}/cancelled")
-    @PreAuthorize("hasAnyAuthority('USER', 'MANAGER','STAFF','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyCancelledOrders(
             @Positive @PathVariable("user_id") Long userId,
             @PageableDefault(size = 20) Pageable pageable

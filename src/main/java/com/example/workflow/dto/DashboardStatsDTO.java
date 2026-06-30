@@ -13,7 +13,8 @@ public class DashboardStatsDTO {
     private Long pendingWH;
     private Long pendingAP;
     private Long pendingPM;
-    private Long pendingKCS;      // Đơn đang chờ xử lý
+    private Long pendingKCS;
+    private Long warehouseAssigned; // Đơn đang chờ xử lý
     private Long shippingOrders;     // Đơn đang giao
     private Long deliveredOrders;    // Đơn giao thành công
     private Long cancelledOrders;    // Đơn bị hủy

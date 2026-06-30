@@ -24,6 +24,7 @@ public class DashboardService {
                 orderRepository.countOrdersByStatus(OrderStatus.PENDING_APPROVAL),
                 orderRepository.countOrdersByStatus(OrderStatus.PENDING_PAYMENT),
                 orderRepository.countOrdersByStatus(OrderStatus.PENDING_KCS),
+                orderRepository.countOrdersByStatus(OrderStatus.WAREHOUSE_ASSIGNED),
                 orderRepository.countOrdersByStatus(OrderStatus.SHIPPING),
                 orderRepository.countOrdersByStatus(OrderStatus.DELIVERED),
                 orderRepository.countOrdersByStatus(OrderStatus.CANCELLED)
