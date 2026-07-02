@@ -22,10 +22,10 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
 
     List<ConsultationSaleAttribution> findByOrderId(Long orderId);
 
-    Page<ConsultationSaleAttribution> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+    Page<ConsultationSaleAttribution> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
 
     Page<ConsultationSaleAttribution> findByStaffIdAndStatusInOrderByCreatedAtDesc(
-            Long staffId,
+            String staffId,
             Collection<ConsultationAttributionStatus> statuses,
             Pageable pageable
     );
@@ -40,7 +40,7 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
             "productVariant"
     })
     Page<ConsultationSaleAttribution> findByStaffIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtLessThanOrderByConfirmedAtDesc(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to,
@@ -57,7 +57,7 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
             "productVariant"
     })
     Page<ConsultationSaleAttribution> findByStaffIdAndStatusAndOrderCreatedAtGreaterThanEqualAndOrderCreatedAtLessThanOrderByOrderCreatedAtDesc(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to,
@@ -74,7 +74,7 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
             "productVariant"
     })
     Page<ConsultationSaleAttribution> findByStaffIdAndStatusAndCancelledAtGreaterThanEqualAndCancelledAtLessThanOrderByCancelledAtDesc(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to,
@@ -83,7 +83,7 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
 
     @EntityGraph(attributePaths = {"order", "staff"})
     List<ConsultationSaleAttribution> findByStaffIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtLessThan(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to
@@ -91,7 +91,7 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
 
     @EntityGraph(attributePaths = {"order", "staff"})
     List<ConsultationSaleAttribution> findByStaffIdAndStatusAndOrderCreatedAtGreaterThanEqualAndOrderCreatedAtLessThan(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to
@@ -99,11 +99,11 @@ public interface ConsultationSaleAttributionRepository extends JpaRepository<Con
 
     @EntityGraph(attributePaths = {"order", "staff"})
     List<ConsultationSaleAttribution> findByStaffIdAndStatusAndCancelledAtGreaterThanEqualAndCancelledAtLessThan(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             LocalDateTime from,
             LocalDateTime to
     );
 
-    Optional<ConsultationSaleAttribution> findByIdAndUserId(Long id, Long userId);
+    Optional<ConsultationSaleAttribution> findByIdAndUserId(Long id, String userId);
 }

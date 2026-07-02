@@ -16,8 +16,8 @@ public class ConsultationSaleAttributionDTO implements Serializable {
     private Long consultationRequestId;
     private Long orderId;
     private Long orderItemId;
-    private Long userId;
-    private Long staffId;
+    private String userId;
+    private String staffId;
     private String staffName;
     private Long productId;
     private String productName;

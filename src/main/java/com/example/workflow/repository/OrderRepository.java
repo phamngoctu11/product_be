@@ -47,7 +47,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId")
     Page<Long> findOrderIdsByUserId(
-            @Param("userId") Long userId,
+            @Param("userId") String userId,
             @Param("oldestFirstStatuses") List<OrderStatus> oldestFirstStatuses,
             @Param("shippingStatus") OrderStatus shippingStatus,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
@@ -72,7 +72,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId")
     Page<OrderListDTO> findListDtoByUserId(
-            @Param("userId") Long userId,
+            @Param("userId") String userId,
             @Param("oldestFirstStatuses") List<OrderStatus> oldestFirstStatuses,
             @Param("shippingStatus") OrderStatus shippingStatus,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
@@ -90,7 +90,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId AND o.status = :status")
     Page<OrderListDTO> findListDtoByUserIdAndStatus(
-            @Param("userId") Long userId,
+            @Param("userId") String userId,
             @Param("status") OrderStatus status,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
             Pageable pageable
@@ -137,7 +137,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.warehouseStaff staff WHERE staff.id = :staffId AND o.status IN :statuses")
     Page<OrderListDTO> findListDtoByWarehouseStaffIdAndStatusIn(
-            @Param("staffId") Long staffId,
+            @Param("staffId") String staffId,
             @Param("statuses") List<OrderStatus> statuses,
             @Param("oldestFirstStatuses") List<OrderStatus> oldestFirstStatuses,
             @Param("assignedStatus") OrderStatus assignedStatus,

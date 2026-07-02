@@ -28,17 +28,12 @@ public class WebSocketEventListener {
             return;
         }
 
-        try {
-            Long userId = Long.parseLong(userIdStr);
-            if (headerAccessor.getSessionAttributes() != null) {
-                headerAccessor.getSessionAttributes().put("chatUserId", userId);
-            }
-            chatPresenceService.markOnline(userId, sessionId);
-            log.info("User {} is ONLINE", userId);
-            chatRealtimePublisher.publishStatus(userId, true);
-        } catch (NumberFormatException e) {
-            log.warn("Invalid userId from WebSocket header: {}", userIdStr);
+        if (headerAccessor.getSessionAttributes() != null) {
+            headerAccessor.getSessionAttributes().put("chatUserId", userIdStr);
         }
+        chatPresenceService.markOnline(userIdStr, sessionId);
+        log.info("User {} is ONLINE", userIdStr);
+        chatRealtimePublisher.publishStatus(userIdStr, true);
     }
 
     @EventListener

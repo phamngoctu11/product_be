@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 public class OrderDTO implements Serializable {
     private Long id;
-    private Long user_id;
+    private String user_id;
     private String lastname;
     private String customerName;
     private List<OrderItemDTO> items;
@@ -25,6 +25,6 @@ public class OrderDTO implements Serializable {
     private String cancelReason;
     private String paymentMethod;
     private String note;
-    private Long approvedById;
+    private String approvedById;
     private String approvedByFullName;
 }

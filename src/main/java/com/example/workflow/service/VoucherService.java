@@ -35,7 +35,7 @@ public class VoucherService {
                 .collect(Collectors.toList());
     }
 
-    public List<UserVoucherDTO> getMyWallet(Long userId) {
+    public List<UserVoucherDTO> getMyWallet(String userId) {
         return userVoucherRepository.findByUserIdAndIsUsedFalse(userId)
                 .stream()
                 .map(voucherMapper::toUserVoucherDto)
@@ -47,7 +47,7 @@ public class VoucherService {
             @CacheEvict(value = "user", key = "#userId"),
             @CacheEvict(value = "users", allEntries = true)
     })
-    public UserVoucherDTO redeemVoucher(Long userId, Long templateId) {
+    public UserVoucherDTO redeemVoucher(String userId, Long templateId) {
         LocalDateTime now = LocalDateTime.now();
         User user = getUserOrThrow(userId);
         VoucherTemplate template = getTemplateOrThrow(templateId);
@@ -74,7 +74,7 @@ public class VoucherService {
         return templateRepository.save(request);
     }
 
-    private User getUserOrThrow(Long userId) {
+    private User getUserOrThrow(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User does not exist"));
     }

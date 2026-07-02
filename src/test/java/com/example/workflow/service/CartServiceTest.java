@@ -99,12 +99,12 @@ class CartServiceTest {
 
     @Test
     void startAddToCartProcessPassesExpectedVariables() {
-        cartService.startAddToCartProcess(1L, 2L, 3);
+        cartService.startAddToCartProcess("1", 2L, 3);
 
         ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
         verify(runtimeService).startProcessInstanceByKey(eq("AddToCartProcess"), variablesCaptor.capture());
         assertThat(variablesCaptor.getValue())
-                .containsEntry("userId", 1L)
+                .containsEntry("userId", "1")
                 .containsEntry("variantId", 2L)
                 .containsEntry("quantity", 3);
     }
@@ -123,17 +123,17 @@ class CartServiceTest {
                 cartItem(deletedVariant, 1)
         );
         CartResDTO mappedCart = new CartResDTO(
-                1L,
+                "1",
                 new ArrayList<>(List.of(
                         new CartItemDTO(1L, "Variant 1", 2, 25.0, null),
                         new CartItemDTO(2L, "Variant 2", 1, 10.0, null)
                 )),
                 60.0
         );
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(cartMapper.toDto(cart)).thenReturn(mappedCart);
 
-        CartResDTO result = cartService.getCartByUserId(1L);
+        CartResDTO result = cartService.getCartByUserId("1");
 
         assertThat(result.getItems()).singleElement().satisfies(item -> {
             assertThat(item.getVariantId()).isEqualTo(1L);
@@ -149,14 +149,14 @@ class CartServiceTest {
         variant.setImageUrl("");
         Cart cart = cartWithItems(1L, user(1L), cartItem(variant, 2));
         CartResDTO mappedCart = new CartResDTO(
-                1L,
+                "1",
                 new ArrayList<>(List.of(new CartItemDTO(1L, "Variant 1", 2, 25.0, null))),
                 50.0
         );
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(cartMapper.toDto(cart)).thenReturn(mappedCart);
 
-        CartResDTO result = cartService.getCartByUserId(1L);
+        CartResDTO result = cartService.getCartByUserId("1");
 
         assertThat(result.getItems()).singleElement()
                 .extracting(CartItemDTO::getImageUrl)
@@ -166,9 +166,9 @@ class CartServiceTest {
 
     @Test
     void getCartByUserIdThrowsWhenCartDoesNotExist() {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> cartService.getCartByUserId(1L))
+        assertThatThrownBy(() -> cartService.getCartByUserId("1"))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
     }
@@ -177,9 +177,9 @@ class CartServiceTest {
     void updateQuantityChangesExistingItem() {
         CartItem item = cartItem(variant(1L, "Variant 1", 25.0, 10, false, product(false, null)), 3);
         Cart cart = cartWithItems(1L, user(1L), item);
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 
-        cartService.updateQuantity(1L, 1L, 7);
+        cartService.updateQuantity("1", 1L, 7);
 
         assertThat(item.getQuantity()).isEqualTo(7);
         verify(cartRepository).save(cart);
@@ -189,9 +189,9 @@ class CartServiceTest {
     void updateQuantityRemovesItemWhenQuantityIsZero() {
         CartItem item = cartItem(variant(1L, "Variant 1", 25.0, 10, false, product(false, null)), 3);
         Cart cart = cartWithItems(1L, user(1L), item);
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 
-        cartService.updateQuantity(1L, 1L, 0);
+        cartService.updateQuantity("1", 1L, 0);
 
         assertThat(cart.getItems()).isEmpty();
         verify(cartRepository).save(cart);
@@ -200,9 +200,9 @@ class CartServiceTest {
     @Test
     void updateQuantityThrowsWhenVariantIsNotInCart() {
         Cart cart = cartWithItems(1L, user(1L));
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 
-        assertThatThrownBy(() -> cartService.updateQuantity(1L, 99L, 1))
+        assertThatThrownBy(() -> cartService.updateQuantity("1", 99L, 1))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
 
@@ -211,9 +211,9 @@ class CartServiceTest {
 
     @Test
     void updateQuantityThrowsWhenCartDoesNotExist() {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> cartService.updateQuantity(1L, 1L, 2))
+        assertThatThrownBy(() -> cartService.updateQuantity("1", 1L, 2))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
 
@@ -225,9 +225,9 @@ class CartServiceTest {
         CartItem removedItem = cartItem(variant(1L, "Variant 1", 25.0, 10, false, product(false, null)), 3);
         CartItem keptItem = cartItem(variant(2L, "Variant 2", 30.0, 10, false, product(false, null)), 1);
         Cart cart = cartWithItems(1L, user(1L), removedItem, keptItem);
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 
-        cartService.removeFromCart(1L, 1L);
+        cartService.removeFromCart("1", 1L);
 
         assertThat(cart.getItems()).containsExactly(keptItem);
         verify(cartRepository).save(cart);
@@ -235,9 +235,9 @@ class CartServiceTest {
 
     @Test
     void removeFromCartThrowsWhenCartDoesNotExist() {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> cartService.removeFromCart(1L, 1L))
+        assertThatThrownBy(() -> cartService.removeFromCart("1", 1L))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
 
@@ -252,8 +252,8 @@ class CartServiceTest {
         CartItem item = cartItem(variant, 2);
         Cart cart = cartWithItems(1L, user, item);
         AtomicReference<Order> savedOrder = new AtomicReference<>();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(100L);
@@ -262,7 +262,7 @@ class CartServiceTest {
         });
         when(orderRepository.findById(100L)).thenAnswer(invocation -> Optional.of(savedOrder.get()));
 
-        Map<String, String> response = cartService.approveCart(1L, List.of(11L), null, "COD", "note");
+        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "COD", "note");
 
         assertThat(response).containsEntry("status", "SUCCESS");
         assertThat(cart.getItems()).isEmpty();
@@ -280,7 +280,7 @@ class CartServiceTest {
         verify(runtimeService).startProcessInstanceByKey(eq("ApproveCartProcess"), eq("1"), variablesCaptor.capture());
         assertThat(variablesCaptor.getValue())
                 .containsEntry("orderId", 100L)
-                .containsEntry("userId", 1L)
+                .containsEntry("userId", "1")
                 .containsEntry("paymentMethod", "COD")
                 .containsEntry("note", "note");
         verify(notificationService, times(2)).sendNotification(any(), any(), eq(100L), any(), any(), any());
@@ -290,9 +290,9 @@ class CartServiceTest {
     void approveCartRejectsCodWhenReputationIsTooLow() {
         User user = user(1L);
         user.setReputation(19);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> cartService.approveCart(1L, List.of(11L), null, "COD", null))
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", null))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
@@ -311,8 +311,8 @@ class CartServiceTest {
         CartItem item = cartItem(variant, 2);
         Cart cart = cartWithItems(1L, user, item);
         AtomicReference<Order> savedOrder = new AtomicReference<>();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(100L);
@@ -323,7 +323,7 @@ class CartServiceTest {
         when(momoService.createPaymentData("100", 50L)).thenReturn(Map.of("payUrl", "https://momo.test/pay"));
         when(momoService.isMockPaymentEnabled()).thenReturn(true);
 
-        Map<String, String> response = cartService.approveCart(1L, List.of(11L), null, "ONLINE", null);
+        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "ONLINE", null);
 
         assertThat(response)
                 .containsEntry("status", "REDIRECT")
@@ -335,7 +335,7 @@ class CartServiceTest {
 
     private User user(Long id) {
         User user = new User();
-        user.setId(id);
+        user.setId(String.valueOf(id));
         user.setReputation(20);
         return user;
     }

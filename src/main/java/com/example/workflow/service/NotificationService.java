@@ -15,7 +15,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public Notification sendUserNotification(String title, String content, Long targetUserId, Long consultationRequestId) {
+    public Notification sendUserNotification(String title, String content, String targetUserId, Long consultationRequestId) {
         return sendNotification(
                 title,
                 content,
@@ -30,7 +30,7 @@ public class NotificationService {
             String title,
             String content,
             Long orderId,
-            Long targetUserId,
+            String targetUserId,
             Long consultationRequestId,
             String destination
     ) {
@@ -45,13 +45,13 @@ public class NotificationService {
         return savedNotification;
     }
 
-    public List<Notification> getNotifications(Long userId, boolean admin) {
-        Long targetUserId = admin ? null : userId;
+    public List<Notification> getNotifications(String userId, boolean admin) {
+        String targetUserId = admin ? null : userId;
         return notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(targetUserId);
     }
 
     @Transactional
-    public void markAllAsRead(Long userId, boolean admin) {
+    public void markAllAsRead(String userId, boolean admin) {
         List<Notification> notifications = getNotifications(userId, admin);
         notifications.forEach(notification -> notification.setRead(true));
         notificationRepository.saveAll(notifications);

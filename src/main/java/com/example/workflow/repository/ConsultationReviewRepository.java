@@ -17,9 +17,9 @@ public interface ConsultationReviewRepository extends JpaRepository<Consultation
     @Query("SELECT r.attribution.id FROM ConsultationReview r WHERE r.attribution.id IN :attributionIds")
     List<Long> findReviewedAttributionIds(@Param("attributionIds") Collection<Long> attributionIds);
 
-    Optional<ConsultationReview> findByAttributionIdAndUserId(Long attributionId, Long userId);
+    Optional<ConsultationReview> findByAttributionIdAndUserId(Long attributionId, String userId);
 
     Page<ConsultationReview> findByProductIdOrderByCreatedAtDesc(Long productId, Pageable pageable);
 
-    Page<ConsultationReview> findByStaffIdOrderByCreatedAtDesc(Long staffId, Pageable pageable);
+    Page<ConsultationReview> findByStaffIdOrderByCreatedAtDesc(String staffId, Pageable pageable);
 }

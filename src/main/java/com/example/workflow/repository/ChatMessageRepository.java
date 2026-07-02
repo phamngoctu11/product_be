@@ -8,9 +8,9 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 
 public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
-    List<ChatMessage> findByUserIdOrderByTimestampAsc(Long userId);
+    List<ChatMessage> findByUserIdOrderByTimestampAsc(String userId);
 
-    List<ChatMessage> findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(Long userId);
+    List<ChatMessage> findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(String userId);
 
     List<ChatMessage> findByConsultationRequestIdOrderByTimestampAsc(Long consultationRequestId);
 

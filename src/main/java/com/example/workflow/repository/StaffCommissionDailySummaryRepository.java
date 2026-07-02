@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Optional;
 
 public interface StaffCommissionDailySummaryRepository extends MongoRepository<StaffCommissionDailySummary, String> {
-    Optional<StaffCommissionDailySummary> findByStaffIdAndSummaryDate(Long staffId, LocalDate summaryDate);
+    Optional<StaffCommissionDailySummary> findByStaffIdAndSummaryDate(String staffId, LocalDate summaryDate);
 
     List<StaffCommissionDailySummary> findByStaffIdAndSummaryDateBetween(
-            Long staffId,
+            String staffId,
             LocalDate startDate,
             LocalDate endDate
     );
 
-    void deleteByStaffIdAndSummaryDate(Long staffId, LocalDate summaryDate);
+    void deleteByStaffIdAndSummaryDate(String staffId, LocalDate summaryDate);
 }

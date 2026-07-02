@@ -21,7 +21,7 @@ public class NotificationController {
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(
-            @Positive(message = "User id must be positive") @PathVariable Long userId,
+            @Positive(message = "User id must be positive") @PathVariable String userId,
             @RequestParam boolean isAdmin
     ) {
         return ResponseEntity.ok(ApiResponse.success(notificationService.getNotifications(userId, isAdmin)));
@@ -29,7 +29,7 @@ public class NotificationController {
 
     @PutMapping("/read-all/{userId}")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(
-            @Positive(message = "User id must be positive") @PathVariable Long userId,
+            @Positive(message = "User id must be positive") @PathVariable String userId,
             @RequestParam boolean isAdmin
     ) {
         notificationService.markAllAsRead(userId, isAdmin);

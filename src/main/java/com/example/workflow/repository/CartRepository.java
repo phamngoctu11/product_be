@@ -16,5 +16,5 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
             "LEFT JOIN FETCH i.productVariant pv " +
             "LEFT JOIN FETCH pv.product " +
             "WHERE c.user.id = :userId")
-    Optional<Cart> findByUserId(@Param("userId") Long userId);
+    Optional<Cart> findByUserId(@Param("userId") String userId);
 }

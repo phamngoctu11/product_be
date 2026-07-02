@@ -13,15 +13,15 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ConsultationRequestDTO implements Serializable {
     private Long id;
-    private Long userId;
+    private String userId;
     private String customerName;
     private Long productId;
     private String productName;
     private String productImageUrl;
     private ConsultationStatus status;
-    private Long assignedStaffId;
+    private String assignedStaffId;
     private String assignedStaffName;
-    private Long assignedByManagerId;
+    private String assignedByManagerId;
     private String assignedByManagerName;
     private LocalDateTime createdAt;
     private LocalDateTime assignedAt;

@@ -28,7 +28,7 @@ public class ProductController {
     @PostMapping
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductDTO>> createProduct(
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductDTO dto
     ) {
         return ResponseEntity.ok(ApiResponse.success(service.createProduct(dto, userId)));
@@ -58,7 +58,7 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> updateProduct(
             @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductDTO dto
     ) {
         service.updateProduct(id, dto, userId);
@@ -80,7 +80,7 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductDTO>> addVariant(
             @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductVariantDTO dto
     ) {
         return ResponseEntity.ok(ApiResponse.success("Variant created successfully", service.addVariant(id, dto, userId)));
@@ -90,7 +90,7 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductVariantDTO>> importStock(
             @Positive(message = "Variant id must be positive") @PathVariable Long variantId,
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Valid @RequestBody StockImportRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success("Stock imported successfully", service.importStock(variantId, request, userId)));
@@ -101,7 +101,7 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteProduct(
             @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId
+            @RequestParam("userId") String userId
     ) {
         service.deleteProduct(id, userId);
         return ResponseEntity.ok(ApiResponse.success("Product deleted successfully"));

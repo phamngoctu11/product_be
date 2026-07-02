@@ -9,6 +9,6 @@ import java.io.Serializable;
 @AllArgsConstructor
 public class AuthResponse implements Serializable {
     private String accessToken;
-    private Long user_id;
+    private String user_id;
     private String username;
 }

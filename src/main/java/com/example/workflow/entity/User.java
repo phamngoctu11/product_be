@@ -1,12 +1,10 @@
 package com.example.workflow.entity;
 
 import com.example.workflow.nume.Role;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -15,9 +13,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class User {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name="id")
-    private Long id;
+    @Column(length = 36, nullable = false, updatable = false)
+    private String id;
 
     @Column(nullable = false,name = "firstname")
     private String firstname;
@@ -27,9 +24,6 @@ public class User {
 
     @Column(unique = true, nullable = false,name="username")
     private String username;
-
-    @Column(nullable = false,name="password")
-    private String password;
 
     @Column(nullable=false,name="gender")
     private String gender;
@@ -54,7 +48,7 @@ public class User {
     private int reputation;
 
     @Column(name="isdelete")
-    private boolean isDelete;
+    private boolean isDelete  = false;
 
     @Column(name = "avatar_url")
     private String avatarUrl;

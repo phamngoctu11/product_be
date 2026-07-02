@@ -29,7 +29,7 @@ public class CartController {
 
     @PostMapping("/add")
     public ResponseEntity<ApiResponse<Void>> addToCart(
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Positive(message = "Variant id must be positive") @RequestParam("variantId") Long variantId,
             @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
     ) {
@@ -39,7 +39,7 @@ public class CartController {
 
     @PutMapping("/update")
     public ResponseEntity<ApiResponse<Void>> update(
-            @Positive(message = "User id must be positive") @RequestParam Long userId,
+            @RequestParam String userId,
             @Positive(message = "Variant id must be positive") @RequestParam Long variantId,
             @Min(value = 0, message = "Quantity must be zero or positive") @RequestParam int quantity
     ) {
@@ -49,7 +49,7 @@ public class CartController {
 
     @DeleteMapping("/remove")
     public ResponseEntity<ApiResponse<Void>> remove(
-            @Positive(message = "User id must be positive") @RequestParam Long userId,
+            @RequestParam String userId,
             @Positive(message = "Variant id must be positive") @RequestParam Long variantId
     ) {
         cartService.removeFromCart(userId, variantId);
@@ -58,14 +58,14 @@ public class CartController {
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<CartResDTO>> getCart(
-            @Positive(message = "User id must be positive") @PathVariable Long userId
+            @PathVariable String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(cartService.getCartByUserId(userId)));
     }
 
     @PostMapping("/approve/{userId}")
     public ResponseEntity<ApiResponse<Map<String, String>>> approveCart(
-            @Positive(message = "User id must be positive") @PathVariable("userId") Long userId,
+            @PathVariable("userId") String userId,
             @Valid @NotEmpty(message = "Select at least one variant to checkout")
             @RequestBody List<@Positive(message = "Variant id must be positive") Long> productIdsToCheckout,
             @Positive(message = "User voucher id must be positive")

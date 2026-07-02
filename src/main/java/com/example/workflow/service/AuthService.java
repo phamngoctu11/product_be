@@ -17,7 +17,7 @@ public class AuthService {
     private final KeycloakIdentityService keycloakIdentityService;
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsernameAndIsDeleteFalse(request.getUsername())
+        User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, ConstantErrorCode.INVALID_CREDENTIALS));
         String accessToken = keycloakIdentityService.authenticate(request.getUsername(), request.getPassword());
         return new AuthResponse(accessToken, user.getId(), user.getUsername());

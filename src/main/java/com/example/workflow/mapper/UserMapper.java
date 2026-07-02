@@ -14,7 +14,6 @@ public interface UserMapper {
     @Mapping(source="phone",target="phone")
     UserResDTO toResponse(User user);
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "password", ignore = true)
     @Mapping(target = "cart",ignore = true)
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "avatarUrl",source = "avatarUrl")

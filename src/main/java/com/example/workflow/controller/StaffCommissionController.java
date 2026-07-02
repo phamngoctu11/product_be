@@ -76,7 +76,7 @@ public class StaffCommissionController {
     @GetMapping("/staff/{staffId}/summary")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<StaffCommissionSummaryDTO>> getStaffSummary(
-            @Positive @PathVariable Long staffId,
+            @PathVariable String staffId,
             @RequestParam(defaultValue = "MONTH") String period,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate from,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate to
@@ -89,7 +89,7 @@ public class StaffCommissionController {
     @GetMapping("/staff/{staffId}/details")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Page<StaffCommissionDetailDTO>>> getStaffDetails(
-            @Positive @PathVariable Long staffId,
+            @PathVariable String staffId,
             @RequestParam(defaultValue = "MONTH") String period,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate from,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate to,

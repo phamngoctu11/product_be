@@ -53,11 +53,11 @@ public class OrderService {
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsernameAndIsDeleteFalse(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
     }
 
-    private User getManagerReviewer(Long changerId) {
+    private User getManagerReviewer(String changerId) {
         User manager = userRepository.findById(changerId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.REVIEWER_NOT_FOUND, changerId));
         if (manager.getRole() != Role.MANAGER) {
@@ -82,7 +82,7 @@ public class OrderService {
         return staff;
     }
 
-    private User getStaffById(Long staffId) {
+    private User getStaffById(String staffId) {
         User staff = userRepository.findById(staffId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
         if (staff.getRole() != Role.STAFF || staff.isDelete()) {
@@ -123,7 +123,7 @@ public class OrderService {
                 .singleResult();
     }
 
-    private void saveOrderAndAuditStatusChange(Order order, OrderStatus oldStatus, Long changerId) {
+    private void saveOrderAndAuditStatusChange(Order order, OrderStatus oldStatus, String changerId) {
         orderRepository.save(order);
         if (oldStatus != order.getStatus()) {
             saveAuditLog(order, oldStatus, order.getStatus(), changerId);
@@ -199,7 +199,7 @@ public class OrderService {
             @CacheEvict(value = "warehouseOrders", allEntries = true),
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
-    public void assignStaffToOrder(Long orderId, Long staffId) {
+    public void assignStaffToOrder(Long orderId, String staffId) {
         Order order = getOrderOrThrow(orderId);
         User manager = getCurrentManager();
         User staff = getStaffById(staffId);
@@ -225,7 +225,7 @@ public class OrderService {
             @CacheEvict(value = "warehouseOrders", allEntries = true),
             @CacheEvict(value = "staffOrders", allEntries = true)
     })
-    public void processAdminReview(Long orderId, AdminReviewRequest request, Long changerId, Long staffId) {
+    public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
         Order order = getOrderOrThrow(orderId);
         User manager = getManagerReviewer(changerId);
         User assignedStaff = request.isApproved() && staffId != null ? getStaffById(staffId) : null;
@@ -337,7 +337,7 @@ public class OrderService {
             order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
             String message = " vui long kiem tra lai so luong xuat.";
             if (cancelReason != null) message = "Ly do: " + cancelReason;
-            Long staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
+            String staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
             String destination = staffId == null ? "/topic/admin-notifications" : "/topic/user-notifications/" + staffId;
             saveAndSendNotification("Canh bao KCS", "Don # bi KCS danh rot" + orderId + message, orderId, staffId, destination);
         }
@@ -633,7 +633,7 @@ public class OrderService {
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }
 
-    private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, Long changer) {
+    private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(order);
         history.setOldstatus(oldStatus);
@@ -643,7 +643,7 @@ public class OrderService {
         historyRepository.save(history);
     }
 
-    private void clearRelatedCaches(Long userId) {
+    private void clearRelatedCaches(String userId) {
         Cache ordersCache = cacheManager.getCache("orders");
         if (ordersCache != null) ordersCache.clear();
         Cache pendingOrdersCache = cacheManager.getCache("pendingOrders");
@@ -658,7 +658,7 @@ public class OrderService {
         if (userDetailCache != null) userDetailCache.evict(userId);
     }
 
-    private void saveAndSendNotification(String title, String content, Long orderId, Long targetUserId, String destination) {
+    private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
         notificationService.sendNotification(title, content, orderId, targetUserId, null, destination);
     }
     @Transactional
@@ -743,7 +743,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "orders", key = "#user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getOrdersByUserId(Long user_id, Pageable pageable) {
+    public Page<OrderListDTO> getOrdersByUserId(String user_id, Pageable pageable) {
         return orderRepository.findListDtoByUserId(
                 user_id,
                 List.of(
@@ -762,7 +762,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "orders", key = "'cancelled-' + #user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getCancelledOrdersByUserId(Long user_id, Pageable pageable) {
+    public Page<OrderListDTO> getCancelledOrdersByUserId(String user_id, Pageable pageable) {
         return orderRepository.findListDtoByUserIdAndStatus(
                 user_id,
                 OrderStatus.CANCELLED,

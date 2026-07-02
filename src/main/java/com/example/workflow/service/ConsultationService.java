@@ -94,7 +94,7 @@ public class ConsultationService {
     }
 
     @Transactional
-    public ConsultationRequestDTO assignRequest(Long requestId, Long staffId) {
+    public ConsultationRequestDTO assignRequest(Long requestId, String staffId) {
         User manager = getCurrentAssigner();
         User staff = getActiveStaffById(staffId);
 
@@ -174,7 +174,7 @@ public class ConsultationService {
         return product;
     }
 
-    private User getActiveStaffById(Long staffId) {
+    private User getActiveStaffById(String staffId) {
         User staff = userRepository.findById(staffId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
         if (staff.getRole() != Role.STAFF || staff.isDelete()) {
@@ -185,7 +185,7 @@ public class ConsultationService {
 
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsernameAndIsDeleteFalse(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
     }
 

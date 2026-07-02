@@ -6,5 +6,5 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 @Repository
 public interface UserVoucherRepository extends JpaRepository<UserVoucher, Long> {
-    List<UserVoucher> findByUserIdAndIsUsedFalse(Long userId);
+    List<UserVoucher> findByUserIdAndIsUsedFalse(String userId);
 }

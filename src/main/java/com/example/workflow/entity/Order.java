@@ -60,7 +60,7 @@ public class Order {
     private User manager;
 
     @Column(name = "approved_by_id")
-    private Long approvedById;
+    private String approvedById;
 
     @Column(name = "approved_by_full_name")
     private String approvedByFullName;

@@ -42,7 +42,7 @@ public class ConsultationAttributionController {
     @GetMapping("/staff/{staffId}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Page<ConsultationSaleAttributionDTO>>> getStaffAttributions(
-            @Positive @PathVariable Long staffId,
+            @PathVariable String staffId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(attributionService.getStaffAttributions(staffId, pageable)));
@@ -74,7 +74,7 @@ public class ConsultationAttributionController {
     @GetMapping("/reviews/staff/{staffId}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN', 'STAFF')")
     public ResponseEntity<ApiResponse<Page<ConsultationReviewDTO>>> getStaffReviews(
-            @Positive @PathVariable Long staffId,
+            @PathVariable String staffId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(attributionService.getStaffReviews(staffId, pageable)));

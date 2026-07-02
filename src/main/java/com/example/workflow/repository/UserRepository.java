@@ -14,15 +14,15 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, String> {
     boolean existsByUsername(String username);
-    Optional<User> findByUsernameAndIsDeleteFalse(String username);
-    @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role,u.avatarUrl) FROM User u where u.isDelete = false")
+    Optional<User> findByUsername(String username);
+    @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role,u.avatarUrl) FROM User u")//where u.isDelete = false
     Page<UserListDTO> findAllCustom(Pageable pageable);
 
     @Query("SELECT new com.example.workflow.dto.ChatUserDTO(u.id, u.firstname, u.lastname, u.email, u.avatarUrl, false) " +
             "FROM User u WHERE u.id IN :ids AND u.isDelete = false")
-    List<ChatUserDTO> findChatUserDtosByIds(@Param("ids") List<Long> ids);
+    List<ChatUserDTO> findChatUserDtosByIds(@Param("ids") List<String> ids);
 
     Page<User> findByRoleAndIsDeleteFalse(Role role, Pageable pageable);
 

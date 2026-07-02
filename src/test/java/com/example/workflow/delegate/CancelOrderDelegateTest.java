@@ -120,7 +120,7 @@ class CancelOrderDelegateTest {
 
     private Order orderWithItems(OrderItem... items) {
         User user = new User();
-        user.setId(99L);
+        user.setId("99");
         Order order = new Order();
         order.setId(10L);
         order.setUser(user);

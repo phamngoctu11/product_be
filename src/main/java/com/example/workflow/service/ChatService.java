@@ -51,7 +51,7 @@ public class ChatService {
     private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
-    public List<ChatMessage> getChatHistory(Long userId) {
+    public List<ChatMessage> getChatHistory(String userId) {
         User currentUser = getCurrentUser();
         validateUserChatReadAccess(userId, currentUser);
         return chatMessageRepository.findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(userId);
@@ -88,17 +88,17 @@ public class ChatService {
                 .findDtosByStatusIn(OPEN_STATUSES, Pageable.unpaged())
                 .getContent();
 
-        List<Long> userIds = mongoTemplate.query(ChatMessage.class)
+        List<String> userIds = mongoTemplate.query(ChatMessage.class)
                 .distinct("userId")
-                .as(Long.class)
+                .as(String.class)
                 .all();
 
-        List<Long> requestUserIds = requests.stream()
+        List<String> requestUserIds = requests.stream()
                 .map(ConsultationRequestDTO::getUserId)
                 .distinct()
                 .toList();
-        List<Long> allUserIds = Stream.concat(userIds.stream(), requestUserIds.stream())
-                .filter(id -> id != null && id > 0)
+        List<String> allUserIds = Stream.concat(userIds.stream(), requestUserIds.stream())
+                .filter(id -> id != null)
                 .distinct()
                 .toList();
 
@@ -106,7 +106,7 @@ public class ChatService {
             return List.of();
         }
 
-        Map<Long, ChatUserDTO> usersById = loadChatUsersById(allUserIds);
+        Map<String, ChatUserDTO> usersById = loadChatUsersById(allUserIds);
 
         List<ChatUserDTO> chatUsers = new ArrayList<>();
         for (ConsultationRequestDTO request : requests) {
@@ -116,7 +116,7 @@ public class ChatService {
             }
         }
 
-        Map<Long, ChatUserDTO> consultationUsersById = chatUsers.stream()
+        Map<String, ChatUserDTO> consultationUsersById = chatUsers.stream()
                 .collect(Collectors.toMap(ChatUserDTO::getId, Function.identity(), (first, second) -> first, LinkedHashMap::new));
         userIds.stream()
                 .filter(userId -> !consultationUsersById.containsKey(userId))
@@ -135,11 +135,11 @@ public class ChatService {
             return List.of();
         }
 
-        List<Long> userIds = requests.stream()
+        List<String> userIds = requests.stream()
                 .map(ConsultationRequestDTO::getUserId)
                 .distinct()
                 .toList();
-        Map<Long, ChatUserDTO> usersById = loadChatUsersById(userIds);
+        Map<String, ChatUserDTO> usersById = loadChatUsersById(userIds);
 
         return requests.stream()
                 .map(request -> enrichChatUser(usersById.get(request.getUserId()), request))
@@ -189,7 +189,7 @@ public class ChatService {
     }
 
     private void validateBasicMessage(ChatMessage chatMessage) {
-        boolean hasValidUserId = chatMessage.getUserId() != null && chatMessage.getUserId() > 0;
+        boolean hasValidUserId = chatMessage.getUserId() != null ;
         boolean hasValidConsultationId = chatMessage.getConsultationRequestId() != null && chatMessage.getConsultationRequestId() > 0;
         if (!hasValidUserId && !hasValidConsultationId) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Valid userId or consultationRequestId is required.");
@@ -272,7 +272,7 @@ public class ChatService {
         }
     }
 
-    private void validateUserChatReadAccess(Long userId, User currentUser) {
+    private void validateUserChatReadAccess(String userId, User currentUser) {
         if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER) {
             return;
         }
@@ -400,7 +400,7 @@ public class ChatService {
         return chatUser;
     }
 
-    private Map<Long, ChatUserDTO> loadChatUsersById(List<Long> userIds) {
+    private Map<String, ChatUserDTO> loadChatUsersById(List<String> userIds) {
         return userRepository.findChatUserDtosByIds(userIds)
                 .stream()
                 .peek(user -> user.setIsActive(chatPresenceService.isOnline(user.getId())))
@@ -450,10 +450,10 @@ public class ChatService {
             return null;
         }
 
-        return userRepository.findByUsernameAndIsDeleteFalse(authentication.getName()).orElse(null);
+        return userRepository.findByUsername(authentication.getName()).orElse(null);
     }
 
-    private User getActiveUserById(Long userId) {
+    private User getActiveUserById(String userId) {
         return userRepository.findById(userId)
                 .filter(user -> !user.isDelete())
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, userId));

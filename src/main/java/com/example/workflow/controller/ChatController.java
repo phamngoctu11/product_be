@@ -31,7 +31,7 @@ public class ChatController {
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<List<ChatMessage>>> getChatHistory(
-            @Positive(message = "User id must be positive") @PathVariable("userId") Long userId
+            @PathVariable("userId") String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(chatService.getChatHistory(userId)));
     }
@@ -68,12 +68,12 @@ public class ChatController {
             return;
         }
 
-        Long sessionUserId = null;
+        String sessionUserId = null;
         if (headerAccessor.getSessionAttributes() != null) {
-            sessionUserId = parseLong(headerAccessor.getSessionAttributes().get("chatUserId"));
+            sessionUserId = parseString(headerAccessor.getSessionAttributes().get("chatUserId"));
         }
         if (sessionUserId == null) {
-            sessionUserId = parseLong(headerAccessor.getFirstNativeHeader("userId"));
+            sessionUserId = parseString(headerAccessor.getFirstNativeHeader("userId"));
         }
         if (sessionUserId == null) {
             return;
@@ -85,17 +85,11 @@ public class ChatController {
         }
     }
 
-    private Long parseLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
+    private String parseString(Object value) {
+        if (value == null) {
+            return null;
         }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return Long.parseLong(text);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+        String text = value.toString();
+        return text.isBlank() ? null : text;
     }
 }

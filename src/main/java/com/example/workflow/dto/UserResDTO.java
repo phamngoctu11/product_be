@@ -6,7 +6,7 @@ import java.time.LocalDate;
 
 @Data
 public class UserResDTO implements Serializable {
-    private Long id;
+    private String id;
     private String username;
     private String firstname;
     private String lastname;

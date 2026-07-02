@@ -46,7 +46,7 @@ public class CartService {
     private final TransactionTemplate transactionTemplate;
 
     // LOGIC CAMUNDA THÊM GIỎ HÀNG
-    public void startAddToCartProcess(Long userId, Long variantId, int quantity) {
+    public void startAddToCartProcess(String userId, Long variantId, int quantity) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("userId", userId);
         variables.put("variantId", variantId);
@@ -55,7 +55,7 @@ public class CartService {
     }
 
     @CacheEvict(value = "carts", key = "#userId")
-    public void updateQuantity(Long userId, Long variantId, int newQuantity) {
+    public void updateQuantity(String userId, Long variantId, int newQuantity) {
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY);
         CartItem item = findCartItemOrThrow(cart, variantId);
         if (newQuantity <= 0) {
@@ -67,7 +67,7 @@ public class CartService {
     }
 
     @CacheEvict(value = "carts", key = "#userId")
-    public void removeFromCart(Long userId, Long variantId) {
+    public void removeFromCart(String userId, Long variantId) {
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
         cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
         cartRepository.save(cart);
@@ -75,7 +75,7 @@ public class CartService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
-    public CartResDTO getCartByUserId(Long userId) {
+    public CartResDTO getCartByUserId(String userId) {
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY_VI);
 
         CartResDTO dto = cartMapper.toDto(cart);
@@ -123,7 +123,7 @@ public class CartService {
     })
     // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Map<String, String> approveCart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
+    public Map<String, String> approveCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
         try {
             Long orderId = transactionTemplate.execute(status ->
                     createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note)
@@ -151,7 +151,7 @@ public class CartService {
         }
     }
 
-    private Long createOrderFromCart(Long userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
+    private Long createOrderFromCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
         User user = getUserOrThrow(userId);
         if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
@@ -227,7 +227,7 @@ public class CartService {
         order.setUserVoucher(appliedVoucher);
     }
 
-    private void startApproveCartProcess(Long orderId, Long userId, String paymentMethod, String note) {
+    private void startApproveCartProcess(Long orderId, String userId, String paymentMethod, String note) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("orderId", orderId);
         variables.put("userId", userId);
@@ -295,7 +295,7 @@ public class CartService {
         )).start();
     }
 
-    private User getUserOrThrow(Long userId) {
+    private User getUserOrThrow(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_VI));
     }
@@ -305,11 +305,11 @@ public class CartService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
     }
 
-    private Cart getCheckoutCart(Long userId) {
+    private Cart getCheckoutCart(String userId) {
         return getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND_VI);
     }
 
-    private Cart getCartOrThrow(Long userId, ConstantErrorCode errorCode) {
+    private Cart getCartOrThrow(String userId, ConstantErrorCode errorCode) {
         return cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode));
     }
@@ -344,7 +344,7 @@ public class CartService {
         return cartItem.getQuantity() * cartItem.getProductVariant().getPrice();
     }
 
-    private UserVoucher applyVoucherForCheckout(Long userVoucherId, Long userId, double totalPrice) {
+    private UserVoucher applyVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
         if (userVoucherId == null) {
             return null;
         }
@@ -357,7 +357,7 @@ public class CartService {
         return userVoucherRepository.save(voucher);
     }
 
-    private void validateVoucherForCheckout(UserVoucher voucher, Long userId, double totalPrice) {
+    private void validateVoucherForCheckout(UserVoucher voucher, String userId, double totalPrice) {
         if (voucher.isUsed()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
         }

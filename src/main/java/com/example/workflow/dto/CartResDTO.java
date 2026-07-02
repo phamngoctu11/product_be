@@ -10,7 +10,7 @@ import java.util.List;
 @NoArgsConstructor
 public class CartResDTO implements Serializable {
 
-    private Long user_id;
+    private String user_id;
     private List<CartItemDTO> items;
     private double totalPrice;
 }

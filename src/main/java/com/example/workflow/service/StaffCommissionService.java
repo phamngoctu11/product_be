@@ -104,7 +104,7 @@ public class StaffCommissionService {
             value = "staffCommissionSummaries",
             key = "'staff-' + #staffId + '-' + #period.name() + '-' + #from + '-' + #to"
     )
-    public StaffCommissionSummaryDTO getStaffSummary(Long staffId, CommissionPeriod period, LocalDate from, LocalDate to) {
+    public StaffCommissionSummaryDTO getStaffSummary(String staffId, CommissionPeriod period, LocalDate from, LocalDate to) {
         requireManagerOrAdmin(getCurrentUser());
         User staff = getStaffOrThrow(staffId);
         DateRange range = resolveDateRange(period, from, to);
@@ -117,7 +117,7 @@ public class StaffCommissionService {
             key = "'staff-' + #staffId + '-' + #period.name() + '-' + #from + '-' + #to + '-' + #status.name() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
     )
     public Page<StaffCommissionDetailDTO> getStaffDetails(
-            Long staffId,
+            String staffId,
             CommissionPeriod period,
             LocalDate from,
             LocalDate to,
@@ -173,7 +173,7 @@ public class StaffCommissionService {
     }
 
     private Page<ConsultationSaleAttribution> findDetailPage(
-            Long staffId,
+            String staffId,
             ConsultationAttributionStatus status,
             DateRange range,
             Pageable pageable
@@ -286,7 +286,7 @@ public class StaffCommissionService {
         }
     }
 
-    private void refreshDailySummary(Long staffId, LocalDate summaryDate) {
+    private void refreshDailySummary(String staffId, LocalDate summaryDate) {
         User staff = userRepository.findById(staffId).orElse(null);
         if (staff == null || staff.isDelete()) {
             summaryRepository.deleteByStaffIdAndSummaryDate(staffId, summaryDate);
@@ -349,7 +349,7 @@ public class StaffCommissionService {
             if (attribution == null || attribution.getStaff() == null || attribution.getStaff().getId() == null) {
                 continue;
             }
-            Long staffId = attribution.getStaff().getId();
+            String staffId = attribution.getStaff().getId();
             collectRefreshKey(refreshKeys, staffId, attribution.getOrderCreatedAt());
             collectRefreshKey(refreshKeys, staffId, attribution.getConfirmedAt());
             collectRefreshKey(refreshKeys, staffId, attribution.getCancelledAt());
@@ -357,7 +357,7 @@ public class StaffCommissionService {
         return refreshKeys;
     }
 
-    private void collectRefreshKey(Set<RefreshKey> refreshKeys, Long staffId, LocalDateTime dateTime) {
+    private void collectRefreshKey(Set<RefreshKey> refreshKeys, String staffId, LocalDateTime dateTime) {
         if (dateTime != null) {
             refreshKeys.add(new RefreshKey(staffId, dateTime.toLocalDate()));
         }
@@ -450,17 +450,17 @@ public class StaffCommissionService {
         return Math.round(value * MONEY_ROUNDING_FACTOR) / MONEY_ROUNDING_FACTOR;
     }
 
-    private String buildSummaryId(Long staffId, LocalDate summaryDate) {
+    private String buildSummaryId(String staffId, LocalDate summaryDate) {
         return staffId + ":" + summaryDate;
     }
 
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsernameAndIsDeleteFalse(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
     }
 
-    private User getStaffOrThrow(Long staffId) {
+    private User getStaffOrThrow(String staffId) {
         User staff = userRepository.findById(staffId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
         if (staff.isDelete() || staff.getRole() != Role.STAFF) {
@@ -503,6 +503,6 @@ public class StaffCommissionService {
         }
     }
 
-    private record RefreshKey(Long staffId, LocalDate summaryDate) {
+    private record RefreshKey(String staffId, LocalDate summaryDate) {
     }
 }

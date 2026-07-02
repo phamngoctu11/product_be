@@ -178,7 +178,7 @@ public class ConsultationAttributionService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "consultationAttributions", key = "'staff-' + #staffId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
-    public Page<ConsultationSaleAttributionDTO> getStaffAttributions(Long staffId, Pageable pageable) {
+    public Page<ConsultationSaleAttributionDTO> getStaffAttributions(String staffId, Pageable pageable) {
         User currentUser = getCurrentUser();
         if (currentUser.getRole() != Role.MANAGER && currentUser.getRole() != Role.ADMIN) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only manager or admin can view staff attribution reports.");
@@ -223,7 +223,7 @@ public class ConsultationAttributionService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "consultationReviews", key = "'staff-' + #staffId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
-    public Page<ConsultationReviewDTO> getStaffReviews(Long staffId, Pageable pageable) {
+    public Page<ConsultationReviewDTO> getStaffReviews(String staffId, Pageable pageable) {
         User currentUser = getCurrentUser();
         if (currentUser.getRole() == Role.STAFF && !currentUser.getId().equals(staffId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Staff can only view their own reviews.");
@@ -368,7 +368,7 @@ public class ConsultationAttributionService {
     }
 
     private Map<Long, ConsultationRequest> loadLatestConsultationsByProduct(
-            Long userId,
+            String userId,
             List<Long> productIds,
             LocalDateTime from,
             LocalDateTime orderCreatedAt
@@ -482,7 +482,7 @@ public class ConsultationAttributionService {
 
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsernameAndIsDeleteFalse(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
     }
 

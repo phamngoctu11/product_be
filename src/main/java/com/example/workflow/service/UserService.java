@@ -125,7 +125,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "user", key = "#id")
-    public UserResDTO getUserById(Long id) {
+    public UserResDTO getUserById(String id) {
         return userMapper.toResponse(getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, id));
     }
 
@@ -135,7 +135,7 @@ public class UserService {
             @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
             @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
-    public UserResDTO updateUser(Long id, UserCreDTO request) {
+    public UserResDTO updateUser(String id, UserCreDTO request) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
         keycloakIdentityService.updateUser(user.getUsername(), request);
         userMapper.updateUser(user, request);
@@ -148,14 +148,14 @@ public class UserService {
             @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
             @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
-    public void deleteUser(Long id) {
+    public void deleteUser(String id) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
         keycloakIdentityService.disableUser(user.getUsername());
         user.setDelete(true);
         userRepository.save(user);
     }
 
-    private User getUserOrThrow(Long id, ConstantErrorCode errorCode, Object... args) {
+    private User getUserOrThrow(String id, ConstantErrorCode errorCode, Object... args) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode, args));
     }

@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class ChatUserDTO {
-    private Long id;
+    private String id;
     private String firstname;
     private String lastname;
     private String email;
@@ -17,13 +17,13 @@ public class ChatUserDTO {
     private Long productId;
     private String productName;
     private String productImageUrl;
-    private Long assignedStaffId;
+    private String assignedStaffId;
     private String assignedStaffName;
-    private Long assignedByManagerId;
+    private String assignedByManagerId;
     private String assignedByManagerName;
     private String chatTitle;
 
-    public ChatUserDTO(Long id, String firstname, String lastname, String email, String avatarUrl, Boolean isActive) {
+    public ChatUserDTO(String id, String firstname, String lastname, String email, String avatarUrl, Boolean isActive) {
         this.id = id;
         this.firstname = firstname;
         this.lastname = lastname;

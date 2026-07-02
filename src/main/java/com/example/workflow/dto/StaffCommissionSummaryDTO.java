@@ -11,7 +11,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class StaffCommissionSummaryDTO implements Serializable {
-    private Long staffId;
+    private String staffId;
     private String staffName;
     private String avatarUrl;
     private LocalDate periodStart;

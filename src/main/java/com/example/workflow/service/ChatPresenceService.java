@@ -18,12 +18,12 @@ public class ChatPresenceService {
 
     private final RedisTemplate<String, Object> redisTemplate;
 
-    public PresenceChange markOnline(Long userId, String sessionId) {
+    public PresenceChange markOnline(String userId, String sessionId) {
         String sessionKey = sessionKey(sessionId);
         String userSessionsKey = userSessionsKey(userId);
 
         try {
-            redisTemplate.opsForValue().set(sessionKey, userId.toString(), PRESENCE_TTL);
+            redisTemplate.opsForValue().set(sessionKey, userId, PRESENCE_TTL);
             redisTemplate.opsForSet().add(userSessionsKey, sessionId);
             redisTemplate.expire(userSessionsKey, PRESENCE_TTL);
         } catch (RuntimeException e) {
@@ -46,14 +46,7 @@ public class ChatPresenceService {
             return Optional.empty();
         }
 
-        Long userId;
-        try {
-            userId = Long.parseLong(rawUserId.toString());
-        } catch (NumberFormatException e) {
-            log.warn("Invalid Redis chat session userId for session {}: {}", sessionId, rawUserId);
-            redisTemplate.delete(sessionKey(sessionId));
-            return Optional.empty();
-        }
+        String userId = rawUserId.toString();
 
         String userSessionsKey = userSessionsKey(userId);
         try {
@@ -72,7 +65,7 @@ public class ChatPresenceService {
         }
     }
 
-    public boolean isOnline(Long userId) {
+    public boolean isOnline(String userId) {
         if (userId == null) {
             return false;
         }
@@ -89,10 +82,10 @@ public class ChatPresenceService {
         return SESSION_KEY_PREFIX + sessionId;
     }
 
-    private String userSessionsKey(Long userId) {
+    private String userSessionsKey(String userId) {
         return USER_SESSIONS_KEY_PREFIX + userId + ":sessions";
     }
 
-    public record PresenceChange(Long userId, boolean online) {
+    public record PresenceChange(String userId, boolean online) {
     }
 }

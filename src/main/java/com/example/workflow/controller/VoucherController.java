@@ -32,14 +32,14 @@ public class VoucherController {
 
     @GetMapping("/wallet/{user_id}")
     public ResponseEntity<ApiResponse<List<UserVoucherDTO>>> getMyWallet(
-            @Positive(message = "User id must be positive") @PathVariable("user_id") Long userId
+            @PathVariable("user_id") String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getMyWallet(userId)));
     }
 
     @PostMapping("/redeem")
     public ResponseEntity<ApiResponse<Void>> redeemVoucher(
-            @Positive(message = "User id must be positive") @RequestParam("userId") Long userId,
+            @RequestParam("userId") String userId,
             @Positive(message = "Template id must be positive") @RequestParam("templateId") Long templateId
     ) {
         try {

@@ -38,5 +38,5 @@ public class OrderStatusHistory {
 
     // Sửa thành lưu ID để JOIN với bảng User khi cần tra cứu trách nhiệm
     @Column(name="changer_id")
-    Long changerId;
+    private String changerId;
 }

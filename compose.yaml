@@ -7,15 +7,7 @@ services:
     command: redis-server --loglevel warning
     volumes:
       - redis_data:/data
-  mysql:
-    image: mysql:8.0.31
-    container_name: workflow-mysql
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD:
-        -""
-      MYSQL_DATABASE: workflow
+
   mongo:
     image: mongo:7.0
     container_name: workflow-mongo
@@ -36,6 +28,25 @@ services:
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       - keycloak_data:/opt/keycloak/data
+
+  #backend:
+    #build: .
+    #container_name: workflow-backend
+    #ports:
+     # - "8080:8080"
+    #depends_on:
+     # - redis
+    #  - mongo
+    #  - keycloak
+   # environment:
+     # - REDIS_HOST=redis
+    #  - MONGODB_URI=mongodb://mongo:27017/workflow_chat
+    #  - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      #- KEYCLOAK_ISSUER_URI=http://165.245.188.101:8180/realms/my-workflow
+     # - KEYCLOAK_ISSUER_URI=http://localhost:8180/realms/my-workflow
+    #  - DB_URL=jdbc:mysql://103.149.170.20:3306/db_A46623
+   #   - DB_USERNAME=A46623
+   #   - DB_PASSWORD=A46623@thanglong
 
 volumes:
   redis_data:

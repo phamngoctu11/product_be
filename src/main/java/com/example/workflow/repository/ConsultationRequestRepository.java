@@ -19,25 +19,25 @@ import java.util.Optional;
 @Repository
 public interface ConsultationRequestRepository extends JpaRepository<ConsultationRequest, Long> {
     Optional<ConsultationRequest> findFirstByUserIdAndProductIdAndStatusInOrderByCreatedAtDesc(
-            Long userId,
+            String userId,
             Long productId,
             Collection<ConsultationStatus> statuses
     );
 
     boolean existsByUserIdAndAssignedStaffIdAndStatusIn(
-            Long userId,
-            Long assignedStaffId,
+            String userId,
+            String assignedStaffId,
             Collection<ConsultationStatus> statuses
     );
 
     Optional<ConsultationRequest> findFirstByUserIdAndAssignedStaffIdAndStatusInOrderByLastMessageAtDescCreatedAtDesc(
-            Long userId,
-            Long assignedStaffId,
+            String userId,
+            String assignedStaffId,
             Collection<ConsultationStatus> statuses
     );
 
     Optional<ConsultationRequest> findFirstByUserIdAndProductIdAndAssignedStaffIsNotNullAndStatusInAndCreatedAtBetweenOrderByCreatedAtDesc(
-            Long userId,
+            String userId,
             Long productId,
             Collection<ConsultationStatus> statuses,
             LocalDateTime from,
@@ -45,7 +45,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     );
 
     Optional<ConsultationRequest> findFirstByUserIdAndProductIdAndAssignedStaffIsNotNullAndFirstStaffReplyAtIsNotNullAndStatusInAndCreatedAtBetweenOrderByCreatedAtDesc(
-            Long userId,
+            String userId,
             Long productId,
             Collection<ConsultationStatus> statuses,
             LocalDateTime from,
@@ -61,7 +61,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
             "AND c.createdAt BETWEEN :from AND :to " +
             "ORDER BY c.product.id ASC, c.createdAt DESC")
     List<ConsultationRequest> findAttributionCandidates(
-            @Param("userId") Long userId,
+            @Param("userId") String userId,
             @Param("productIds") Collection<Long> productIds,
             @Param("statuses") Collection<ConsultationStatus> statuses,
             @Param("from") LocalDateTime from,
@@ -132,7 +132,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
             "WHERE u.id = :userId AND c.status IN :statuses " +
             "ORDER BY c.lastMessageAt DESC, c.createdAt DESC")
     Page<ConsultationRequestDTO> findDtosByUserIdAndStatusIn(
-            @Param("userId") Long userId,
+            @Param("userId") String userId,
             @Param("statuses") Collection<ConsultationStatus> statuses,
             Pageable pageable
     );
@@ -151,7 +151,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
             "WHERE staff.id = :staffId AND c.status IN :statuses " +
             "ORDER BY c.lastMessageAt DESC, c.createdAt DESC")
     Page<ConsultationRequestDTO> findDtosByAssignedStaffIdAndStatusIn(
-            @Param("staffId") Long staffId,
+            @Param("staffId") String staffId,
             @Param("statuses") Collection<ConsultationStatus> statuses,
             Pageable pageable
     );
@@ -163,7 +163,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
             nativeQuery = true)
     int claimWaitingRequest(
             @Param("id") Long id,
-            @Param("staffId") Long staffId,
+            @Param("staffId") String staffId,
             @Param("status") String status,
             @Param("waitingStatus") String waitingStatus,
             @Param("now") LocalDateTime now
@@ -176,8 +176,8 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
             nativeQuery = true)
     int assignWaitingRequest(
             @Param("id") Long id,
-            @Param("staffId") Long staffId,
-            @Param("managerId") Long managerId,
+            @Param("staffId") String staffId,
+            @Param("managerId") String managerId,
             @Param("status") String status,
             @Param("waitingStatus") String waitingStatus,
             @Param("now") LocalDateTime now

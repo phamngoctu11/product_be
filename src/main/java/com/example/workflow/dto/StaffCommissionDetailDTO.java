@@ -13,9 +13,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class StaffCommissionDetailDTO implements Serializable {
     private Long attributionId;
-    private Long staffId;
+    private String staffId;
     private String staffName;
-    private Long customerId;
+    private String customerId;
     private String customerName;
     private Long orderId;
     private Long orderItemId;

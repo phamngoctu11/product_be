@@ -7,5 +7,5 @@ import java.util.List;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     // Lấy thông báo theo người nhận (hoặc null nếu là Admin), sắp xếp mới nhất lên đầu
-    List<Notification> findByTargetUserIdOrderByCreatedAtDesc(Long targetUserId);
+    List<Notification> findByTargetUserIdOrderByCreatedAtDesc(String targetUserId);
 }

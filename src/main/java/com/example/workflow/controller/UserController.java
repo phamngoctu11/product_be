@@ -45,7 +45,7 @@ public class UserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<UserResDTO>> getById(
-            @Positive(message = "User id must be positive") @PathVariable Long id
+            @PathVariable String id
     ) {
         UserResDTO user = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.success(user));
@@ -53,7 +53,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<UserResDTO>> update(
-            @Positive(message = "User id must be positive") @PathVariable Long id,
+            @PathVariable String id,
             @Valid @RequestBody UserCreDTO request
     ) {
         UserResDTO updatedUser = userService.updateUser(id, request);
@@ -62,7 +62,7 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(
-            @Positive(message = "User id must be positive") @PathVariable Long id
+            @PathVariable String id
     ) {
         userService.deleteUser(id);
         return ResponseEntity.ok(ApiResponse.success("User deleted successfully"));

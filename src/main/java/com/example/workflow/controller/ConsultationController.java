@@ -79,7 +79,7 @@ public class ConsultationController {
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ConsultationRequestDTO>> assignRequest(
             @Positive @PathVariable Long requestId,
-            @Positive @RequestParam Long staffId
+            @RequestParam String staffId
     ) {
         try {
             return ResponseEntity.ok(ApiResponse.success("Gan yeu cau tu van cho staff thanh cong.", consultationService.assignRequest(requestId, staffId)));

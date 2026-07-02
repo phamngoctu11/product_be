@@ -50,12 +50,11 @@ public class SaveUserDelegate implements JavaDelegate {
         UserCreDTO keycloakUser = createKeycloakUser(username, password, firstname, lastname, email);
         String keycloakUserId = keycloakIdentityService.createUser(keycloakUser, role);
 
-        User user = createUser(username, firstname, lastname, gender, phone, birth, address, avatar, email, role);
+        User user = createUser(keycloakUserId,username, firstname, lastname, gender, phone, birth, address, avatar, email, role);
         Cart cart = createCartFor(user);
 
         try {
-            userRepository.save(user);
-            cartRepository.save(cart);
+            userRepository.saveAndFlush(user);
         } catch (RuntimeException ex) {
             keycloakIdentityService.deleteUserById(keycloakUserId);
             throw ex;
@@ -73,6 +72,7 @@ public class SaveUserDelegate implements JavaDelegate {
     }
 
     private User createUser(
+            String id,
             String username,
             String firstname,
             String lastname,
@@ -85,6 +85,7 @@ public class SaveUserDelegate implements JavaDelegate {
             Role role
     ) {
         User user = new User();
+        user.setId(id);
         user.setUsername(username);
         user.setFirstname(firstname);
         user.setLastname(lastname);
@@ -97,7 +98,6 @@ public class SaveUserDelegate implements JavaDelegate {
         user.setAvatarUrl(avatar);
         user.setReputation(50);
         user.setDelete(false);
-        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
         return user;
     }
 

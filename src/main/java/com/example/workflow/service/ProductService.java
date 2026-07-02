@@ -68,7 +68,7 @@ public class ProductService {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true)
     })
-    public ProductDTO createProduct(ProductDTO dto, Long userId) {
+    public ProductDTO createProduct(ProductDTO dto, String userId) {
         User actor = getActor(userId);
         Product entity = mapper.toEntity(dto);
         prepareProductForCreate(entity);
@@ -85,7 +85,7 @@ public class ProductService {
             @CacheEvict(value = "product", key = "#id"),
             @CacheEvict(value = "staffCommissionDetails", allEntries = true)
     })
-    public void updateProduct(Long id, ProductDTO dto, Long userId) {
+    public void updateProduct(Long id, ProductDTO dto, String userId) {
         User actor = getActor(userId);
         Product existingProduct = getActiveProduct(id);
         List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
@@ -159,7 +159,7 @@ public class ProductService {
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
             @CacheEvict(value = "product", key = "#productId")
     })
-    public ProductDTO addVariant(Long productId, ProductVariantDTO dto, Long userId) {
+    public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
         User actor = getActor(userId);
         Product product = getActiveProduct(productId);
 
@@ -181,7 +181,7 @@ public class ProductService {
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
-    public ProductVariantDTO importStock(Long variantId, StockImportRequest request, Long userId) {
+    public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
         User actor = getActor(userId);
         ProductVariant variant = getActiveVariant(variantId);
 
@@ -198,7 +198,7 @@ public class ProductService {
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
             @CacheEvict(value = "product", key = "#id")
     })
-    public void deleteProduct(Long id, Long userId) {
+    public void deleteProduct(Long id, String userId) {
         getActor(userId);
         Product product = getActiveProduct(id);
         product.setDelete(true);
@@ -284,7 +284,7 @@ public class ProductService {
         inventoryTransactionService.record(null, variant, actor, changeAmount, type);
     }
 
-    private User getActor(Long userId) {
+    private User getActor(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, userId));
     }

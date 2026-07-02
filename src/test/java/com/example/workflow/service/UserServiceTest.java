@@ -165,14 +165,14 @@ class UserServiceTest {
 
     @Test
     void getUserByIdReturnsMappedResponse() {
-        User user = user(42L, "customer");
+        User user = user("42", "customer");
         UserResDTO response = new UserResDTO();
-        response.setId(42L);
+        response.setId("42");
         response.setUsername("customer");
-        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
         when(userMapper.toResponse(user)).thenReturn(response);
 
-        UserResDTO result = userService.getUserById(42L);
+        UserResDTO result = userService.getUserById("42");
 
         assertThat(result).isSameAs(response);
         verify(userMapper).toResponse(user);
@@ -180,15 +180,15 @@ class UserServiceTest {
 
     @Test
     void updateUserSyncsKeycloakAndPersistsMappedEntity() {
-        User user = user(42L, "customer");
+        User user = user("42", "customer");
         UserCreDTO request = validUser();
         UserResDTO response = new UserResDTO();
-        response.setId(42L);
-        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+        response.setId("42");
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
         when(userRepository.save(user)).thenReturn(user);
         when(userMapper.toResponse(user)).thenReturn(response);
 
-        UserResDTO result = userService.updateUser(42L, request);
+        UserResDTO result = userService.updateUser("42", request);
 
         assertThat(result).isSameAs(response);
         verify(keycloakIdentityService).updateUser("customer", request);
@@ -198,10 +198,10 @@ class UserServiceTest {
 
     @Test
     void deleteUserDisablesKeycloakUserAndSoftDeletesEntity() {
-        User user = user(42L, "customer");
-        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+        User user = user("42", "customer");
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
 
-        userService.deleteUser(42L);
+        userService.deleteUser("42");
 
         assertThat(user.isDelete()).isTrue();
         verify(keycloakIdentityService).disableUser("customer");
@@ -210,9 +210,9 @@ class UserServiceTest {
 
     @Test
     void getUserByIdThrowsWhenUserDoesNotExist() {
-        when(userRepository.findById(42L)).thenReturn(Optional.empty());
+        when(userRepository.findById("42")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.getUserById(42L))
+        assertThatThrownBy(() -> userService.getUserById("42"))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
 
@@ -224,7 +224,7 @@ class UserServiceTest {
         AppException exception = new AppException(
                 HttpStatus.NOT_FOUND,
                 ConstantErrorCode.USER_NOT_FOUND_WITH_ID,
-                42L
+                "42"
         );
 
         assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -244,7 +244,7 @@ class UserServiceTest {
         return dto;
     }
 
-    private User user(Long id, String username) {
+    private User user(String id, String username) {
         User user = new User();
         user.setId(id);
         user.setUsername(username);

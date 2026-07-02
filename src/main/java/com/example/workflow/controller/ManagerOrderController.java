@@ -46,8 +46,8 @@ public class ManagerOrderController {
     public ResponseEntity<ApiResponse<Void>> reviewOrder(
             @Positive @PathVariable Long orderId,
             @Valid @RequestBody AdminReviewRequest request,
-            @Positive(message = "Changer id must be positive") @RequestParam("changerId") Long changerId,
-            @Positive(message = "Staff id must be positive") @RequestParam(value = "staffId", required = false) Long staffId
+            @RequestParam("changerId") String changerId,
+            @RequestParam(value = "staffId", required = false) String staffId
     ) {
         try {
             managerOrderService.reviewOrder(orderId, request, changerId, staffId);
@@ -63,7 +63,7 @@ public class ManagerOrderController {
     @PreAuthorize("hasAuthority('MANAGER')")
     public ResponseEntity<ApiResponse<Void>> assignStaffToOrder(
             @Positive @PathVariable Long orderId,
-            @Positive(message = "Staff id must be positive") @RequestParam("staffId") Long staffId
+            @RequestParam("staffId") String staffId
     ) {
         try {
             managerOrderService.assignStaffToOrder(orderId, staffId);

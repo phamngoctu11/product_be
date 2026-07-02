@@ -10,7 +10,7 @@ import java.time.LocalDate;
 
 @Data
 public class UserCreDTO implements Serializable {
-    private Long id;
+    private String id;
     @NotBlank(message = "Firstname is required")
     private String firstname;
     @NotBlank(message = "Lastname is required")

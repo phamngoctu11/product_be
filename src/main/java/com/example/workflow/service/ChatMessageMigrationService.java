@@ -51,7 +51,7 @@ public class ChatMessageMigrationService {
     private ChatMessage mapLegacyMessage(ResultSet rs) throws SQLException {
         ChatMessage message = new ChatMessage();
         message.setLegacyMysqlId(rs.getLong("id"));
-        message.setUserId(rs.getLong("user_id"));
+        message.setUserId(rs.getString("user_id"));
         message.setContent(rs.getString("content"));
         message.setShopSender(rs.getBoolean("is_shop_sender"));
 

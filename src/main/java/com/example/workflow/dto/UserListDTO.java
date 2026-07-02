@@ -9,7 +9,7 @@ import java.io.Serializable;
 @Data
 @AllArgsConstructor
 public class UserListDTO implements Serializable {
-    private Long id;
+    private String id;
     private String firstname;
     private String lastname;
     private int reputation;

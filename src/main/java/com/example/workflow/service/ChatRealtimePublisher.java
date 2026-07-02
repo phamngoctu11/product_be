@@ -28,7 +28,7 @@ public class ChatRealtimePublisher {
         }
     }
 
-    public void publishStatus(Long userId, boolean active) {
+    public void publishStatus(String userId, boolean active) {
         ChatRealtimeEvent event = new ChatRealtimeEvent(
                 "/topic/chat/admin/status",
                 null,

@@ -25,7 +25,7 @@ public class StaffCommissionDailySummary {
     private String id;
 
     @Indexed
-    private Long staffId;
+    private String staffId;
 
     private String staffName;
 

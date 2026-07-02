@@ -43,7 +43,7 @@ public class OrderController {
     @GetMapping("/user/{user_id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyOrders(
-            @Positive @PathVariable("user_id") Long userId,
+            @PathVariable("user_id") String userId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         Page<OrderListDTO> rs = orderService.getOrdersByUserId(userId, pageable);
@@ -54,7 +54,7 @@ public class OrderController {
     @GetMapping("/user/{user_id}/cancelled")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyCancelledOrders(
-            @Positive @PathVariable("user_id") Long userId,
+            @PathVariable("user_id") String userId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         Page<OrderListDTO> rs = orderService.getCancelledOrdersByUserId(userId, pageable);

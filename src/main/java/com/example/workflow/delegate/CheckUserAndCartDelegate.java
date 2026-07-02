@@ -18,7 +18,7 @@ public class CheckUserAndCartDelegate implements JavaDelegate {
 
     @Override
     public void execute(DelegateExecution execution) {
-        Long userId = (Long) execution.getVariable("userId");
+        String userId = (String) execution.getVariable("userId");
         Long variantId = (Long) execution.getVariable("variantId");
 
         validateUserExists(userId);
@@ -31,7 +31,7 @@ public class CheckUserAndCartDelegate implements JavaDelegate {
         System.out.println(">>> CheckUserAndCart: isExisted = " + existed);
     }
 
-    private void validateUserExists(Long userId) {
+    private void validateUserExists(String userId) {
         if (!userRepository.existsById(userId)) {
             throw new RuntimeException("User not found!!");
         }
@@ -42,7 +42,7 @@ public class CheckUserAndCartDelegate implements JavaDelegate {
                 .orElseThrow(() -> new RuntimeException("Product Variant not found!"));
     }
 
-    private Cart getCartByUserOrThrow(Long userId) {
+    private Cart getCartByUserOrThrow(String userId) {
         return cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Not found cart!"));
     }

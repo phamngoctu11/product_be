@@ -11,6 +11,6 @@ import lombok.NoArgsConstructor;
 public class ChatRealtimeEvent {
     private String destination;
     private ChatMessage message;
-    private Long userId;
+    private String userId;
     private Boolean active;
 }

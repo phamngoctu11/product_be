@@ -23,15 +23,15 @@ public class ChatMessage {
 
     private Long consultationRequestId;
 
-    private Long userId;
+    private String userId;
 
-    private Long senderId;
+    private String senderId;
 
     private String senderRole;
 
     private String senderName;
 
-    private Long assignedStaffId;
+    private String assignedStaffId;
 
     private String assignedStaffName;
 
