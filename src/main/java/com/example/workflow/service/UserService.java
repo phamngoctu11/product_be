@@ -42,7 +42,6 @@ public class UserService {
         String finalRole = resolveRegistrationRole(dto);
         Map<String, Object> variables = buildRegistrationVariables(dto, finalRole);
 
-        // The process has no async continuation, so this returns only after all delegates succeed.
         runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
     }
 
@@ -75,7 +74,8 @@ public class UserService {
                 && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken)
                 && auth.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ADMIN") || authority.getAuthority().equals("MANAGER"));
+                // Đã sửa: Phải map đúng với tiền tố ROLE_ đã sinh ra ở SecurityConfig
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN") || authority.getAuthority().equals("ROLE_MANAGER"));
     }
 
     private Map<String, Object> buildRegistrationVariables(UserCreDTO dto, String finalRole) {

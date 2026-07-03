@@ -9,6 +9,8 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.KeycloakIdentityService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
@@ -20,7 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.UUID;
+import java.util.Base64;
 
 @Component("saveUserDelegate")
 @RequiredArgsConstructor
@@ -48,15 +50,20 @@ public class SaveUserDelegate implements JavaDelegate {
         Role role = parseRole(roleValue);
 
         UserCreDTO keycloakUser = createKeycloakUser(username, password, firstname, lastname, email);
-        String keycloakUserId = keycloakIdentityService.createUser(keycloakUser, role);
 
-        User user = createUser(keycloakUserId,username, firstname, lastname, gender, phone, birth, address, avatar, email, role);
+        // 1. Lấy kết quả từ hàm tạo User của Keycloak (Có thể đang là Token)
+        String keycloakResponseOrToken = keycloakIdentityService.createUser(keycloakUser, role);
+
+        // 2. Tự động giải mã Token để trích xuất trường 'sub' làm ID chuẩn
+        String finalUserId = extractSubFromToken(keycloakResponseOrToken);
+
+        User user = createUser(finalUserId, username, firstname, lastname, gender, phone, birth, address, avatar, email, role);
         Cart cart = createCartFor(user);
 
         try {
             userRepository.saveAndFlush(user);
         } catch (RuntimeException ex) {
-            keycloakIdentityService.deleteUserById(keycloakUserId);
+            keycloakIdentityService.deleteUserById(finalUserId);
             throw ex;
         }
     }
@@ -117,5 +124,34 @@ public class SaveUserDelegate implements JavaDelegate {
         } catch (IllegalArgumentException ex) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_ROLE);
         }
+    }
+
+    /**
+     * Hàm phụ trợ: Giải mã JWT Token để lấy trường 'sub'.
+     * Nếu giá trị truyền vào không phải là Token hợp lệ, nó sẽ tự động fallback về nguyên bản gốc.
+     */
+    private String extractSubFromToken(String tokenOrId) {
+        try {
+            // Kiểm tra xem chuỗi có cấu trúc của JWT (3 phần phân cách bởi dấu chấm) không
+            if (tokenOrId != null && tokenOrId.split("\\.").length == 3) {
+                String[] parts = tokenOrId.split("\\.");
+
+                // Decode phần thứ 2 (Payload) từ chuỗi Base64
+                String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode node = mapper.readTree(payload);
+
+                // Nếu Payload có chứa trường "sub", lấy ra làm ID
+                if (node.has("sub")) {
+                    return node.get("sub").asText();
+                }
+            }
+        } catch (Exception e) {
+            // Nếu xảy ra lỗi lúc giải mã, bỏ qua và đi tiếp đến dòng return chuỗi gốc
+        }
+
+        // Nếu không phải là Token, trả về chính chuỗi cũ (rất có thể nó đã là UUID chuẩn sẵn)
+        return tokenOrId;
     }
 }

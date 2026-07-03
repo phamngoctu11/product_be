@@ -219,6 +219,10 @@ public class KeycloakIdentityService {
             throw new AppException(HttpStatus.SERVICE_UNAVAILABLE, ConstantErrorCode.KEYCLOAK_USER_SYNC_FAILED);
         }
         String path = location.getPath();
+        // Đã sửa: Xóa bỏ dấu gạch chéo ở cuối chuỗi nếu có để tránh việc cắt ra chuỗi rỗng
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
         return path.substring(path.lastIndexOf('/') + 1);
     }
 }

@@ -26,6 +26,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -51,19 +52,26 @@ public class SecurityConfig {
                         .requestMatchers("/api/chat/users").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
-                );
+                ).oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+        );
 
         return http.build();
     }
-
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setPrincipalClaimName("preferred_username");
-        converter.setJwtGrantedAuthoritiesConverter(keycloakRealmRoleConverter());
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            Map<String, Object> realmAccess = jwt.getClaim("realm_access");
+            if (realmAccess == null || !realmAccess.containsKey("roles")) {
+                return List.of();
+            }
+            Collection<String> roles = (Collection<String>) realmAccess.get("roles");
+            return roles.stream()
+                    // Có thể thêm tiền tố "ROLE_" nếu bạn dùng @PreAuthorize("hasRole('MANAGER')")
+                    .map(role -> new SimpleGrantedAuthority(role))
+                    .collect(Collectors.toList());
+        });
         return converter;
     }
 
