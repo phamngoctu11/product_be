@@ -15,6 +15,7 @@ public class ConsultationRequestDTO implements Serializable {
     private Long id;
     private String userId;
     private String customerName;
+    private String customerAvatarUrl;
     private Long productId;
     private String productName;
     private String productImageUrl;

@@ -26,7 +26,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -61,17 +60,8 @@ public class SecurityConfig {
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
-            Map<String, Object> realmAccess = jwt.getClaim("realm_access");
-            if (realmAccess == null || !realmAccess.containsKey("roles")) {
-                return List.of();
-            }
-            Collection<String> roles = (Collection<String>) realmAccess.get("roles");
-            return roles.stream()
-                    // Có thể thêm tiền tố "ROLE_" nếu bạn dùng @PreAuthorize("hasRole('MANAGER')")
-                    .map(role -> new SimpleGrantedAuthority(role))
-                    .collect(Collectors.toList());
-        });
+        converter.setPrincipalClaimName("preferred_username");
+        converter.setJwtGrantedAuthoritiesConverter(keycloakRealmRoleConverter());
         return converter;
     }
 

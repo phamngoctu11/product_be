@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.UserCreDTO;
+import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
@@ -21,7 +22,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -191,8 +195,69 @@ class UserServiceTest {
         UserResDTO result = userService.updateUser("42", request);
 
         assertThat(result).isSameAs(response);
-        verify(keycloakIdentityService).updateUser("customer", request);
+        verify(keycloakIdentityService).updateUser("42", request, Role.USER);
         verify(userMapper).updateUser(user, request);
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateUserAllowsAdminToSynchronizeRoleWithKeycloak() {
+        mockAuthenticatedRole("ADMIN");
+        User user = user("42", "customer");
+        UserCreDTO request = validUser();
+        request.setRole("STAFF");
+        UserResDTO response = new UserResDTO();
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+        when(userMapper.toResponse(user)).thenReturn(response);
+
+        userService.updateUser("42", request);
+
+        assertThat(user.getRole()).isEqualTo(Role.STAFF);
+        verify(keycloakIdentityService).updateUser("42", request, Role.STAFF);
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateUserRejectsRoleChangeFromUnprivilegedUser() {
+        mockAuthenticatedRole("USER");
+        User user = user("42", "customer");
+        UserCreDTO request = validUser();
+        request.setRole("STAFF");
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.updateUser("42", request))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("status", HttpStatus.FORBIDDEN);
+
+        assertThat(user.getRole()).isEqualTo(Role.USER);
+        verifyNoInteractions(keycloakIdentityService);
+        verify(userMapper, never()).updateUser(any(), any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateMyProfileUsesJwtSubjectAndPreservesRole() {
+        mockJwtUser("42", "customer");
+        User user = user("42", "customer");
+        user.setRole(Role.STAFF);
+        UserProfileUpdateDTO request = new UserProfileUpdateDTO();
+        request.setFirstname("Updated");
+        request.setLastname("User");
+        request.setGender("OTHER");
+        request.setPhone("0911111111");
+        request.setEmail("updated@example.com");
+        UserResDTO response = new UserResDTO();
+        when(userRepository.findById("42")).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+        when(userMapper.toResponse(user)).thenReturn(response);
+
+        UserResDTO result = userService.updateMyProfile(request);
+
+        assertThat(result).isSameAs(response);
+        assertThat(user.getRole()).isEqualTo(Role.STAFF);
+        verify(keycloakIdentityService).updateUserProfile("42", "customer", request);
+        verify(userMapper).updateProfile(user, request);
         verify(userRepository).save(user);
     }
 
@@ -204,7 +269,7 @@ class UserServiceTest {
         userService.deleteUser("42");
 
         assertThat(user.isDelete()).isTrue();
-        verify(keycloakIdentityService).disableUser("customer");
+        verify(keycloakIdentityService).disableUser("42");
         verify(userRepository).save(user);
     }
 
@@ -258,6 +323,23 @@ class UserServiceTest {
         doReturn(List.of(new SimpleGrantedAuthority(authority))).when(authentication).getAuthorities();
         SecurityContext context = mock(SecurityContext.class);
         when(context.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(context);
+    }
+
+    private void mockJwtUser(String subject, String username) {
+        Jwt jwt = Jwt.withTokenValue("token")
+                .header("alg", "none")
+                .subject(subject)
+                .claim("preferred_username", username)
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        SecurityContext context = mock(SecurityContext.class);
+        when(context.getAuthentication()).thenReturn(new JwtAuthenticationToken(
+                jwt,
+                List.of(new SimpleGrantedAuthority("USER")),
+                username
+        ));
         SecurityContextHolder.setContext(context);
     }
 }

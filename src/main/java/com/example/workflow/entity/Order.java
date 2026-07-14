@@ -74,4 +74,10 @@ public class Order {
 
     @Column(name = "tracking_code")
     private String trackingCode;
+
+    @Column(name = "stock_reserved", nullable = false, columnDefinition = "boolean default false")
+    private boolean stockReserved = false;
+
+    @Column(name = "stock_deducted", nullable = false, columnDefinition = "boolean default false")
+    private boolean stockDeducted = false;
 }

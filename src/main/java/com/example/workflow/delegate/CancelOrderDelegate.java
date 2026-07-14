@@ -1,15 +1,12 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
-import com.example.workflow.entity.OrderItem;
-import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.ConsultationAttributionService;
-import com.example.workflow.service.InventoryTransactionService;
+import com.example.workflow.service.InventoryReservationService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
@@ -24,10 +21,9 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
-    private final ProductVariantRepository variantRepository;
     private final CacheManager cacheManager;
     private final ConsultationAttributionService consultationAttributionService;
-    private final InventoryTransactionService inventoryTransactionService;
+    private final InventoryReservationService inventoryReservationService;
 
     @Override
     @Transactional
@@ -37,10 +33,9 @@ public class CancelOrderDelegate implements JavaDelegate {
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
 
         order.setStatus(OrderStatus.CANCELLED);
-        boolean stockDeducted = Boolean.TRUE.equals(execution.getVariable("stockDeducted"));
-
-        if (stockDeducted && order.getItems() != null) {
-            restoreStock(order);
+        boolean reservationReleased = inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");
+        if (!reservationReleased) {
+            inventoryReservationService.restoreDeductedStock(order, "CANCEL_RETURN");
         }
 
         restoreVoucher(order.getUserVoucher());
@@ -55,19 +50,6 @@ public class CancelOrderDelegate implements JavaDelegate {
         clearCache("products");
         clearCache("product");
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
-    }
-
-    private void restoreStock(Order order) {
-        for (OrderItem item : order.getItems()) {
-            ProductVariant variant = item.getProductVariant();
-            if (variant == null) {
-                continue;
-            }
-
-            variant.setQuantity(variant.getQuantity() + item.getQuantity());
-            variantRepository.save(variant);
-            inventoryTransactionService.record(order, variant, item.getQuantity(), "CANCEL_RETURN");
-        }
     }
 
     private void restoreVoucher(UserVoucher appliedVoucher) {

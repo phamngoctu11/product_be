@@ -79,6 +79,7 @@ public enum ConstantErrorCode {
     EMAIL_ALREADY_EXISTS("Địa chỉ thư điện tử đã tồn tại"),
     PHONE_ALREADY_EXISTS("Số điện thoại đã tồn tại"),
     INVALID_ROLE("Vai trò người dùng không hợp lệ"),
+    ROLE_UPDATE_FORBIDDEN("Chỉ quản trị viên hoặc quản lý mới có thể thay đổi vai trò người dùng"),
     USER_NOT_FOUND_TO_UPDATE("Không tìm thấy người dùng cần cập nhật"),
     KEYCLOAK_UNAVAILABLE("Không thể kết nối tới Keycloak"),
     KEYCLOAK_USER_SYNC_FAILED("Không thể đồng bộ người dùng với Keycloak"),

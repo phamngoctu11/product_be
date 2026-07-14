@@ -44,6 +44,7 @@ public class CartService {
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;
+    private final InventoryReservationService inventoryReservationService;
 
     // LOGIC CAMUNDA THÊM GIỎ HÀNG
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
@@ -125,13 +126,13 @@ public class CartService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Map<String, String> approveCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
         try {
-            Long orderId = transactionTemplate.execute(status ->
-                    createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note)
-            );
+            Long orderId = transactionTemplate.execute(status -> {
+                Long createdOrderId = createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
+                startApproveCartProcess(createdOrderId, userId, paymentMethod, note);
+                return createdOrderId;
+            });
             Order savedOrder = getOrderOrThrow(orderId);
             User user = getUserOrThrow(userId);
-
-            startApproveCartProcess(orderId, userId, paymentMethod, note);
 
             if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
                 return buildOnlinePaymentResponse(savedOrder);
@@ -166,7 +167,11 @@ public class CartService {
         double discountAmount = calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
 
+        // The conditional UPDATE in this call is the authoritative stock check.
+        // If two checkouts compete for the last unit, only one transaction can reserve it.
+        inventoryReservationService.reserve(order);
         Order savedOrder = orderRepository.saveAndFlush(order);
+        inventoryReservationService.recordReservations(savedOrder);
         consultationAttributionService.recordOrderAttributions(savedOrder);
 
         cartItemRepository.deleteAll(itemsToCheckout);
@@ -233,6 +238,8 @@ public class CartService {
         variables.put("userId", userId);
         variables.put("paymentMethod", paymentMethod);
         variables.put("note", note);
+        variables.put("stockReserved", true);
+        variables.put("stockDeducted", false);
         runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
     }
 

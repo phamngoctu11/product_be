@@ -21,14 +21,29 @@ public class InventoryTransactionService {
     }
 
     public InventoryTransaction record(Order order, ProductVariant variant, User user, int quantityChange, String transactionType) {
+        return record(order, variant, user, quantityChange, variant.getQuantity(), transactionType);
+    }
+
+    public InventoryTransaction record(
+            Order order,
+            ProductVariant variant,
+            User user,
+            int quantityChange,
+            int remainingStock,
+            String transactionType
+    ) {
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setProductVariant(variant);
         transaction.setOrder(order);
         transaction.setUser(user);
         transaction.setQuantityChange(quantityChange);
-        transaction.setRemainingStock(variant.getQuantity());
+        transaction.setRemainingStock(remainingStock);
         transaction.setTransactionType(transactionType);
         transaction.setCreatedAt(LocalDateTime.now());
         return inventoryTransactionRepository.save(transaction);
+    }
+
+    public int updateOrderTransactionType(Order order, String sourceType, String targetType) {
+        return inventoryTransactionRepository.updateTypeByOrderId(order.getId(), sourceType, targetType);
     }
 }

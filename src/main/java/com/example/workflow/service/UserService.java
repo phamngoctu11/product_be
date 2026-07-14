@@ -2,6 +2,7 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
+import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
@@ -20,11 +21,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -74,8 +77,7 @@ public class UserService {
                 && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken)
                 && auth.getAuthorities().stream()
-                // Đã sửa: Phải map đúng với tiền tố ROLE_ đã sinh ra ở SecurityConfig
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN") || authority.getAuthority().equals("ROLE_MANAGER"));
+                .anyMatch(authority -> authority.getAuthority().equals("ADMIN") || authority.getAuthority().equals("MANAGER"));
     }
 
     private Map<String, Object> buildRegistrationVariables(UserCreDTO dto, String finalRole) {
@@ -118,15 +120,38 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "users", key = "'list-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<UserListDTO> getAllUsers(Pageable pageable) {
-        return userRepository.findAllCustom(pageable);
+    @Cacheable(value = "users", key = "'list-' + #roles + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<UserListDTO> getAllUsers(List<Role> roles, Pageable pageable) {
+        if (roles == null || roles.isEmpty()) {
+            return userRepository.findAllCustom(pageable);
+        }
+        return userRepository.findAllCustomByRoles(roles, pageable);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "user", key = "#id")
     public UserResDTO getUserById(String id) {
         return userMapper.toResponse(getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, id));
+    }
+
+    @Transactional(readOnly = true)
+    public UserResDTO getMyProfile() {
+        return userMapper.toResponse(getCurrentUser());
+    }
+
+    @Caching(evict = {
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "user", allEntries = true),
+            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    })
+    public UserResDTO updateMyProfile(UserProfileUpdateDTO request) {
+        User user = getCurrentUser();
+        normalizeProfileData(request);
+        validateProfileUniqueness(user, request);
+        keycloakIdentityService.updateUserProfile(user.getId(), user.getUsername(), request);
+        userMapper.updateProfile(user, request);
+        return userMapper.toResponse(userRepository.save(user));
     }
 
     @Caching(evict = {
@@ -137,9 +162,58 @@ public class UserService {
     })
     public UserResDTO updateUser(String id, UserCreDTO request) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
-        keycloakIdentityService.updateUser(user.getUsername(), request);
+        Role updatedRole = resolveUpdatedRole(user, request);
+        keycloakIdentityService.updateUser(user.getId(), request, updatedRole);
         userMapper.updateUser(user, request);
+        user.setRole(updatedRole);
         return userMapper.toResponse(userRepository.save(user));
+    }
+
+    private Role resolveUpdatedRole(User user, UserCreDTO request) {
+        if (!StringUtils.hasText(request.getRole())) {
+            return user.getRole();
+        }
+
+        Role requestedRole = parseRole(request.getRole());
+        if (requestedRole != user.getRole() && !canCurrentUserAssignRole()) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ROLE_UPDATE_FORBIDDEN);
+        }
+        return requestedRole;
+    }
+
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            throw new AppException(HttpStatus.UNAUTHORIZED, ConstantErrorCode.INVALID_CREDENTIALS);
+        }
+
+        if (authentication.getPrincipal() instanceof Jwt jwt && StringUtils.hasText(jwt.getSubject())) {
+            return userRepository.findById(jwt.getSubject())
+                    .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
+        }
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
+    }
+
+    private void normalizeProfileData(UserProfileUpdateDTO request) {
+        request.setEmail(trimToNull(request.getEmail()));
+        request.setPhone(trimToNull(request.getPhone()));
+        request.setFirstname(trimToNull(request.getFirstname()));
+        request.setLastname(trimToNull(request.getLastname()));
+        request.setGender(trimToNull(request.getGender()));
+        request.setAddress(trimToNull(request.getAddress()));
+        request.setAvatarUrl(trimToNull(request.getAvatarUrl()));
+    }
+
+    private void validateProfileUniqueness(User user, UserProfileUpdateDTO request) {
+        if (StringUtils.hasText(request.getEmail())
+                && userRepository.existsByEmailAndIdNot(request.getEmail(), user.getId())) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.EMAIL_ALREADY_EXISTS);
+        }
+        if (userRepository.existsByPhoneAndIdNot(request.getPhone(), user.getId())) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PHONE_ALREADY_EXISTS);
+        }
     }
 
     @Caching(evict = {
@@ -150,7 +224,7 @@ public class UserService {
     })
     public void deleteUser(String id) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
-        keycloakIdentityService.disableUser(user.getUsername());
+        keycloakIdentityService.disableUser(user.getId());
         user.setDelete(true);
         userRepository.save(user);
     }

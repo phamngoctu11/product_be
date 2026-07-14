@@ -12,6 +12,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -44,9 +45,14 @@ public class OrderController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyOrders(
             @PathVariable("user_id") String userId,
+            @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
+            @RequestParam(required = false) Double minPrice,
+            @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
+            @RequestParam(required = false) Double maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        Page<OrderListDTO> rs = orderService.getOrdersByUserId(userId, pageable);
+        validatePriceRange(minPrice, maxPrice);
+        Page<OrderListDTO> rs = orderService.getOrdersByUserId(userId, minPrice, maxPrice, pageable);
         return ResponseEntity.ok(ApiResponse.success(rs));
     }
 
@@ -55,9 +61,14 @@ public class OrderController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyCancelledOrders(
             @PathVariable("user_id") String userId,
+            @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
+            @RequestParam(required = false) Double minPrice,
+            @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
+            @RequestParam(required = false) Double maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        Page<OrderListDTO> rs = orderService.getCancelledOrdersByUserId(userId, pageable);
+        validatePriceRange(minPrice, maxPrice);
+        Page<OrderListDTO> rs = orderService.getCancelledOrdersByUserId(userId, minPrice, maxPrice, pageable);
         return ResponseEntity.ok(ApiResponse.success(rs));
     }
 
@@ -120,6 +131,16 @@ public class OrderController {
             throw e;
         } catch (Exception e) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
+        }
+    }
+
+    private void validatePriceRange(Double minPrice, Double maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw new AppException(
+                    HttpStatus.BAD_REQUEST,
+                    ConstantErrorCode.BAD_REQUEST_DETAIL,
+                    "Minimum price must not be greater than maximum price."
+            );
         }
     }
 }

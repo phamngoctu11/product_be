@@ -69,7 +69,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     );
 
     @Query("SELECT new com.example.workflow.dto.ConsultationRequestDTO(" +
-            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), " +
+            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), u.avatarUrl, " +
             "p.id, p.productName, p.imageUrl, c.status, " +
             "staff.id, CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END, " +
             "manager.id, CASE WHEN manager.id IS NULL THEN null ELSE CONCAT(CONCAT(manager.lastname, ' '), manager.firstname) END, " +
@@ -83,7 +83,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     Optional<ConsultationRequestDTO> findDtoById(@Param("id") Long id);
 
     @Query("SELECT new com.example.workflow.dto.ConsultationRequestDTO(" +
-            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), " +
+            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), u.avatarUrl, " +
             "p.id, p.productName, p.imageUrl, c.status, " +
             "staff.id, CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END, " +
             "manager.id, CASE WHEN manager.id IS NULL THEN null ELSE CONCAT(CONCAT(manager.lastname, ' '), manager.firstname) END, " +
@@ -101,7 +101,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     );
 
     @Query("SELECT new com.example.workflow.dto.ConsultationRequestDTO(" +
-            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), " +
+            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), u.avatarUrl, " +
             "p.id, p.productName, p.imageUrl, c.status, " +
             "staff.id, CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END, " +
             "manager.id, CASE WHEN manager.id IS NULL THEN null ELSE CONCAT(CONCAT(manager.lastname, ' '), manager.firstname) END, " +
@@ -119,7 +119,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     );
 
     @Query("SELECT new com.example.workflow.dto.ConsultationRequestDTO(" +
-            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), " +
+            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), u.avatarUrl, " +
             "p.id, p.productName, p.imageUrl, c.status, " +
             "staff.id, CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END, " +
             "manager.id, CASE WHEN manager.id IS NULL THEN null ELSE CONCAT(CONCAT(manager.lastname, ' '), manager.firstname) END, " +
@@ -138,7 +138,7 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
     );
 
     @Query("SELECT new com.example.workflow.dto.ConsultationRequestDTO(" +
-            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), " +
+            "c.id, u.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), u.avatarUrl, " +
             "p.id, p.productName, p.imageUrl, c.status, " +
             "staff.id, CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END, " +
             "manager.id, CASE WHEN manager.id IS NULL THEN null ELSE CONCAT(CONCAT(manager.lastname, ' '), manager.firstname) END, " +

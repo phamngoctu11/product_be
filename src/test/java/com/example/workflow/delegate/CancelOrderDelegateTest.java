@@ -1,16 +1,13 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
-import com.example.workflow.entity.OrderItem;
-import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.ConsultationAttributionService;
-import com.example.workflow.service.InventoryTransactionService;
+import com.example.workflow.service.InventoryReservationService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
@@ -30,52 +27,45 @@ import static org.mockito.Mockito.when;
 class CancelOrderDelegateTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
-    private final ProductVariantRepository variantRepository = mock(ProductVariantRepository.class);
     private final CacheManager cacheManager = mock(CacheManager.class);
     private final ConsultationAttributionService consultationAttributionService = mock(ConsultationAttributionService.class);
-    private final InventoryTransactionService inventoryTransactionService = mock(InventoryTransactionService.class);
+    private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderRepository,
             userVoucherRepository,
-            variantRepository,
             cacheManager,
             consultationAttributionService,
-            inventoryTransactionService
+            inventoryReservationService
     );
 
     @Test
-    void doesNotRestoreStockWhenStockWasNotDeducted() throws Exception {
-        ProductVariant variant = variant(1L, 5);
-        Order order = orderWithItems(item(variant, 2));
+    void releasesReservationAndDoesNotRestoreAgain() {
+        Order order = order();
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(execution.getVariable("stockDeducted")).thenReturn(false);
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(true);
 
         delegate.execute(execution);
 
-        assertThat(variant.getQuantity()).isEqualTo(5);
-        verify(variantRepository, never()).save(variant);
-        verify(inventoryTransactionService, never()).record(order, variant, 2, "CANCEL_RETURN");
+        verify(inventoryReservationService).releaseReservedStock(order, "CANCEL_RETURN");
+        verify(inventoryReservationService, never()).restoreDeductedStock(order, "CANCEL_RETURN");
     }
 
     @Test
-    void restoresStockWhenStockWasDeducted() throws Exception {
-        ProductVariant variant = variant(1L, 5);
-        Order order = orderWithItems(item(variant, 2));
+    void restoresConfirmedStockWhenThereIsNoReservation() {
+        Order order = order();
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(execution.getVariable("stockDeducted")).thenReturn(true);
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(false);
 
         delegate.execute(execution);
 
-        assertThat(variant.getQuantity()).isEqualTo(7);
-        verify(variantRepository).save(variant);
-        verify(inventoryTransactionService).record(order, variant, 2, "CANCEL_RETURN");
+        verify(inventoryReservationService).restoreDeductedStock(order, "CANCEL_RETURN");
     }
 
     @Test
-    void cancelsOrderRestoresVoucherClearsCachesAndCancelsAttributions() throws Exception {
+    void cancelsOrderRestoresVoucherClearsCachesAndCancelsAttributions() {
         Cache ordersCache = mock(Cache.class);
         Cache pendingOrdersCache = mock(Cache.class);
         Cache productsCache = mock(Cache.class);
@@ -83,7 +73,7 @@ class CancelOrderDelegateTest {
         UserVoucher voucher = new UserVoucher();
         voucher.setUsed(true);
         voucher.setUsedDate(LocalDateTime.now());
-        Order order = orderWithItems();
+        Order order = order();
         order.setUserVoucher(voucher);
         when(execution.getVariable("orderId")).thenReturn(10L);
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
@@ -100,7 +90,7 @@ class CancelOrderDelegateTest {
         verify(userVoucherRepository).save(voucher);
         verify(orderRepository).save(order);
         verify(consultationAttributionService).cancelOrderAttributions(10L);
-        verify(ordersCache).evict(99L);
+        verify(ordersCache).evict("99");
         verify(pendingOrdersCache).clear();
         verify(productsCache).clear();
         verify(productCache).clear();
@@ -118,27 +108,13 @@ class CancelOrderDelegateTest {
         verify(orderRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
-    private Order orderWithItems(OrderItem... items) {
+    private Order order() {
         User user = new User();
         user.setId("99");
         Order order = new Order();
         order.setId(10L);
         order.setUser(user);
-        order.setItems(List.of(items));
+        order.setItems(List.of());
         return order;
-    }
-
-    private ProductVariant variant(Long variantId, int stock) {
-        ProductVariant variant = new ProductVariant();
-        variant.setId(variantId);
-        variant.setQuantity(stock);
-        return variant;
-    }
-
-    private OrderItem item(ProductVariant variant, int quantity) {
-        OrderItem item = new OrderItem();
-        item.setProductVariant(variant);
-        item.setQuantity(quantity);
-        return item;
     }
 }

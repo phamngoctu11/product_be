@@ -86,6 +86,9 @@ class CartServiceTest {
     @Mock
     private TransactionTemplate transactionTemplate;
 
+    @Mock
+    private InventoryReservationService inventoryReservationService;
+
     @InjectMocks
     private CartService cartService;
 
@@ -275,6 +278,8 @@ class CartServiceTest {
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
+        verify(inventoryReservationService).reserve(savedOrder.get());
+        verify(inventoryReservationService).recordReservations(savedOrder.get());
         verify(consultationAttributionService).recordOrderAttributions(savedOrder.get());
         ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
         verify(runtimeService).startProcessInstanceByKey(eq("ApproveCartProcess"), eq("1"), variablesCaptor.capture());
@@ -282,8 +287,41 @@ class CartServiceTest {
                 .containsEntry("orderId", 100L)
                 .containsEntry("userId", "1")
                 .containsEntry("paymentMethod", "COD")
-                .containsEntry("note", "note");
+                .containsEntry("note", "note")
+                .containsEntry("stockReserved", true)
+                .containsEntry("stockDeducted", false);
         verify(notificationService, times(2)).sendNotification(any(), any(), eq(100L), any(), any(), any());
+    }
+
+    @Test
+    void approveCartFailsWhenWorkflowStartThrows() throws Exception {
+        User user = user(1L);
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        CartItem item = cartItem(variant, 2);
+        Cart cart = cartWithItems(1L, user, item);
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(100L);
+            return order;
+        });
+        when(runtimeService.startProcessInstanceByKey(
+                eq("ApproveCartProcess"),
+                eq("1"),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+        ))
+                .thenThrow(new RuntimeException("camunda down"));
+
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", "note"))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
+
+        verify(inventoryReservationService).reserve(any(Order.class));
+        verify(inventoryReservationService).recordReservations(any(Order.class));
+        verify(orderRepository, never()).findById(100L);
+        verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
+        verify(momoService, never()).createPaymentData(anyString(), any(Long.class));
     }
 
     @Test

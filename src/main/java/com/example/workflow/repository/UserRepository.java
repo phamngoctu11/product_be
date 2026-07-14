@@ -20,6 +20,10 @@ public interface UserRepository extends JpaRepository<User, String> {
     @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role,u.avatarUrl) FROM User u")//where u.isDelete = false
     Page<UserListDTO> findAllCustom(Pageable pageable);
 
+    @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role, u.avatarUrl) " +
+            "FROM User u WHERE u.role IN :roles")
+    Page<UserListDTO> findAllCustomByRoles(@Param("roles") List<Role> roles, Pageable pageable);
+
     @Query("SELECT new com.example.workflow.dto.ChatUserDTO(u.id, u.firstname, u.lastname, u.email, u.avatarUrl, false) " +
             "FROM User u WHERE u.id IN :ids AND u.isDelete = false")
     List<ChatUserDTO> findChatUserDtosByIds(@Param("ids") List<String> ids);
@@ -30,6 +34,8 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
+    boolean existsByEmailAndIdNot(String email, String id);
+    boolean existsByPhoneAndIdNot(String phone, String id);
 
     List<User> findByRoleInAndIsDeleteFalseAndEmailIsNotNull(List<Role> roles);
 }

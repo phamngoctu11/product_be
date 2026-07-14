@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.UserCreDTO;
+import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.Role;
@@ -18,9 +19,10 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -94,20 +96,35 @@ public class KeycloakIdentityService {
         }
     }
 
-    public void updateUser(String username, UserCreDTO user) {
+    public void updateUser(String userId, UserCreDTO user, Role role) {
         String adminToken = getAdminToken();
-        String userId = findUserId(adminToken, username);
-        Map<String, Object> representation = Map.of(
-                "firstName", user.getFirstname(),
-                "lastName", user.getLastname(),
-                "email", user.getEmail() == null ? "" : user.getEmail()
-        );
+        updateProfile(adminToken, userId, user.getUsername(), user.getFirstname(), user.getLastname(), user.getEmail());
+        synchronizeRealmRole(adminToken, userId, role);
+    }
+
+    public void updateUserProfile(String userId, String username, UserProfileUpdateDTO user) {
+        String adminToken = getAdminToken();
+        updateProfile(adminToken, userId, username, user.getFirstname(), user.getLastname(), user.getEmail());
+    }
+
+    private void updateProfile(
+            String adminToken,
+            String userId,
+            String username,
+            String firstname,
+            String lastname,
+            String email
+    ) {
+        Map<String, Object> representation = new HashMap<>();
+        representation.put("username", username);
+        representation.put("firstName", firstname);
+        representation.put("lastName", lastname);
+        representation.put("email", email == null ? "" : email);
         exchangeAdmin(adminUrl("/users/" + userId), HttpMethod.PUT, adminToken, representation, Void.class);
     }
 
-    public void disableUser(String username) {
+    public void disableUser(String userId) {
         String adminToken = getAdminToken();
-        String userId = findUserId(adminToken, username);
         exchangeAdmin(adminUrl("/users/" + userId), HttpMethod.PUT, adminToken, Map.of("enabled", false), Void.class);
     }
 
@@ -138,21 +155,55 @@ public class KeycloakIdentityService {
         );
     }
 
-    private String findUserId(String adminToken, String username) {
-        URI uri = UriComponentsBuilder.fromHttpUrl(adminUrl("/users"))
-                .queryParam("username", username)
-                .queryParam("exact", true)
-                .build().encode().toUri();
-        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                uri, HttpMethod.GET, adminEntity(adminToken, null),
+    private void synchronizeRealmRole(String adminToken, String userId, Role desiredRole) {
+        if (desiredRole == null) {
+            return;
+        }
+
+        List<Map<String, Object>> assignedRoles = exchangeAdmin(
+                adminUrl("/users/" + userId + "/role-mappings/realm"),
+                HttpMethod.GET,
+                adminToken,
+                null,
                 new ParameterizedTypeReference<List<Map<String, Object>>>() {
                 }
-        );
-        List<Map<String, Object>> users = response.getBody();
-        if (users == null || users.isEmpty()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.KEYCLOAK_USER_NOT_FOUND);
+        ).getBody();
+
+        List<Map<String, Object>> applicationRoles = new ArrayList<>();
+        if (assignedRoles != null) {
+            for (Map<String, Object> assignedRole : assignedRoles) {
+                Object roleName = assignedRole.get("name");
+                if (roleName instanceof String name && isApplicationRole(name)) {
+                    applicationRoles.add(assignedRole);
+                }
+            }
         }
-        return String.valueOf(users.get(0).get("id"));
+
+        boolean alreadyAssigned = applicationRoles.stream()
+                .anyMatch(role -> desiredRole.name().equalsIgnoreCase(String.valueOf(role.get("name"))));
+        if (alreadyAssigned && applicationRoles.size() == 1) {
+            return;
+        }
+
+        if (!applicationRoles.isEmpty()) {
+            exchangeAdmin(
+                    adminUrl("/users/" + userId + "/role-mappings/realm"),
+                    HttpMethod.DELETE,
+                    adminToken,
+                    applicationRoles,
+                    Void.class
+            );
+        }
+        assignRealmRole(adminToken, userId, desiredRole.name());
+    }
+
+    private boolean isApplicationRole(String roleName) {
+        for (Role role : Role.values()) {
+            if (role.name().equalsIgnoreCase(roleName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String getAdminToken() {

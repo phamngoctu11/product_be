@@ -60,6 +60,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "FROM Order o JOIN o.user u " +
             "LEFT JOIN o.warehouseStaff staff " +
             "WHERE u.id = :userId " +
+            "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
+            "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice) " +
             "ORDER BY " +
             "CASE " +
             "WHEN o.status IN :oldestFirstStatuses THEN 0 " +
@@ -70,13 +72,17 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "CASE WHEN o.status IN :oldestFirstStatuses THEN o.startOrderTime ELSE NULL END ASC, " +
             "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
             "o.startOrderTime DESC",
-            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId")
+            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId " +
+                    "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
+                    "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice)")
     Page<OrderListDTO> findListDtoByUserId(
             @Param("userId") String userId,
             @Param("oldestFirstStatuses") List<OrderStatus> oldestFirstStatuses,
             @Param("shippingStatus") OrderStatus shippingStatus,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
             @Param("cancelledStatus") OrderStatus cancelledStatus,
+            @Param("minPrice") Double minPrice,
+            @Param("maxPrice") Double maxPrice,
             Pageable pageable
     );
 
@@ -85,14 +91,20 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "FROM Order o JOIN o.user u " +
             "LEFT JOIN o.warehouseStaff staff " +
             "WHERE u.id = :userId AND o.status = :status " +
+            "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
+            "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice) " +
             "ORDER BY " +
             "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
             "o.startOrderTime DESC",
-            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId AND o.status = :status")
+            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId AND o.status = :status " +
+                    "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
+                    "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice)")
     Page<OrderListDTO> findListDtoByUserIdAndStatus(
             @Param("userId") String userId,
             @Param("status") OrderStatus status,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
+            @Param("minPrice") Double minPrice,
+            @Param("maxPrice") Double maxPrice,
             Pageable pageable
     );
 

@@ -1,0 +1,25 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/my-workflow-dev}
+  datasource:
+    url: ${DB_URL:jdbc:mysql://103.149.170.20:3306/db_A45488}
+    username: ${DB_USERNAME:A45488}
+    password: ${DB_PASSWORD:A45488@thanglong}
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+
+app:
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost}
+
+keycloak:
+  realm: ${KEYCLOAK_REALM:my-workflow-dev}
+
+momo:
+  redirectUrl: ${MOMO_REDIRECT_URL:http://localhost:4200/payment-success}

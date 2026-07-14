@@ -49,6 +49,7 @@ public class OrderService {
     private final EmailService emailService;
     private final UserVoucherRepository userVoucherRepository;
     private final ConsultationAttributionService consultationAttributionService;
+    private final InventoryReservationService inventoryReservationService;
 
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
@@ -592,6 +593,7 @@ public class OrderService {
         OrderStatus oldStatus = order.getStatus();
         deductUserReputation(user, calculateCancellationReputationDeduction(order));
         deleteOrderProcessIfExists(id, "Customer cancelled order");
+        inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");
         restoreVoucher(order.getUserVoucher());
 
         order.setCancelReason("Khach hang tu huy: " + reason);
@@ -716,6 +718,7 @@ public class OrderService {
         order.setCancelReason("Thanh toan MoMo that bai hoac khach huy giao dich (Ma loi MoMo: " + resultCode + ")");
         order.setEndOrderTime(LocalDateTime.now());
 
+        inventoryReservationService.releaseReservedStock(order, "PAYMENT_FAILED_RETURN");
         restoreVoucher(order.getUserVoucher());
         saveOrderAndAuditStatusChange(order, oldStatus, null);
         consultationAttributionService.cancelOrderAttributions(orderId);
@@ -742,8 +745,8 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "#user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getOrdersByUserId(String user_id, Pageable pageable) {
+    @Cacheable(value = "orders", key = "#user_id + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<OrderListDTO> getOrdersByUserId(String user_id, Double minPrice, Double maxPrice, Pageable pageable) {
         return orderRepository.findListDtoByUserId(
                 user_id,
                 List.of(
@@ -756,17 +759,21 @@ public class OrderService {
                 OrderStatus.SHIPPING,
                 OrderStatus.DELIVERED,
                 OrderStatus.CANCELLED,
+                minPrice,
+                maxPrice,
                 normalizePageable(pageable)
         );
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "'cancelled-' + #user_id + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getCancelledOrdersByUserId(String user_id, Pageable pageable) {
+    @Cacheable(value = "orders", key = "'cancelled-' + #user_id + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<OrderListDTO> getCancelledOrdersByUserId(String user_id, Double minPrice, Double maxPrice, Pageable pageable) {
         return orderRepository.findListDtoByUserIdAndStatus(
                 user_id,
                 OrderStatus.CANCELLED,
                 OrderStatus.DELIVERED,
+                minPrice,
+                maxPrice,
                 normalizePageable(pageable)
         );
     }
