@@ -9,6 +9,7 @@ import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.StaffCommissionDailySummary;
 import com.example.workflow.entity.User;
+import com.example.workflow.event.payload.CommissionRefreshKey;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.CommissionPeriod;
@@ -154,6 +155,46 @@ public class StaffCommissionService {
         }
 
         Set<RefreshKey> refreshKeys = collectRefreshKeys(attributions);
+        if (refreshKeys.isEmpty()) {
+            return;
+        }
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            Set<RefreshKey> keysAfterCommit = new HashSet<>(refreshKeys);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    refreshKeys(keysAfterCommit);
+                }
+            });
+            return;
+        }
+
+        refreshKeys(refreshKeys);
+    }
+
+    @Caching(evict = {
+            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    })
+    public void refreshSummaries(Collection<CommissionRefreshKey> commissionRefreshKeys) {
+        if (commissionRefreshKeys == null || commissionRefreshKeys.isEmpty()) {
+            return;
+        }
+
+        Set<RefreshKey> refreshKeys = new HashSet<>();
+        for (CommissionRefreshKey key : commissionRefreshKeys) {
+            if (key == null || key.staffId() == null || key.staffId().isBlank()
+                    || key.summaryDate() == null || key.summaryDate().isBlank()) {
+                continue;
+            }
+            try {
+                refreshKeys.add(new RefreshKey(key.staffId(), LocalDate.parse(key.summaryDate())));
+            } catch (RuntimeException ignored) {
+                // Ignore malformed async refresh keys; the source attribution data remains the source of truth.
+            }
+        }
+
         if (refreshKeys.isEmpty()) {
             return;
         }

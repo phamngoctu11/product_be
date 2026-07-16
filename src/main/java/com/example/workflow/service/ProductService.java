@@ -52,6 +52,7 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "bestSellingProducts", key = "#period + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<BestSellerProductDTO> getBestSellingProducts(String period, Pageable pageable) {
         BestSellerRange range = resolveBestSellerRange(period);
         return inventoryRepo.findBestSellingProducts(range.fromTime(), range.toTime(), normalizePageable(pageable));

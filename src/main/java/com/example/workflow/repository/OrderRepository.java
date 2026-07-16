@@ -20,6 +20,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // 1. DETAIL VIEW (Dùng LEFT JOIN FETCH để lấy rập khuôn chi tiết)
     // ==============================================================
     @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.user " +
             "LEFT JOIN FETCH o.items i " +
             "LEFT JOIN FETCH i.productVariant pv " +
             "LEFT JOIN FETCH pv.product " +

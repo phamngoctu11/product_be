@@ -16,6 +16,14 @@ chat:
 consultation:
   bonus:
     percent: ${CONSULTATION_BONUS_PERCENT:5}
+workflow:
+  events:
+    redis-stream:
+      enabled: ${WORKFLOW_EVENTS_REDIS_STREAM_ENABLED:true}
+      group: ${WORKFLOW_EVENTS_REDIS_STREAM_GROUP:workflow-domain-event-workers}
+      consumer-name: ${WORKFLOW_EVENTS_REDIS_STREAM_CONSUMER_NAME:${spring.application.name:workflow-app}}
+      batch-size: ${WORKFLOW_EVENTS_REDIS_STREAM_BATCH_SIZE:20}
+      poll-delay-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_POLL_DELAY_MS:1000}
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
   realm: ${KEYCLOAK_REALM:my-workflow}
@@ -65,7 +73,7 @@ spring:
       time-to-live: 3600000
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
-    show-sql: true
+    show-sql: false
     hibernate:
       ddl-auto: update
 

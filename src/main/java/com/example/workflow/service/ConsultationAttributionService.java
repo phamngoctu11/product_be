@@ -11,6 +11,10 @@ import com.example.workflow.entity.OrderItem;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.CommissionRefreshKey;
+import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.ConsultationAttributionStatus;
@@ -35,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,7 +63,7 @@ public class ConsultationAttributionService {
     private final ConsultationReviewRepository reviewRepository;
     private final ConsultationRequestRepository consultationRepository;
     private final UserRepository userRepository;
-    private final StaffCommissionService staffCommissionService;
+    private final DomainEventPublisher eventPublisher;
 
     @Value("${consultation.bonus.percent:5}")
     private double consultationBonusPercent;
@@ -112,7 +117,7 @@ public class ConsultationAttributionService {
                 savedAttributions.add(attributionRepository.save(toAttribution(order, item, request, orderCreatedAt, orderGrossAmount)));
             }
         }
-        staffCommissionService.refreshForAttributions(savedAttributions);
+        requestCommissionRefresh(savedAttributions);
     }
 
     @Transactional
@@ -137,7 +142,7 @@ public class ConsultationAttributionService {
                 updatedAttributions.add(attribution);
             }
         }
-        staffCommissionService.refreshForAttributions(updatedAttributions);
+        requestCommissionRefresh(updatedAttributions);
     }
 
     @Transactional
@@ -158,7 +163,7 @@ public class ConsultationAttributionService {
                 updatedAttributions.add(attribution);
             }
         }
-        staffCommissionService.refreshForAttributions(updatedAttributions);
+        requestCommissionRefresh(updatedAttributions);
     }
 
     @Transactional(readOnly = true)
@@ -478,6 +483,36 @@ public class ConsultationAttributionService {
             return null;
         }
         return comment.trim();
+    }
+
+    private void requestCommissionRefresh(Collection<ConsultationSaleAttribution> attributions) {
+        if (attributions == null || attributions.isEmpty()) {
+            return;
+        }
+
+        Set<CommissionRefreshKey> refreshKeys = new HashSet<>();
+        for (ConsultationSaleAttribution attribution : attributions) {
+            if (attribution == null || attribution.getStaff() == null || attribution.getStaff().getId() == null) {
+                continue;
+            }
+            String staffId = attribution.getStaff().getId();
+            collectRefreshKey(refreshKeys, staffId, attribution.getOrderCreatedAt());
+            collectRefreshKey(refreshKeys, staffId, attribution.getConfirmedAt());
+            collectRefreshKey(refreshKeys, staffId, attribution.getCancelledAt());
+        }
+
+        if (!refreshKeys.isEmpty()) {
+            eventPublisher.publishAfterCommit(
+                    EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED,
+                    new StaffCommissionRefreshRequestedEvent(refreshKeys)
+            );
+        }
+    }
+
+    private void collectRefreshKey(Set<CommissionRefreshKey> refreshKeys, String staffId, LocalDateTime dateTime) {
+        if (dateTime != null) {
+            refreshKeys.add(new CommissionRefreshKey(staffId, dateTime.toLocalDate().toString()));
+        }
     }
 
     private User getCurrentUser() {

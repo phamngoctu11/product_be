@@ -9,7 +9,6 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
-import org.camunda.bpm.engine.RuntimeService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,7 +26,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,9 +49,6 @@ class UserServiceTest {
     private UserMapper userMapper;
 
     @Mock
-    private RuntimeService runtimeService;
-
-    @Mock
     private KeycloakIdentityService keycloakIdentityService;
 
     @InjectMocks
@@ -65,18 +60,22 @@ class UserServiceTest {
     }
 
     @Test
-    void registrationAlwaysStartsProcessWithUserRole() {
+    void registrationCreatesUserWithDefaultUserRole() {
         UserCreDTO dto = validUser();
         dto.setRole("ADMIN");
         when(userRepository.existsByUsername("new-user")).thenReturn(false);
         when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
+        when(keycloakIdentityService.createUser(any(UserCreDTO.class), eq(Role.USER))).thenReturn("keycloak-id");
 
         userService.startUserRegistrationProcess(dto);
 
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(eq("CreateUserProcess"), variablesCaptor.capture());
-        assertThat(variablesCaptor.getValue().get("role")).isEqualTo("USER");
-        assertThat(variablesCaptor.getValue().get("avatarUrl")).isEqualTo("https://example.com/avatar.png");
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().getId()).isEqualTo("keycloak-id");
+        assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.USER);
+        assertThat(userCaptor.getValue().getAvatarUrl()).isEqualTo("https://example.com/avatar.png");
+        assertThat(userCaptor.getValue().getCart()).isNotNull();
+        assertThat(userCaptor.getValue().getCart().getUser()).isSameAs(userCaptor.getValue());
     }
 
     @Test
@@ -84,16 +83,17 @@ class UserServiceTest {
         mockAuthenticatedRole("ADMIN");
         UserCreDTO dto = validUser();
         dto.setRole("staff");
+        when(keycloakIdentityService.createUser(any(UserCreDTO.class), eq(Role.STAFF))).thenReturn("staff-id");
 
         userService.startUserRegistrationProcess(dto);
 
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(eq("CreateUserProcess"), variablesCaptor.capture());
-        assertThat(variablesCaptor.getValue().get("role")).isEqualTo("STAFF");
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.STAFF);
     }
 
     @Test
-    void registrationRejectsBlankPasswordBeforeStartingProcess() {
+    void registrationRejectsBlankPasswordBeforeCreatingUser() {
         UserCreDTO dto = validUser();
         dto.setPassword(" ");
 
@@ -101,11 +101,11 @@ class UserServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
-        verifyNoInteractions(runtimeService);
+        verifyNoInteractions(keycloakIdentityService);
     }
 
     @Test
-    void registrationRejectsDuplicateUsernameBeforeStartingProcess() {
+    void registrationRejectsDuplicateUsernameBeforeCreatingUser() {
         UserCreDTO dto = validUser();
         when(userRepository.existsByUsername("new-user")).thenReturn(true);
 
@@ -113,11 +113,11 @@ class UserServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasMessage("Tên đăng nhập đã tồn tại");
 
-        verifyNoInteractions(runtimeService);
+        verifyNoInteractions(keycloakIdentityService);
     }
 
     @Test
-    void registrationRejectsDuplicateEmailBeforeStartingProcess() {
+    void registrationRejectsDuplicateEmailBeforeCreatingUser() {
         UserCreDTO dto = validUser();
         when(userRepository.existsByUsername("new-user")).thenReturn(false);
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
@@ -126,24 +126,25 @@ class UserServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.CONFLICT);
 
-        verifyNoInteractions(runtimeService);
+        verifyNoInteractions(keycloakIdentityService);
     }
 
     @Test
     void registrationNormalizesBlankEmailToNull() {
         UserCreDTO dto = validUser();
         dto.setEmail("   ");
+        when(keycloakIdentityService.createUser(any(UserCreDTO.class), eq(Role.USER))).thenReturn("keycloak-id");
 
         userService.startUserRegistrationProcess(dto);
 
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(eq("CreateUserProcess"), variablesCaptor.capture());
-        assertThat(variablesCaptor.getValue().get("email")).isNull();
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmail()).isNull();
         verify(userRepository, never()).existsByEmail(anyString());
     }
 
     @Test
-    void registrationRejectsDuplicatePhoneBeforeStartingProcess() {
+    void registrationRejectsDuplicatePhoneBeforeCreatingUser() {
         UserCreDTO dto = validUser();
         when(userRepository.existsByPhone("0900000000")).thenReturn(true);
 
@@ -151,7 +152,7 @@ class UserServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasMessage("Số điện thoại đã tồn tại");
 
-        verifyNoInteractions(runtimeService);
+        verifyNoInteractions(keycloakIdentityService);
     }
 
     @Test
@@ -164,7 +165,7 @@ class UserServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
-        verifyNoInteractions(runtimeService);
+        verifyNoInteractions(keycloakIdentityService);
     }
 
     @Test

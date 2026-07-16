@@ -3,6 +3,9 @@ package com.example.workflow.service;
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.entity.*;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
@@ -36,23 +39,34 @@ public class CartService {
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
     private final UserVoucherRepository userVoucherRepository;
+    private final ProductVariantRepository productVariantRepository;
 
-    // TIÊM THÊM 2 SERVICE NÀY VÀO ĐỂ LÀM ORCHESTRATOR
     private final RuntimeService runtimeService;
-    private final ConsultationAttributionService consultationAttributionService;
+    private final DomainEventPublisher eventPublisher;
     private final MomoService momoService;
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;
     private final InventoryReservationService inventoryReservationService;
 
-    // LOGIC CAMUNDA THÊM GIỎ HÀNG
+    @CacheEvict(value = "carts", key = "#userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("userId", userId);
-        variables.put("variantId", variantId);
-        variables.put("quantity", quantity);
-        runtimeService.startProcessInstanceByKey("AddToCartProcess", variables);
+        if (quantity < 1) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
+        }
+
+        getUserOrThrow(userId);
+        ProductVariant variant = getActiveVariantOrThrow(variantId);
+        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
+        CartItem existingItem = findCartItem(cart, variantId);
+
+        if (existingItem == null) {
+            cart.getItems().add(createCartItem(cart, variant, quantity));
+        } else {
+            existingItem.setQuantity(existingItem.getQuantity() + quantity);
+        }
+
+        cartRepository.save(cart);
     }
 
     @CacheEvict(value = "carts", key = "#userId")
@@ -119,6 +133,7 @@ public class CartService {
             @CacheEvict(value = "pendingOrders", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "staffOrders", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "products", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "product", allEntries = true, beforeInvocation = true)
     })
@@ -172,7 +187,7 @@ public class CartService {
         inventoryReservationService.reserve(order);
         Order savedOrder = orderRepository.saveAndFlush(order);
         inventoryReservationService.recordReservations(savedOrder);
-        consultationAttributionService.recordOrderAttributions(savedOrder);
+        eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
 
         cartItemRepository.deleteAll(itemsToCheckout);
         cart.getItems().removeAll(itemsToCheckout);
@@ -186,6 +201,26 @@ public class CartService {
                 .filter(item -> item.getProductVariant().getId().equals(variantId))
                 .findFirst()
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_VARIANT_NOT_IN_CART));
+    }
+
+    private CartItem findCartItem(Cart cart, Long variantId) {
+        return cart.getItems().stream()
+                .filter(item -> item.getProductVariant().getId().equals(variantId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private ProductVariant getActiveVariantOrThrow(Long variantId) {
+        return productVariantRepository.findActiveById(variantId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND));
+    }
+
+    private CartItem createCartItem(Cart cart, ProductVariant variant, int quantity) {
+        CartItem item = new CartItem();
+        item.setCart(cart);
+        item.setProductVariant(variant);
+        item.setQuantity(quantity);
+        return item;
     }
 
     private List<CartItem> resolveCheckoutItems(Cart cart, List<Long> variantIdsToCheckout) {
@@ -293,13 +328,13 @@ public class CartService {
         if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
             return;
         }
-        new Thread(() -> emailService.sendOrderConfirmationEmail(
+        emailService.sendOrderConfirmationEmail(
                 user.getEmail(),
                 user.getLastname(),
                 savedOrder.getId(),
                 savedOrder.getTotalPrice(),
                 "Thanh toan khi nhan hang (COD)"
-        )).start();
+        );
     }
 
     private User getUserOrThrow(String userId) {

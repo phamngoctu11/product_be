@@ -3,14 +3,17 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
-import com.example.workflow.service.ConsultationAttributionService;
 import com.example.workflow.service.InventoryReservationService;
 import com.example.workflow.service.OptionalCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,14 +31,14 @@ class CancelOrderDelegateTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
-    private final ConsultationAttributionService consultationAttributionService = mock(ConsultationAttributionService.class);
+    private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
     private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderRepository,
             userVoucherRepository,
             optionalCacheService,
-            consultationAttributionService,
+            eventPublisher,
             inventoryReservationService
     );
 
@@ -80,7 +84,9 @@ class CancelOrderDelegateTest {
         assertThat(voucher.getUsedDate()).isNull();
         verify(userVoucherRepository).save(voucher);
         verify(orderRepository).save(order);
-        verify(consultationAttributionService).cancelOrderAttributions(10L);
+        ArgumentCaptor<OrderCancelledEvent> eventCaptor = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+        verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CANCELLED), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().orderId()).isEqualTo(10L);
         verify(optionalCacheService).evict("orders", "99");
         verify(optionalCacheService).clear("pendingOrders");
         verify(optionalCacheService).clear("products");

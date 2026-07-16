@@ -1,6 +1,11 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.ReceiptMismatchDTO;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
+import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
+import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -20,8 +25,16 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
+    private final DomainEventPublisher eventPublisher;
 
     public void sendOrderConfirmationEmail(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
+                new OrderConfirmationEmailRequestedEvent(toEmail, customerName, orderId, totalPrice, paymentMethod)
+        );
+    }
+
+    public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
         try {
             Context context = new Context();
             context.setVariable("customerName", customerName);
@@ -45,6 +58,13 @@ public class EmailService {
     }
 
     public void sendOrderCancellationEmail(String toEmail, String customerName, Long orderId, String reason) {
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CANCELLATION_EMAIL_REQUESTED,
+                new OrderCancellationEmailRequestedEvent(toEmail, customerName, orderId, reason)
+        );
+    }
+
+    public void sendOrderCancellationEmailNow(String toEmail, String customerName, Long orderId, String reason) {
         try {
             Context context = new Context();
             context.setVariable("customerName", customerName);
@@ -67,6 +87,23 @@ public class EmailService {
     }
 
     public void sendReceiptComplaintEmail(
+            List<String> toEmails,
+            Long orderId,
+            String customerName,
+            String customerEmail,
+            String note,
+            List<ReceiptMismatchDTO> mismatches
+    ) {
+        if (toEmails == null || toEmails.isEmpty()) {
+            return;
+        }
+        eventPublisher.publishAfterCommit(
+                EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED,
+                new ReceiptComplaintEmailRequestedEvent(toEmails, orderId, customerName, customerEmail, note, mismatches)
+        );
+    }
+
+    public void sendReceiptComplaintEmailNow(
             List<String> toEmails,
             Long orderId,
             String customerName,

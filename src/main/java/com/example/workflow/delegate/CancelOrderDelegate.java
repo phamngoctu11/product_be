@@ -2,10 +2,12 @@ package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.UserVoucher;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
-import com.example.workflow.service.ConsultationAttributionService;
 import com.example.workflow.service.InventoryReservationService;
 import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +23,7 @@ public class CancelOrderDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
     private final OptionalCacheService optionalCacheService;
-    private final ConsultationAttributionService consultationAttributionService;
+    private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
 
     @Override
@@ -40,11 +42,15 @@ public class CancelOrderDelegate implements JavaDelegate {
         restoreVoucher(order.getUserVoucher());
 
         orderRepository.save(order);
-        consultationAttributionService.cancelOrderAttributions(order.getId());
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CANCELLED,
+                new OrderCancelledEvent(order.getId(), order.getCancelReason())
+        );
 
         String userId = order.getUser() == null ? null : order.getUser().getId();
         optionalCacheService.evict("orders", userId);
         optionalCacheService.clear("pendingOrders");
+        optionalCacheService.clear("dashboardStats");
         optionalCacheService.clear("products");
         optionalCacheService.clear("product");
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);

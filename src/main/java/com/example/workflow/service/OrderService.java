@@ -2,6 +2,10 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.*;
 import com.example.workflow.entity.*;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCancelledEvent;
+import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderMapper;
@@ -48,7 +52,7 @@ public class OrderService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final UserVoucherRepository userVoucherRepository;
-    private final ConsultationAttributionService consultationAttributionService;
+    private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
 
     // Get current authenticated user.
@@ -160,13 +164,13 @@ public class OrderService {
         if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
             return;
         }
-        new Thread(() -> emailService.sendOrderConfirmationEmail(
+        emailService.sendOrderConfirmationEmail(
                 user.getEmail(),
                 user.getLastname(),
                 order.getId(),
                 order.getTotalPrice(),
                 paymentMethodLabel
-        )).start();
+        );
     }
 
     @Transactional
@@ -174,7 +178,8 @@ public class OrderService {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void claimWarehouseOrder(Long orderId) {
         Order order = getOrderOrThrow(orderId);
@@ -198,7 +203,8 @@ public class OrderService {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void assignStaffToOrder(Long orderId, String staffId) {
         Order order = getOrderOrThrow(orderId);
@@ -224,7 +230,8 @@ public class OrderService {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
         Order order = getOrderOrThrow(orderId);
@@ -271,7 +278,8 @@ public class OrderService {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
         Order order = getOrderOrThrow(orderId);
@@ -315,6 +323,7 @@ public class OrderService {
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
             @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true),
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
@@ -356,6 +365,7 @@ public class OrderService {
             @CacheEvict(value = "users", allEntries = true),
             @CacheEvict(value = "user", allEntries = true),
             @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true)
     })
     public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
@@ -383,7 +393,7 @@ public class OrderService {
         currentUser.setReputation(currentUser.getReputation() + 2);
         userRepository.save(currentUser);
         saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
-        consultationAttributionService.confirmOrderAttributions(order.getId());
+        eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
 
         taskService.complete(task.getId());
 
@@ -576,6 +586,7 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true),
             @CacheEvict(value = "users", allEntries = true),
             @CacheEvict(value = "user", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true),
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", allEntries = true)
     })
@@ -601,7 +612,10 @@ public class OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setEndOrderTime(LocalDateTime.now());
         saveOrderAndAuditStatusChange(order, oldStatus, user.getId());
-        consultationAttributionService.cancelOrderAttributions(order.getId());
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CANCELLED,
+                new OrderCancelledEvent(order.getId(), order.getCancelReason())
+        );
 
         clearRelatedCaches(user.getId());
 
@@ -652,6 +666,7 @@ public class OrderService {
         optionalCacheService.clear("warehouseOrders");
         optionalCacheService.clear("staffOrders");
         optionalCacheService.clear("users");
+        optionalCacheService.clear("dashboardStats");
         optionalCacheService.evict("user", userId);
     }
 
@@ -663,7 +678,8 @@ public class OrderService {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true),
+            @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void processMomoCallbackResult(Long orderId, String resultCode) {
         Order order = getOrderOrThrow(orderId);
@@ -716,7 +732,10 @@ public class OrderService {
         inventoryReservationService.releaseReservedStock(order, "PAYMENT_FAILED_RETURN");
         restoreVoucher(order.getUserVoucher());
         saveOrderAndAuditStatusChange(order, oldStatus, null);
-        consultationAttributionService.cancelOrderAttributions(orderId);
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CANCELLED,
+                new OrderCancelledEvent(orderId, order.getCancelReason())
+        );
         deleteOrderProcessIfExists(orderId, "MoMo payment failed");
 
         saveAndSendNotification(

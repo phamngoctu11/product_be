@@ -8,12 +8,16 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
+import com.example.workflow.event.DomainEventPublisher;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.repository.CartItemRepository;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import org.camunda.bpm.engine.RuntimeService;
@@ -38,6 +42,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -69,10 +74,13 @@ class CartServiceTest {
     private UserVoucherRepository userVoucherRepository;
 
     @Mock
+    private ProductVariantRepository productVariantRepository;
+
+    @Mock
     private RuntimeService runtimeService;
 
     @Mock
-    private ConsultationAttributionService consultationAttributionService;
+    private DomainEventPublisher eventPublisher;
 
     @Mock
     private MomoService momoService;
@@ -101,15 +109,39 @@ class CartServiceTest {
     }
 
     @Test
-    void startAddToCartProcessPassesExpectedVariables() {
+    void addToCartAddsNewItemWhenVariantIsMissing() {
+        User user = user(1L);
+        ProductVariant variant = variant(2L, "Variant 2", 30.0, 10, false, product(false, null));
+        Cart cart = cartWithItems(1L, user);
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+
         cartService.startAddToCartProcess("1", 2L, 3);
 
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(eq("AddToCartProcess"), variablesCaptor.capture());
-        assertThat(variablesCaptor.getValue())
-                .containsEntry("userId", "1")
-                .containsEntry("variantId", 2L)
-                .containsEntry("quantity", 3);
+        assertThat(cart.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getCart()).isSameAs(cart);
+            assertThat(item.getProductVariant()).isSameAs(variant);
+            assertThat(item.getQuantity()).isEqualTo(3);
+        });
+        verify(cartRepository).save(cart);
+    }
+
+    @Test
+    void addToCartIncreasesQuantityWhenVariantAlreadyExists() {
+        User user = user(1L);
+        ProductVariant variant = variant(2L, "Variant 2", 30.0, 10, false, product(false, null));
+        CartItem item = cartItem(variant, 4);
+        Cart cart = cartWithItems(1L, user, item);
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+
+        cartService.startAddToCartProcess("1", 2L, 3);
+
+        assertThat(cart.getItems()).containsExactly(item);
+        assertThat(item.getQuantity()).isEqualTo(7);
+        verify(cartRepository).save(cart);
     }
 
     @Test
@@ -280,7 +312,9 @@ class CartServiceTest {
         verify(cartRepository).save(cart);
         verify(inventoryReservationService).reserve(savedOrder.get());
         verify(inventoryReservationService).recordReservations(savedOrder.get());
-        verify(consultationAttributionService).recordOrderAttributions(savedOrder.get());
+        ArgumentCaptor<OrderCreatedEvent> eventCaptor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+        verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CREATED), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().orderId()).isEqualTo(100L);
         ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
         verify(runtimeService).startProcessInstanceByKey(eq("ApproveCartProcess"), eq("1"), variablesCaptor.capture());
         assertThat(variablesCaptor.getValue())
@@ -321,7 +355,7 @@ class CartServiceTest {
         verify(inventoryReservationService).recordReservations(any(Order.class));
         verify(orderRepository, never()).findById(100L);
         verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
-        verify(momoService, never()).createPaymentData(anyString(), any(Long.class));
+        verify(momoService, never()).createPaymentData(anyString(), anyLong());
     }
 
     @Test

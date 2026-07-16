@@ -4,6 +4,7 @@ import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.dto.UserResDTO;
+import com.example.workflow.entity.Cart;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -11,7 +12,6 @@ import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -26,9 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.HashMap;
+import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -36,16 +35,23 @@ import java.util.Map;
 public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-    private final RuntimeService runtimeService;
     private final KeycloakIdentityService keycloakIdentityService;
 
+    @CacheEvict(value = "users", allEntries = true)
     public void startUserRegistrationProcess(UserCreDTO dto) {
         normalizeRegistrationData(dto);
         validateRegistrationRequest(dto);
-        String finalRole = resolveRegistrationRole(dto);
-        Map<String, Object> variables = buildRegistrationVariables(dto, finalRole);
+        Role role = resolveRegistrationRole(dto);
 
-        runtimeService.startProcessInstanceByKey("CreateUserProcess", variables);
+        UserCreDTO keycloakUser = createKeycloakUser(dto);
+        String userId = extractSubFromToken(keycloakIdentityService.createUser(keycloakUser, role));
+
+        try {
+            userRepository.saveAndFlush(createUser(dto, userId, role));
+        } catch (RuntimeException ex) {
+            keycloakIdentityService.deleteUserById(userId);
+            throw ex;
+        }
     }
 
     private void validateRegistrationRequest(UserCreDTO dto) {
@@ -63,10 +69,10 @@ public class UserService {
         }
     }
 
-    private String resolveRegistrationRole(UserCreDTO dto) {
-        String finalRole = Role.USER.name();
+    private Role resolveRegistrationRole(UserCreDTO dto) {
+        Role finalRole = Role.USER;
         if (canCurrentUserAssignRole() && StringUtils.hasText(dto.getRole())) {
-            finalRole = parseRole(dto.getRole()).name();
+            finalRole = parseRole(dto.getRole());
         }
         return finalRole;
     }
@@ -78,22 +84,6 @@ public class UserService {
                 && !(auth instanceof AnonymousAuthenticationToken)
                 && auth.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ADMIN") || authority.getAuthority().equals("MANAGER"));
-    }
-
-    private Map<String, Object> buildRegistrationVariables(UserCreDTO dto, String finalRole) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("username", dto.getUsername());
-        variables.put("password", dto.getPassword());
-        variables.put("firstname", dto.getFirstname());
-        variables.put("lastname", dto.getLastname());
-        variables.put("gender", dto.getGender());
-        variables.put("address", dto.getAddress());
-        variables.put("role", finalRole);
-        variables.put("birth", dto.getBirth());
-        variables.put("phone", dto.getPhone());
-        variables.put("email", dto.getEmail());
-        variables.put("avatarUrl", dto.getAvatarUrl());
-        return variables;
     }
 
     private void normalizeRegistrationData(UserCreDTO dto) {
@@ -117,6 +107,57 @@ public class UserService {
         } catch (IllegalArgumentException ex) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_ROLE);
         }
+    }
+
+    private UserCreDTO createKeycloakUser(UserCreDTO dto) {
+        UserCreDTO keycloakUser = new UserCreDTO();
+        keycloakUser.setUsername(dto.getUsername());
+        keycloakUser.setPassword(dto.getPassword());
+        keycloakUser.setFirstname(dto.getFirstname());
+        keycloakUser.setLastname(dto.getLastname());
+        keycloakUser.setEmail(dto.getEmail());
+        return keycloakUser;
+    }
+
+    private User createUser(UserCreDTO dto, String id, Role role) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(dto.getUsername());
+        user.setFirstname(dto.getFirstname());
+        user.setLastname(dto.getLastname());
+        user.setGender(dto.getGender());
+        user.setAddress(dto.getAddress());
+        user.setPhone(dto.getPhone());
+        user.setBirth(dto.getBirth());
+        user.setEmail(dto.getEmail());
+        user.setRole(role);
+        user.setAvatarUrl(dto.getAvatarUrl());
+        user.setReputation(50);
+        user.setDelete(false);
+        user.setCart(createCartFor(user));
+        return user;
+    }
+
+    private Cart createCartFor(User user) {
+        Cart cart = new Cart();
+        cart.setUser(user);
+        return cart;
+    }
+
+    private String extractSubFromToken(String tokenOrId) {
+        try {
+            if (tokenOrId != null && tokenOrId.split("\\.").length == 3) {
+                String[] parts = tokenOrId.split("\\.");
+                String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+                if (node.has("sub")) {
+                    return node.get("sub").asText();
+                }
+            }
+        } catch (Exception ignored) {
+            // Preserve the old delegate fallback: non-JWT values are already the user id.
+        }
+        return tokenOrId;
     }
 
     @Transactional(readOnly = true)

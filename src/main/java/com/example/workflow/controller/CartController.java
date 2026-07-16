@@ -34,7 +34,7 @@ public class CartController {
             @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
     ) {
         cartService.startAddToCartProcess(userId, variantId, quantity);
-        return ResponseEntity.ok(ApiResponse.success("Da day lenh them gio hang vao Workflow!"));
+        return ResponseEntity.ok(ApiResponse.success("Added to cart"));
     }
 
     @PutMapping("/update")
