@@ -20,20 +20,24 @@ public class ChatRedisSubscriber implements MessageListener {
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
-        Object payload = redisTemplate.getValueSerializer().deserialize(message.getBody());
-        if (!(payload instanceof ChatRealtimeEvent event) || event.getDestination() == null) {
-            log.warn("Ignored invalid chat realtime event from Redis");
-            return;
-        }
+        try {
+            Object payload = redisTemplate.getValueSerializer().deserialize(message.getBody());
+            if (!(payload instanceof ChatRealtimeEvent event) || event.getDestination() == null) {
+                log.warn("Ignored invalid chat realtime event from Redis");
+                return;
+            }
 
-        if (event.getMessage() != null) {
-            messagingTemplate.convertAndSend(event.getDestination(), event.getMessage());
-            return;
-        }
+            if (event.getMessage() != null) {
+                messagingTemplate.convertAndSend(event.getDestination(), event.getMessage());
+                return;
+            }
 
-        if (event.getUserId() != null && event.getActive() != null) {
-            messagingTemplate.convertAndSend(event.getDestination(),
-                    Map.of("userId", event.getUserId(), "isActive", event.getActive()));
+            if (event.getUserId() != null && event.getActive() != null) {
+                messagingTemplate.convertAndSend(event.getDestination(),
+                        Map.of("userId", event.getUserId(), "isActive", event.getActive()));
+            }
+        } catch (RuntimeException e) {
+            log.warn("Optional Redis chat event handling failed: {}", e.getMessage());
         }
     }
 }

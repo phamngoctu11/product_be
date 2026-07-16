@@ -3,18 +3,17 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Cart;
 import com.example.workflow.entity.CartItem;
 import com.example.workflow.repository.CartRepository;
+import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 @Component("updateQuantityDelegate")
 @RequiredArgsConstructor
 public class UpdateQuantityDelegate implements JavaDelegate {
     private final CartRepository cartRepository;
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
 
     @Override
     public void execute(DelegateExecution execution) {
@@ -42,9 +41,7 @@ public class UpdateQuantityDelegate implements JavaDelegate {
     }
 
     private void evictCartCache(Cart cart) {
-        Cache cache = cacheManager.getCache("carts");
-        if (cache != null) {
-            cache.evict(cart.getUser().getId());
-        }
+        String userId = cart.getUser() == null ? null : cart.getUser().getId();
+        optionalCacheService.evict("carts", userId);
     }
 }

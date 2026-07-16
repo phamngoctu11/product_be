@@ -1,15 +1,18 @@
 package com.example.workflow.config;
-import org.springframework.beans.factory.annotation.Autowired;
+
+import com.example.workflow.service.OptionalCacheService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
+
 @Component
+@RequiredArgsConstructor
 public class CacheClearer implements CommandLineRunner {
-    @Autowired
-    private CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
+
     @Override
     public void run(String... args) {
-        cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
-        System.out.println(">>> Đã xóa toàn bộ Cache để cập nhật cấu trúc mới!");
+        optionalCacheService.clearAllAvailableCaches();
+        System.out.println(">>> Cache clear attempted on startup.");
     }
 }

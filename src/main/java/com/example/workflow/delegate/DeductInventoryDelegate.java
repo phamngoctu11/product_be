@@ -3,11 +3,10 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Order;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Component("deductInventoryDelegate")
 public class DeductInventoryDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
     private final InventoryReservationService inventoryReservationService;
 
     @Override
@@ -33,15 +32,8 @@ public class DeductInventoryDelegate implements JavaDelegate {
     }
 
     private void clearProductCaches() {
-        clearCache("products");
-        clearCache("product");
-        clearCache("bestSellingProducts");
-    }
-
-    private void clearCache(String cacheName) {
-        Cache cache = cacheManager.getCache(cacheName);
-        if (cache != null) {
-            cache.clear();
-        }
+        optionalCacheService.clear("products");
+        optionalCacheService.clear("product");
+        optionalCacheService.clear("bestSellingProducts");
     }
 }

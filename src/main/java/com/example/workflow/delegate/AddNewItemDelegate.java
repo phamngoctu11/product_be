@@ -5,11 +5,10 @@ import com.example.workflow.entity.CartItem;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.ProductVariantRepository;
+import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AddNewItemDelegate implements JavaDelegate {
     private final CartRepository cartRepository;
     private final ProductVariantRepository productVariantRepository;
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
 
     @Override
     @Transactional
@@ -56,9 +55,7 @@ public class AddNewItemDelegate implements JavaDelegate {
     }
 
     private void evictCartCache(Cart cart) {
-        Cache cache = cacheManager.getCache("carts");
-        if (cache != null) {
-            cache.evict(cart.getUser().getId());
-        }
+        String userId = cart.getUser() == null ? null : cart.getUser().getId();
+        optionalCacheService.evict("carts", userId);
     }
 }

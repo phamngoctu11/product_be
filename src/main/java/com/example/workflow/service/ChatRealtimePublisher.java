@@ -24,7 +24,7 @@ public class ChatRealtimePublisher {
     public void publishMessage(String destination, ChatMessage message) {
         ChatRealtimeEvent event = new ChatRealtimeEvent(destination, message, null, null);
         if (!publishToRedis(event)) {
-            messagingTemplate.convertAndSend(destination, message);
+            publishLocal(destination, message);
         }
     }
 
@@ -36,8 +36,7 @@ public class ChatRealtimePublisher {
                 active
         );
         if (!publishToRedis(event)) {
-            messagingTemplate.convertAndSend(event.getDestination(),
-                    java.util.Map.of("userId", userId, "isActive", active));
+            publishLocal(event.getDestination(), java.util.Map.of("userId", userId, "isActive", active));
         }
     }
 
@@ -52,6 +51,14 @@ public class ChatRealtimePublisher {
         } catch (RuntimeException e) {
             log.warn("Redis Pub/Sub unavailable, falling back to local WebSocket send: {}", e.getMessage());
             return false;
+        }
+    }
+
+    private void publishLocal(String destination, Object payload) {
+        try {
+            messagingTemplate.convertAndSend(destination, payload);
+        } catch (RuntimeException e) {
+            log.warn("Optional local WebSocket publish failed for destination {}: {}", destination, e.getMessage());
         }
     }
 }

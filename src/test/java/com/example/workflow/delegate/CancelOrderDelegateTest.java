@@ -8,10 +8,9 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.ConsultationAttributionService;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.OptionalCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,14 +26,14 @@ import static org.mockito.Mockito.when;
 class CancelOrderDelegateTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
-    private final CacheManager cacheManager = mock(CacheManager.class);
+    private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final ConsultationAttributionService consultationAttributionService = mock(ConsultationAttributionService.class);
     private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderRepository,
             userVoucherRepository,
-            cacheManager,
+            optionalCacheService,
             consultationAttributionService,
             inventoryReservationService
     );
@@ -66,10 +65,6 @@ class CancelOrderDelegateTest {
 
     @Test
     void cancelsOrderRestoresVoucherClearsCachesAndCancelsAttributions() {
-        Cache ordersCache = mock(Cache.class);
-        Cache pendingOrdersCache = mock(Cache.class);
-        Cache productsCache = mock(Cache.class);
-        Cache productCache = mock(Cache.class);
         UserVoucher voucher = new UserVoucher();
         voucher.setUsed(true);
         voucher.setUsedDate(LocalDateTime.now());
@@ -77,10 +72,6 @@ class CancelOrderDelegateTest {
         order.setUserVoucher(voucher);
         when(execution.getVariable("orderId")).thenReturn(10L);
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
-        when(cacheManager.getCache("orders")).thenReturn(ordersCache);
-        when(cacheManager.getCache("pendingOrders")).thenReturn(pendingOrdersCache);
-        when(cacheManager.getCache("products")).thenReturn(productsCache);
-        when(cacheManager.getCache("product")).thenReturn(productCache);
 
         delegate.execute(execution);
 
@@ -90,10 +81,10 @@ class CancelOrderDelegateTest {
         verify(userVoucherRepository).save(voucher);
         verify(orderRepository).save(order);
         verify(consultationAttributionService).cancelOrderAttributions(10L);
-        verify(ordersCache).evict("99");
-        verify(pendingOrdersCache).clear();
-        verify(productsCache).clear();
-        verify(productCache).clear();
+        verify(optionalCacheService).evict("orders", "99");
+        verify(optionalCacheService).clear("pendingOrders");
+        verify(optionalCacheService).clear("products");
+        verify(optionalCacheService).clear("product");
     }
 
     @Test

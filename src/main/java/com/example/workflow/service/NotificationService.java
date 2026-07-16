@@ -3,6 +3,7 @@ package com.example.workflow.service;
 import com.example.workflow.entity.Notification;
 import com.example.workflow.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -41,8 +43,21 @@ public class NotificationService {
         notification.setTargetUserId(targetUserId);
         notification.setConsultationRequestId(consultationRequestId);
         Notification savedNotification = notificationRepository.save(notification);
-        messagingTemplate.convertAndSend(destination, savedNotification);
+        publishRealtimeNotification(destination, savedNotification);
         return savedNotification;
+    }
+
+    private void publishRealtimeNotification(String destination, Notification notification) {
+        try {
+            messagingTemplate.convertAndSend(destination, notification);
+        } catch (RuntimeException e) {
+            log.warn(
+                    "Optional realtime notification publish failed for destination {} notification {}: {}",
+                    destination,
+                    notification == null ? null : notification.getId(),
+                    e.getMessage()
+            );
+        }
     }
 
     public List<Notification> getNotifications(String userId, boolean admin) {

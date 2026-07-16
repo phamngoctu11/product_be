@@ -3,9 +3,9 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Order;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.OptionalCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
-import org.springframework.cache.CacheManager;
 
 import java.util.Optional;
 
@@ -17,12 +17,12 @@ import static org.mockito.Mockito.when;
 
 class DeductInventoryDelegateTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
-    private final CacheManager cacheManager = mock(CacheManager.class);
+    private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final DeductInventoryDelegate delegate = new DeductInventoryDelegate(
             orderRepository,
-            cacheManager,
+            optionalCacheService,
             inventoryReservationService
     );
 

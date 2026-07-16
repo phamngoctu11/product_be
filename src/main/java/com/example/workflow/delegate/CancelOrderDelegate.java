@@ -7,11 +7,10 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.ConsultationAttributionService;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,7 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
     private final ConsultationAttributionService consultationAttributionService;
     private final InventoryReservationService inventoryReservationService;
 
@@ -43,12 +42,11 @@ public class CancelOrderDelegate implements JavaDelegate {
         orderRepository.save(order);
         consultationAttributionService.cancelOrderAttributions(order.getId());
 
-        if (cacheManager.getCache("orders") != null) {
-            cacheManager.getCache("orders").evict(order.getUser().getId());
-        }
-        clearCache("pendingOrders");
-        clearCache("products");
-        clearCache("product");
+        String userId = order.getUser() == null ? null : order.getUser().getId();
+        optionalCacheService.evict("orders", userId);
+        optionalCacheService.clear("pendingOrders");
+        optionalCacheService.clear("products");
+        optionalCacheService.clear("product");
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
     }
 
@@ -59,12 +57,5 @@ public class CancelOrderDelegate implements JavaDelegate {
         appliedVoucher.setUsed(false);
         appliedVoucher.setUsedDate(null);
         userVoucherRepository.save(appliedVoucher);
-    }
-
-    private void clearCache(String cacheName) {
-        Cache cache = cacheManager.getCache(cacheName);
-        if (cache != null) {
-            cache.clear();
-        }
     }
 }

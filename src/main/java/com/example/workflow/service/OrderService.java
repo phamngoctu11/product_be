@@ -10,12 +10,11 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -36,12 +35,13 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final UserRepository userRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
     private final OrderStatusHistoryMapper historyMapper;
     private final TaskService taskService;
     private final RuntimeService runtimeService;
@@ -413,17 +413,18 @@ public class OrderService {
                 .distinct()
                 .collect(Collectors.toList());
         if (managerEmails.isEmpty()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.MANAGER_EMAIL_NOT_FOUND);
+            log.warn("No manager email found for receipt complaint on order {}; storing notification only.", orderId);
+        } else {
+            emailService.sendReceiptComplaintEmail(
+                    managerEmails,
+                    orderId,
+                    buildFullName(currentUser),
+                    currentUser.getEmail(),
+                    request.getNote(),
+                    mismatches
+            );
         }
 
-        emailService.sendReceiptComplaintEmail(
-                managerEmails,
-                orderId,
-                buildFullName(currentUser),
-                currentUser.getEmail(),
-                request.getNote(),
-                mismatches
-        );
         saveAndSendNotification(
                 "Khieu nai lech so luong",
                 "Khach hang " + buildFullName(currentUser) + " khieu nai lech so luong don #" + orderId + ".",
@@ -646,18 +647,12 @@ public class OrderService {
     }
 
     private void clearRelatedCaches(String userId) {
-        Cache ordersCache = cacheManager.getCache("orders");
-        if (ordersCache != null) ordersCache.clear();
-        Cache pendingOrdersCache = cacheManager.getCache("pendingOrders");
-        if (pendingOrdersCache != null) pendingOrdersCache.clear();
-        Cache warehouseOrdersCache = cacheManager.getCache("warehouseOrders");
-        if (warehouseOrdersCache != null) warehouseOrdersCache.clear();
-        Cache staffOrdersCache = cacheManager.getCache("staffOrders");
-        if (staffOrdersCache != null) staffOrdersCache.clear();
-        Cache usersCache = cacheManager.getCache("users");
-        if (usersCache != null) usersCache.clear();
-        Cache userDetailCache = cacheManager.getCache("user");
-        if (userDetailCache != null) userDetailCache.evict(userId);
+        optionalCacheService.clear("orders");
+        optionalCacheService.clear("pendingOrders");
+        optionalCacheService.clear("warehouseOrders");
+        optionalCacheService.clear("staffOrders");
+        optionalCacheService.clear("users");
+        optionalCacheService.evict("user", userId);
     }
 
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {

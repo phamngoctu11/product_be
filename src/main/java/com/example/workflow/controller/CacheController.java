@@ -1,8 +1,8 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.service.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.CacheManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,16 +13,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class CacheController {
 
-    private final CacheManager cacheManager;
+    private final OptionalCacheService optionalCacheService;
 
     @DeleteMapping("/clear-all")
     public ResponseEntity<ApiResponse<Void>> clearAllCaches() {
-        // Duyệt qua tất cả các tên cache đang có trong hệ thống và xóa sạch
-        for (String cacheName : cacheManager.getCacheNames()) {
-            if (cacheManager.getCache(cacheName) != null) {
-                cacheManager.getCache(cacheName).clear();
-            }
+        OptionalCacheService.CacheClearResult result = optionalCacheService.clearAllAvailableCaches();
+        if (result.listingFailed()) {
+            return ResponseEntity.ok(ApiResponse.success("Cache clear attempted, but cache backend was unavailable."));
         }
-        return ResponseEntity.ok(ApiResponse.success("Đã clear toàn bộ cache thành công! DB đã sẵn sàng nhận data mới."));
+
+        if (!result.failedCaches().isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("Cache clear attempted. Failed caches: " + String.join(", ", result.failedCaches())));
+        }
+        return ResponseEntity.ok(ApiResponse.success("Cleared all caches successfully."));
     }
 }

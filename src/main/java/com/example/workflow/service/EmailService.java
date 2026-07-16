@@ -4,6 +4,7 @@ import com.example.workflow.dto.ReceiptMismatchDTO;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EmailService {
 
     private final JavaMailSender mailSender;
@@ -31,15 +33,14 @@ public class EmailService {
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
             helper.setTo(toEmail);
-            helper.setSubject("Xác nhận đơn hàng #" + orderId + " từ My App");
+            helper.setSubject("Order confirmation #" + orderId);
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            System.out.println(">>> Đã gửi Email Hóa đơn thành công tới: " + toEmail);
-        } catch (MessagingException e) {
-            System.err.println(">>> Lỗi khi gửi email: " + e.getMessage());
+            log.info("Sent order confirmation email for order {} to {}", orderId, toEmail);
+        } catch (MessagingException | RuntimeException e) {
+            log.warn("Optional order confirmation email failed for order {}: {}", orderId, e.getMessage());
         }
     }
 
@@ -54,15 +55,14 @@ public class EmailService {
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
             helper.setTo(toEmail);
-            helper.setSubject("Thông báo Hủy đơn hàng #" + orderId + " từ My App");
+            helper.setSubject("Order cancelled #" + orderId);
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            System.out.println(">>> Đã gửi Email HỦY ĐƠN thành công tới: " + toEmail);
-        } catch (MessagingException e) {
-            System.err.println(">>> Lỗi khi gửi email hủy đơn: " + e.getMessage());
+            log.info("Sent order cancellation email for order {} to {}", orderId, toEmail);
+        } catch (MessagingException | RuntimeException e) {
+            log.warn("Optional order cancellation email failed for order {}: {}", orderId, e.getMessage());
         }
     }
 
@@ -81,15 +81,14 @@ public class EmailService {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
             helper.setTo(toEmails.toArray(new String[0]));
-            helper.setSubject("Khieu nai lech so luong don hang #" + orderId);
+            helper.setSubject("Receipt quantity complaint for order #" + orderId);
             helper.setText(buildReceiptComplaintHtml(orderId, customerName, customerEmail, note, mismatches), true);
 
             mailSender.send(message);
-            System.out.println(">>> Sent receipt complaint email for order #" + orderId);
-        } catch (MessagingException e) {
-            System.err.println(">>> Error sending receipt complaint email: " + e.getMessage());
+            log.info("Sent receipt complaint email for order {}", orderId);
+        } catch (MessagingException | RuntimeException e) {
+            log.warn("Optional receipt complaint email failed for order {}: {}", orderId, e.getMessage());
         }
     }
 
@@ -114,18 +113,18 @@ public class EmailService {
         return """
                 <html>
                 <body style="font-family: Arial, sans-serif; color: #222;">
-                    <h2>Khieu nai lech so luong don hang #%s</h2>
-                    <p><b>Khach hang:</b> %s</p>
-                    <p><b>Email khach hang:</b> %s</p>
-                    <p><b>Ghi chu:</b> %s</p>
+                    <h2>Receipt quantity complaint for order #%s</h2>
+                    <p><b>Customer:</b> %s</p>
+                    <p><b>Customer email:</b> %s</p>
+                    <p><b>Note:</b> %s</p>
                     <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%%;">
                         <thead>
                             <tr>
                                 <th>Variant ID</th>
                                 <th>Variant</th>
-                                <th>So luong dat</th>
-                                <th>So luong xuat</th>
-                                <th>So luong khach nhan</th>
+                                <th>Ordered quantity</th>
+                                <th>Exported quantity</th>
+                                <th>Received quantity</th>
                             </tr>
                         </thead>
                         <tbody>
