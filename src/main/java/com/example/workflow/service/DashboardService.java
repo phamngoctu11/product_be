@@ -4,13 +4,17 @@ import com.example.workflow.dto.DashboardStatsDTO;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
     private final OrderRepository orderRepository;
 
+    @Transactional(readOnly = true)
+    @Cacheable(value = "dashboardStats", key = "'summary'", unless = "#result == null")
     public DashboardStatsDTO getDashboardStats() {
         Double totalRevenue = orderRepository.calculateTotalRevenue(OrderStatus.DELIVERED);
         if (totalRevenue == null) {
