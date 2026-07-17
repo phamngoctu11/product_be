@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -21,7 +21,7 @@ import java.util.UUID;
 public class DomainEventPublisher {
     public static final String STREAM_KEY = "stream:workflow-events";
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
     @Value("${workflow.events.redis-stream.enabled:true}")
@@ -48,7 +48,7 @@ public class DomainEventPublisher {
         }
 
         try {
-            Map<String, Object> body = new LinkedHashMap<>();
+            Map<String, String> body = new LinkedHashMap<>();
             body.put("eventId", UUID.randomUUID().toString());
             body.put("type", type);
             body.put("payload", objectMapper.writeValueAsString(payload));

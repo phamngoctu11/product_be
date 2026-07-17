@@ -4,10 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class DashboardStatsDTO {
+public class DashboardStatsDTO implements Serializable {
     private Double totalRevenue;     // Tổng doanh thu (Chỉ tính đơn Đã giao)
     private Long totalOrders;       // Tổng số đơn hàng
     private Long pendingWH;

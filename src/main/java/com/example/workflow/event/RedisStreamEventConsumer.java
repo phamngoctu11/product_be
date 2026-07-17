@@ -25,7 +25,7 @@ import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -41,7 +41,7 @@ import java.util.UUID;
 public class RedisStreamEventConsumer {
     private static final String DEFAULT_GROUP = "workflow-domain-event-workers";
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final NotificationService notificationService;
     private final EmailService emailService;
@@ -70,11 +70,12 @@ public class RedisStreamEventConsumer {
             redisFailureLogged = false;
         } catch (RuntimeException e) {
             groupReady = false;
+            String rootCauseMessage = rootCauseMessage(e);
             if (!redisFailureLogged) {
-                log.warn("Redis Stream consumer unavailable: {}", e.getMessage());
+                log.warn("Redis Stream consumer unavailable: {}", rootCauseMessage);
                 redisFailureLogged = true;
             } else {
-                log.debug("Redis Stream consumer still unavailable: {}", e.getMessage());
+                log.debug("Redis Stream consumer still unavailable: {}", rootCauseMessage);
             }
         }
     }
@@ -106,7 +107,7 @@ public class RedisStreamEventConsumer {
     }
 
     private boolean isGroupAlreadyExists(RuntimeException e) {
-        String message = e.getMessage();
+        String message = rootCauseMessage(e);
         return message != null && message.contains("BUSYGROUP");
     }
 
@@ -227,6 +228,26 @@ public class RedisStreamEventConsumer {
     }
 
     private String asString(Object value) {
-        return value == null ? null : String.valueOf(value);
+        if (value == null) {
+            return null;
+        }
+        String raw = String.valueOf(value);
+        if (raw.length() >= 2 && raw.startsWith("\"") && raw.endsWith("\"")) {
+            try {
+                return objectMapper.readValue(raw, String.class);
+            } catch (JsonProcessingException ignored) {
+                return raw;
+            }
+        }
+        return raw;
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
     }
 }

@@ -5,6 +5,12 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     volumes:
       - redis_data:/data
 
@@ -35,9 +41,12 @@ services:
     ports:
       - "8081:8080"
     depends_on:
-      - redis
-      - mongo
-      - keycloak
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+      keycloak:
+        condition: service_started
     environment:
       - REDIS_HOST=redis
       - MONGODB_URI=mongodb://mongo:27017/workflow_chat
