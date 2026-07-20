@@ -46,7 +46,7 @@ class CancelOrderDelegateTest {
     void releasesReservationAndDoesNotRestoreAgain() {
         Order order = order();
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
         when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(true);
 
         delegate.execute(execution);
@@ -59,7 +59,7 @@ class CancelOrderDelegateTest {
     void restoresConfirmedStockWhenThereIsNoReservation() {
         Order order = order();
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
         when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(false);
 
         delegate.execute(execution);
@@ -75,7 +75,7 @@ class CancelOrderDelegateTest {
         Order order = order();
         order.setUserVoucher(voucher);
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
 
         delegate.execute(execution);
 
@@ -96,7 +96,7 @@ class CancelOrderDelegateTest {
     @Test
     void throwsWhenOrderDoesNotExist() {
         when(execution.getVariable("orderId")).thenReturn(404L);
-        when(orderRepository.findById(404L)).thenReturn(Optional.empty());
+        when(orderRepository.findByIdForUpdate(404L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> delegate.execute(execution))
                 .isInstanceOf(RuntimeException.class)

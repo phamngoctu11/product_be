@@ -72,7 +72,8 @@ public class CartController {
             @RequestParam(value = "userVoucherId", required = false) Long userVoucherId,
             @Pattern(regexp = "(?i)COD|ONLINE", message = "Payment method must be COD or ONLINE")
             @RequestParam("paymentMethod") String paymentMethod,
-            @RequestParam(value = "note", required = false) String note
+            @RequestParam(value = "note", required = false) String note,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         try {
             Map<String, String> response = cartService.approveCart(
@@ -80,7 +81,8 @@ public class CartController {
                     productIdsToCheckout,
                     userVoucherId,
                     paymentMethod,
-                    note
+                    note,
+                    idempotencyKey
             );
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (AppException e) {

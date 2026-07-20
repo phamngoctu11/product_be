@@ -2,6 +2,7 @@ package com.example.workflow.exception;
 
 public enum ConstantErrorCode {
     INVALID_CREDENTIALS("Thông tin đăng nhập không hợp lệ"),
+    LOGIN_RATE_LIMIT_EXCEEDED("Too many login attempts. Please retry later."),
     USER_NOT_FOUND("Không tìm thấy người dùng"),
     ORDER_NOT_FOUND("Không tìm thấy đơn hàng"),
     MOMO_PAY_URL_MISSING("MoMo không trả về đường dẫn thanh toán."),
@@ -25,6 +26,10 @@ public enum ConstantErrorCode {
     LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT("Điểm uy tín của bạn quá thấp (< 20). Bạn bắt buộc phải thanh toán trực tuyến!"),
     CART_NOT_FOUND_VI("Không tìm thấy giỏ hàng!"),
     CHECKOUT_ITEM_REQUIRED("Vui lòng chọn ít nhất 1 sản phẩm để thanh toán."),
+    CHECKOUT_ALREADY_IN_PROGRESS("Checkout request is already being processed. Please wait."),
+    CHECKOUT_LOCK_UNAVAILABLE("Checkout lock service is unavailable. Please try again later: %s"),
+    CHECKOUT_IDEMPOTENCY_UNAVAILABLE("Checkout idempotency service is unavailable. Please try again later: %s"),
+    IDEMPOTENCY_KEY_TOO_LONG("Idempotency-Key must be at most %s characters."),
     SELECTED_PRODUCTS_NOT_IN_CART("Các sản phẩm được chọn không tồn tại trong giỏ hàng."),
     PRODUCT_VARIANT_DELETED("Biến thể sản phẩm có mã %s đã bị xóa hoặc không còn được bán."),
     PRODUCT_VARIANT_OUT_OF_STOCK("Biến thể sản phẩm có mã %s đã hết hàng hoặc không đủ số lượng!"),

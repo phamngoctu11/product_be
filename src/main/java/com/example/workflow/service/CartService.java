@@ -48,6 +48,8 @@ public class CartService {
     private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;
     private final InventoryReservationService inventoryReservationService;
+    private final CheckoutConcurrencyService checkoutConcurrencyService;
+    private final CheckoutIdempotencyService checkoutIdempotencyService;
 
     @CacheEvict(value = "carts", key = "#userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
@@ -137,34 +139,64 @@ public class CartService {
             @CacheEvict(value = "products", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "product", allEntries = true, beforeInvocation = true)
     })
-    // Tách riêng logic tạo Order (Chỉ dùng nội bộ trong class này)
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Map<String, String> approveCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
+    public Map<String, String> approveCart(
+            String userId,
+            List<Long> variantIdsToCheckout,
+            Long userVoucherId,
+            String paymentMethod,
+            String note,
+            String idempotencyKey
+    ) {
+        CheckoutIdempotencyService.CheckoutIdempotencyState idempotencyState =
+                checkoutIdempotencyService.begin(userId, idempotencyKey);
+        if (idempotencyState.isReplay()) {
+            return idempotencyState.response();
+        }
+
         try {
-            Long orderId = transactionTemplate.execute(status -> {
-                Long createdOrderId = createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
-                startApproveCartProcess(createdOrderId, userId, paymentMethod, note);
-                return createdOrderId;
-            });
-            Order savedOrder = getOrderOrThrow(orderId);
-            User user = getUserOrThrow(userId);
-
-            if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-                return buildOnlinePaymentResponse(savedOrder);
+            Map<String, String> response;
+            try (CheckoutConcurrencyService.CheckoutLocks ignored =
+                         checkoutConcurrencyService.acquireCheckoutLocks(userId, variantIdsToCheckout)) {
+                response = approveCartInternal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
             }
-
-            sendCodOrderNotifications(user, savedOrder);
-            sendOrderConfirmationEmail(user, savedOrder);
-
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "SUCCESS");
-            response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
+            checkoutIdempotencyService.complete(idempotencyState, response);
             return response;
         } catch (AppException e) {
+            checkoutIdempotencyService.fail(idempotencyState);
             throw e;
         } catch (Exception e) {
+            checkoutIdempotencyService.fail(idempotencyState);
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         }
+    }
+
+    private Map<String, String> approveCartInternal(
+            String userId,
+            List<Long> variantIdsToCheckout,
+            Long userVoucherId,
+            String paymentMethod,
+            String note
+    ) throws Exception {
+        Long orderId = transactionTemplate.execute(status -> {
+            Long createdOrderId = createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
+            startApproveCartProcess(createdOrderId, userId, paymentMethod, note);
+            return createdOrderId;
+        });
+        Order savedOrder = getOrderOrThrow(orderId);
+        User user = getUserOrThrow(userId);
+
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            return buildOnlinePaymentResponse(savedOrder);
+        }
+
+        sendCodOrderNotifications(user, savedOrder);
+        sendOrderConfirmationEmail(user, savedOrder);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "SUCCESS");
+        response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
+        return response;
     }
 
     private Long createOrderFromCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
@@ -181,9 +213,6 @@ public class CartService {
         UserVoucher appliedVoucher = applyVoucherForCheckout(userVoucherId, userId, totalPrice);
         double discountAmount = calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
-
-        // The conditional UPDATE in this call is the authoritative stock check.
-        // If two checkouts compete for the last unit, only one transaction can reserve it.
         inventoryReservationService.reserve(order);
         Order savedOrder = orderRepository.saveAndFlush(order);
         inventoryReservationService.recordReservations(savedOrder);

@@ -3,13 +3,16 @@ package com.example.workflow.repository;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.nume.OrderStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +31,26 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "LEFT JOIN FETCH uv.template " +
             "WHERE o.id = :id")
     Optional<Order> findById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.user " +
+            "LEFT JOIN FETCH o.items i " +
+            "LEFT JOIN FETCH i.productVariant pv " +
+            "LEFT JOIN FETCH pv.product " +
+            "LEFT JOIN FETCH o.userVoucher uv " +
+            "LEFT JOIN FETCH uv.template " +
+            "WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("SELECT o.id FROM Order o " +
+            "WHERE o.status = :status " +
+            "AND o.stockReserved = true " +
+            "AND o.startOrderTime < :cutoff")
+    List<Long> findReservedOrderIdsByStatusBefore(
+            @Param("status") OrderStatus status,
+            @Param("cutoff") LocalDateTime cutoff
+    );
 
     // ==============================================================
     // 2. MASTER/LIST VIEW (Dùng DTO Projection & JOIN thường)

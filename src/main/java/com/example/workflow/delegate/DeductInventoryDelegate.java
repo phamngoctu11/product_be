@@ -22,6 +22,8 @@ public class DeductInventoryDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) {
         Long orderId = (Long) execution.getVariable("orderId");
         Order order = orderRepository.findById(orderId).orElseThrow();
+        // New checkout orders already reserve stock. This confirms the reservation as SALE
+        // instead of decrementing stock a second time.
         inventoryReservationService.confirmReservation(order);
         orderRepository.save(order);
 

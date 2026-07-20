@@ -30,8 +30,11 @@ public class CancelOrderDelegate implements JavaDelegate {
     @Transactional
     public void execute(DelegateExecution execution) {
         Long orderId = (Long) execution.getVariable("orderId");
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
 
         order.setStatus(OrderStatus.CANCELLED);
         boolean reservationReleased = inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");

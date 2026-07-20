@@ -13,6 +13,7 @@ import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.repository.CartItemRepository;
 import com.example.workflow.repository.CartRepository;
@@ -45,6 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -97,6 +99,12 @@ class CartServiceTest {
     @Mock
     private InventoryReservationService inventoryReservationService;
 
+    @Mock
+    private CheckoutConcurrencyService checkoutConcurrencyService;
+
+    @Mock
+    private CheckoutIdempotencyService checkoutIdempotencyService;
+
     @InjectMocks
     private CartService cartService;
 
@@ -106,6 +114,10 @@ class CartServiceTest {
             TransactionCallback<Long> callback = invocation.getArgument(0);
             return callback.doInTransaction(mock(TransactionStatus.class));
         });
+        lenient().when(checkoutConcurrencyService.acquireCheckoutLocks(anyString(), any()))
+                .thenReturn(CheckoutConcurrencyService.CheckoutLocks.noop());
+        lenient().when(checkoutIdempotencyService.begin(anyString(), nullable(String.class)))
+                .thenReturn(CheckoutIdempotencyService.CheckoutIdempotencyState.disabled());
     }
 
     @Test
@@ -297,7 +309,7 @@ class CartServiceTest {
         });
         when(orderRepository.findById(100L)).thenAnswer(invocation -> Optional.of(savedOrder.get()));
 
-        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "COD", "note");
+        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "COD", "note", null);
 
         assertThat(response).containsEntry("status", "SUCCESS");
         assertThat(cart.getItems()).isEmpty();
@@ -328,6 +340,46 @@ class CartServiceTest {
     }
 
     @Test
+    void approveCartStopsBeforeCreatingOrderWhenCheckoutLockIsBusy() {
+        when(checkoutConcurrencyService.acquireCheckoutLocks(eq("1"), eq(List.of(11L))))
+                .thenThrow(new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CHECKOUT_ALREADY_IN_PROGRESS));
+
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", "note", null))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("status", HttpStatus.CONFLICT);
+
+        verify(transactionTemplate, never()).execute(any());
+        verify(orderRepository, never()).saveAndFlush(any());
+        verify(inventoryReservationService, never()).reserve(any());
+        verify(runtimeService, never()).startProcessInstanceByKey(
+                eq("ApproveCartProcess"),
+                anyString(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+        );
+        verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void approveCartReplaysIdempotentResponseWithoutCreatingAnotherOrder() {
+        Map<String, String> replayResponse = Map.of(
+                "status", "SUCCESS",
+                "message", "already-created"
+        );
+        when(checkoutIdempotencyService.begin("1", "idem-1"))
+                .thenReturn(CheckoutIdempotencyService.CheckoutIdempotencyState.replay(replayResponse));
+
+        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "COD", "note", "idem-1");
+
+        assertThat(response).containsEntry("status", "SUCCESS")
+                .containsEntry("message", "already-created");
+        verify(checkoutConcurrencyService, never()).acquireCheckoutLocks(anyString(), any());
+        verify(transactionTemplate, never()).execute(any());
+        verify(orderRepository, never()).saveAndFlush(any());
+        verify(inventoryReservationService, never()).reserve(any());
+        verify(checkoutIdempotencyService, never()).complete(any(), any());
+    }
+
+    @Test
     void approveCartFailsWhenWorkflowStartThrows() throws Exception {
         User user = user(1L);
         ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
@@ -347,7 +399,7 @@ class CartServiceTest {
         ))
                 .thenThrow(new RuntimeException("camunda down"));
 
-        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", "note"))
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", "note", null))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
@@ -364,7 +416,7 @@ class CartServiceTest {
         user.setReputation(19);
         when(userRepository.findById("1")).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", null))
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", null, null))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
@@ -395,7 +447,7 @@ class CartServiceTest {
         when(momoService.createPaymentData("100", 50L)).thenReturn(Map.of("payUrl", "https://momo.test/pay"));
         when(momoService.isMockPaymentEnabled()).thenReturn(true);
 
-        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "ONLINE", null);
+        Map<String, String> response = cartService.approveCart("1", List.of(11L), null, "ONLINE", null, null);
 
         assertThat(response)
                 .containsEntry("status", "REDIRECT")

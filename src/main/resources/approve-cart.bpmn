@@ -32,7 +32,7 @@
       <bpmn:incoming>Flow_0vtbik3</bpmn:incoming>
       <bpmn:outgoing>Flow_0zwll0x</bpmn:outgoing>
       <bpmn:timerEventDefinition id="TimerEventDefinition_0jq9jnm">
-        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT3M</bpmn:timeDuration>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT15M</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:intermediateCatchEvent>
     <bpmn:sequenceFlow id="Flow_0vtbik3" sourceRef="Gateway_019e67i" targetRef="Event_0yyuvok" />
@@ -90,7 +90,7 @@
     <bpmn:sequenceFlow id="Flow_KCS_Passed" name="OK" sourceRef="Gateway_KCS" targetRef="Activity_0rfojij">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${kcsPassed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:serviceTask id="Activity_0rfojij" name="Trừ Tồn Kho &#38; Ghi Sao Kê" camunda:delegateExpression="${deductInventoryDelegate}">
+    <bpmn:serviceTask id="Activity_0rfojij" name="Xac Nhan Reservation &#38; Ghi Sao Ke" camunda:delegateExpression="${deductInventoryDelegate}">
       <bpmn:incoming>Flow_KCS_Passed</bpmn:incoming>
       <bpmn:outgoing>Flow_To_Customer</bpmn:outgoing>
     </bpmn:serviceTask>

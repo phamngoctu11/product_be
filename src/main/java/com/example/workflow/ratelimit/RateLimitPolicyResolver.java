@@ -17,10 +17,10 @@ public class RateLimitPolicyResolver {
     private final List<String> bypassPatterns = List.of(
             "/ws/**",
             "/camunda/**",
+            "/api/auth/login",
             "/api/payment/momo-callback"
     );
     private final List<RateLimitRule> rules = List.of(
-            sliding("auth-login", Set.of("POST"), Set.of("/api/auth/login"), 5, Duration.ofMinutes(5), true, RateLimitIdentity.IP),
             sliding("auth-register", Set.of("POST"), Set.of("/api/users"), 3, Duration.ofHours(1), true, RateLimitIdentity.IP),
             sliding("payment-create", Set.of("POST"), Set.of("/api/payment/momo-pay"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("upload-image", Set.of("POST"), Set.of("/api/upload/**"), 20, Duration.ofHours(1), true, RateLimitIdentity.USER_OR_IP),

@@ -113,6 +113,11 @@ public class OrderService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
     }
 
+    private Order getOrderForUpdateOrThrow(Long orderId) {
+        return orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+    }
+
     private Task findWorkflowTask(Long orderId, String taskDefinitionKey, String missingMessage) {
         Task task = queryWorkflowTask(orderId, taskDefinitionKey);
         if (task == null) {
@@ -591,7 +596,7 @@ public class OrderService {
             @CacheEvict(value = "product", allEntries = true)
     })
     public void cancelOrder(Long id, String reason) {
-        Order order = getOrderOrThrow(id);
+        Order order = getOrderForUpdateOrThrow(id);
         User user = getCurrentAuthenticatedUser();
 
         if (!order.getUser().getId().equals(user.getId())) {
@@ -682,7 +687,7 @@ public class OrderService {
             @CacheEvict(value = "dashboardStats", allEntries = true)
     })
     public void processMomoCallbackResult(Long orderId, String resultCode) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = getOrderForUpdateOrThrow(orderId);
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
             System.out.println("MoMo callback skipped because order #" + orderId + " was already processed.");
             return;

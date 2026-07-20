@@ -14,7 +14,7 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
-        return new ResponseEntity<>(ApiResponse.error(ex.getStatus(), ex.getMessage()), ex.getStatus());
+        return buildAppExceptionResponse(ex);
     }
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
@@ -44,10 +44,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleGlobalException(Exception ex) {
         AppException appException = findAppException(ex);
         if (appException != null) {
-            return new ResponseEntity<>(
-                    ApiResponse.error(appException.getStatus(), appException.getMessage()),
-                    appException.getStatus()
-            );
+            return buildAppExceptionResponse(appException);
         }
         return new ResponseEntity<>(
                 ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage()),
@@ -64,5 +61,15 @@ public class GlobalExceptionHandler {
             current = current.getCause();
         }
         return null;
+    }
+
+    private ResponseEntity<ApiResponse<Void>> buildAppExceptionResponse(AppException ex) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex instanceof RateLimitExceededException rateLimitExceededException) {
+            String retryAfter = String.valueOf(rateLimitExceededException.getRetryAfterSeconds());
+            response.header("Retry-After", retryAfter);
+            response.header("X-RateLimit-Reset", retryAfter);
+        }
+        return response.body(ApiResponse.error(ex.getStatus(), ex.getMessage()));
     }
 }
