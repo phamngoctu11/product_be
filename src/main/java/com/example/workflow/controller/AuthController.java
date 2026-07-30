@@ -4,7 +4,7 @@ import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.AuthResponse;
 import com.example.workflow.dto.LoginRequest;
 import com.example.workflow.exception.AppException;
-import com.example.workflow.ratelimit.LoginRateLimitService;
+import com.example.workflow.service.redis.LoginRateLimitService;
 import com.example.workflow.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

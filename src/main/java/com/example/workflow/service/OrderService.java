@@ -2,7 +2,6 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.*;
 import com.example.workflow.entity.*;
-import com.example.workflow.event.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
@@ -13,6 +12,8 @@ import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
+import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.redis.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;

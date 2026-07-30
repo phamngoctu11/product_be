@@ -3,7 +3,7 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.ChatUserDTO;
 import com.example.workflow.entity.ChatMessage;
-import com.example.workflow.service.ChatRealtimePublisher;
+import com.example.workflow.service.redis.ChatRealtimePublisher;
 import com.example.workflow.service.ChatService;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;

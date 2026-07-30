@@ -12,6 +12,7 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChatMessageRepository;
 import com.example.workflow.repository.ConsultationRequestRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.redis.ChatPresenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;

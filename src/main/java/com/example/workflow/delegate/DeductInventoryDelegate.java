@@ -3,7 +3,7 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Order;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.InventoryReservationService;
-import com.example.workflow.service.OptionalCacheService;
+import com.example.workflow.service.redis.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;

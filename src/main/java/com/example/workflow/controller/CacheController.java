@@ -1,7 +1,7 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
-import com.example.workflow.service.OptionalCacheService;
+import com.example.workflow.service.redis.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;

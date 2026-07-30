@@ -1,11 +1,11 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.ReceiptMismatchDTO;
-import com.example.workflow.event.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;

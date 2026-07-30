@@ -3,7 +3,6 @@ package com.example.workflow.service;
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.entity.*;
-import com.example.workflow.event.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
@@ -11,6 +10,9 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
+import com.example.workflow.service.redis.CheckoutConcurrencyService;
+import com.example.workflow.service.redis.CheckoutIdempotencyService;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.cache.annotation.CacheEvict;
@@ -50,14 +52,16 @@ public class CartService {
     private final InventoryReservationService inventoryReservationService;
     private final CheckoutConcurrencyService checkoutConcurrencyService;
     private final CheckoutIdempotencyService checkoutIdempotencyService;
+    private final AuthService authService;
 
     @CacheEvict(value = "carts", key = "#userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
+        if(!this.authService.isCurrentUserOwner(userId)){
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
+        }
         if (quantity < 1) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
         }
-
-        getUserOrThrow(userId);
         ProductVariant variant = getActiveVariantOrThrow(variantId);
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
         CartItem existingItem = findCartItem(cart, variantId);

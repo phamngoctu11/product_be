@@ -4,7 +4,7 @@ import com.example.workflow.dto.AuthResponse;
 import com.example.workflow.dto.LoginRequest;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.ratelimit.LoginRateLimitService;
+import com.example.workflow.service.redis.LoginRateLimitService;
 import com.example.workflow.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

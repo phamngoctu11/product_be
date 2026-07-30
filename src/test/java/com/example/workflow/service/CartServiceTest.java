@@ -8,7 +8,6 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
-import com.example.workflow.event.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.nume.OrderStatus;
@@ -21,6 +20,9 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
+import com.example.workflow.service.redis.CheckoutConcurrencyService;
+import com.example.workflow.service.redis.CheckoutIdempotencyService;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import org.camunda.bpm.engine.RuntimeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -125,7 +127,6 @@ class CartServiceTest {
         User user = user(1L);
         ProductVariant variant = variant(2L, "Variant 2", 30.0, 10, false, product(false, null));
         Cart cart = cartWithItems(1L, user);
-        when(userRepository.findById("1")).thenReturn(Optional.of(user));
         when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
         when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 
@@ -145,7 +146,6 @@ class CartServiceTest {
         ProductVariant variant = variant(2L, "Variant 2", 30.0, 10, false, product(false, null));
         CartItem item = cartItem(variant, 4);
         Cart cart = cartWithItems(1L, user, item);
-        when(userRepository.findById("1")).thenReturn(Optional.of(user));
         when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
         when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
 

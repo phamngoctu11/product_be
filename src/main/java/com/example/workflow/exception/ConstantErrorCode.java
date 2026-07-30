@@ -17,7 +17,7 @@ public enum ConstantErrorCode {
     IMAGE_FILE_REQUIRED("Chỉ chấp nhận tệp hình ảnh"),
     IMAGE_UPLOAD_FAILED("Tải hình ảnh lên thất bại: %s"),
     SYSTEM_ERROR("Lỗi hệ thống: %s"),
-
+    NOT_THE_OWNER("Bạn không phải chủ sở hữu của giỏ hàng này."),
     CART_EMPTY("Giỏ hàng trống"),
     PRODUCT_VARIANT_NOT_IN_CART("Biến thể sản phẩm không có trong giỏ hàng"),
     CART_NOT_FOUND("Không tìm thấy giỏ hàng"),

@@ -1,7 +1,7 @@
 package com.example.workflow.config;
 
-import com.example.workflow.service.ChatRealtimePublisher;
-import com.example.workflow.service.ChatRedisSubscriber;
+import com.example.workflow.service.redis.ChatRealtimePublisher;
+import com.example.workflow.service.redis.ChatRedisSubscriber;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;

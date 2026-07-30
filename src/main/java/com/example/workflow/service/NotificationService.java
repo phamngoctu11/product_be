@@ -1,10 +1,10 @@
 package com.example.workflow.service;
 
 import com.example.workflow.entity.Notification;
-import com.example.workflow.event.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.NotificationRequestedEvent;
 import com.example.workflow.repository.NotificationRepository;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;

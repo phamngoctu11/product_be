@@ -1,6 +1,6 @@
 package com.example.workflow.config;
 
-import com.example.workflow.service.OptionalCacheService;
+import com.example.workflow.service.redis.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;

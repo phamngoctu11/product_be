@@ -1,7 +1,7 @@
 package com.example.workflow.listener;
 
-import com.example.workflow.service.ChatPresenceService;
-import com.example.workflow.service.ChatRealtimePublisher;
+import com.example.workflow.service.redis.ChatPresenceService;
+import com.example.workflow.service.redis.ChatRealtimePublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
