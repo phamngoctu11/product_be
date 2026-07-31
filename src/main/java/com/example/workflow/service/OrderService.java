@@ -27,7 +27,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,12 +54,11 @@ public class OrderService {
     private final UserVoucherRepository userVoucherRepository;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
+    private final AuthService authService;
 
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
+        return authService.getCurrentUser();
     }
 
     private User getManagerReviewer(String changerId) {
@@ -117,6 +115,14 @@ public class OrderService {
     private Order getOrderForUpdateOrThrow(Long orderId) {
         return orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private void assertCurrentUserCanViewOrder(Order order) {
+        User currentUser = getCurrentAuthenticatedUser();
+        if (currentUser.getRole() == Role.USER
+                && (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId()))) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
+        }
     }
 
     private Task findWorkflowTask(Long orderId, String taskDefinitionKey, String missingMessage) {
@@ -629,8 +635,10 @@ public class OrderService {
         saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
     }
 
+    @Transactional(readOnly = true)
     public OrderDTO getOrderById(Long id) {
         Order order = getOrderOrThrow(id);
+        assertCurrentUserCanViewOrder(order);
         OrderDTO dto = orderMapper.toDto(order);
         injectImageUrls(order, dto);
         return dto;
@@ -652,6 +660,8 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderStatusHistoryDTO> getOrderHistory(Long orderId) {
+        Order order = getOrderOrThrow(orderId);
+        assertCurrentUserCanViewOrder(order);
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }
@@ -765,10 +775,11 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "#user_id + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getOrdersByUserId(String user_id, Double minPrice, Double maxPrice, Pageable pageable) {
+    @Cacheable(value = "orders", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<OrderListDTO> getMyOrders(Double minPrice, Double maxPrice, Pageable pageable) {
+        String userId = authService.getCurrentUserId();
         return orderRepository.findListDtoByUserId(
-                user_id,
+                userId,
                 List.of(
                         OrderStatus.PENDING_PAYMENT,
                         OrderStatus.PENDING_APPROVAL,
@@ -786,10 +797,11 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "'cancelled-' + #user_id + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<OrderListDTO> getCancelledOrdersByUserId(String user_id, Double minPrice, Double maxPrice, Pageable pageable) {
+    @Cacheable(value = "orders", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-cancelled-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<OrderListDTO> getMyCancelledOrders(Double minPrice, Double maxPrice, Pageable pageable) {
+        String userId = authService.getCurrentUserId();
         return orderRepository.findListDtoByUserIdAndStatus(
-                user_id,
+                userId,
                 OrderStatus.CANCELLED,
                 OrderStatus.DELIVERED,
                 minPrice,

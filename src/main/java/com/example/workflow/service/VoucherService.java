@@ -27,6 +27,7 @@ public class VoucherService {
     private final UserVoucherRepository userVoucherRepository;
     private final UserRepository userRepository;
     private final VoucherMapper voucherMapper;
+    private final AuthService authService;
 
     public List<VoucherTemplateDTO> getActiveTemplates() {
         return templateRepository.findAvailableTemplates(LocalDateTime.now())
@@ -35,7 +36,8 @@ public class VoucherService {
                 .collect(Collectors.toList());
     }
 
-    public List<UserVoucherDTO> getMyWallet(String userId) {
+    public List<UserVoucherDTO> getMyWallet() {
+        String userId = authService.getCurrentUserId();
         return userVoucherRepository.findByUserIdAndIsUsedFalse(userId)
                 .stream()
                 .map(voucherMapper::toUserVoucherDto)
@@ -44,10 +46,11 @@ public class VoucherService {
 
     @Transactional
     @Caching(evict = {
-            @CacheEvict(value = "user", key = "#userId"),
+            @CacheEvict(value = "user", allEntries = true),
             @CacheEvict(value = "users", allEntries = true)
     })
-    public UserVoucherDTO redeemVoucher(String userId, Long templateId) {
+    public UserVoucherDTO redeemVoucher(Long templateId) {
+        String userId = authService.getCurrentUserId();
         LocalDateTime now = LocalDateTime.now();
         User user = getUserOrThrow(userId);
         VoucherTemplate template = getTemplateOrThrow(templateId);

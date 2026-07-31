@@ -41,10 +41,9 @@ import java.util.List;
 public class OrderController {
     private final OrderService orderService;
 
-    @GetMapping("/user/{user_id}")
+    @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyOrders(
-            @PathVariable("user_id") String userId,
+    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
             @RequestParam(required = false) Double minPrice,
             @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
@@ -52,15 +51,14 @@ public class OrderController {
             @PageableDefault(size = 20) Pageable pageable
     ) {
         validatePriceRange(minPrice, maxPrice);
-        Page<OrderListDTO> rs = orderService.getOrdersByUserId(userId, minPrice, maxPrice, pageable);
+        Page<OrderListDTO> rs = orderService.getMyOrders(minPrice, maxPrice, pageable);
         return ResponseEntity.ok(ApiResponse.success(rs));
     }
 
 
-    @GetMapping("/user/{user_id}/cancelled")
+    @GetMapping("/me/cancelled")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getAllMyCancelledOrders(
-            @PathVariable("user_id") String userId,
+    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyCancelledOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
             @RequestParam(required = false) Double minPrice,
             @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
@@ -68,7 +66,7 @@ public class OrderController {
             @PageableDefault(size = 20) Pageable pageable
     ) {
         validatePriceRange(minPrice, maxPrice);
-        Page<OrderListDTO> rs = orderService.getCancelledOrdersByUserId(userId, minPrice, maxPrice, pageable);
+        Page<OrderListDTO> rs = orderService.getMyCancelledOrders(minPrice, maxPrice, pageable);
         return ResponseEntity.ok(ApiResponse.success(rs));
     }
 

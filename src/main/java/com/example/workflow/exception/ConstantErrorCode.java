@@ -88,7 +88,8 @@ public enum ConstantErrorCode {
     USER_NOT_FOUND_TO_UPDATE("Không tìm thấy người dùng cần cập nhật"),
     KEYCLOAK_UNAVAILABLE("Không thể kết nối tới Keycloak"),
     KEYCLOAK_USER_SYNC_FAILED("Không thể đồng bộ người dùng với Keycloak"),
-    KEYCLOAK_USER_NOT_FOUND("Không tìm thấy người dùng trong Keycloak");
+    KEYCLOAK_USER_NOT_FOUND("Không tìm thấy người dùng trong Keycloak"),
+    USER_DATA_ACCESS_FORBIDDEN("Bạn không có quyền truy cập dữ liệu của người dùng khác.");
 
     private final String messageTemplate;
 

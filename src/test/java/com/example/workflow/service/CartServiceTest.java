@@ -107,6 +107,9 @@ class CartServiceTest {
     @Mock
     private CheckoutIdempotencyService checkoutIdempotencyService;
 
+    @Mock
+    private AuthService authService;
+
     @InjectMocks
     private CartService cartService;
 
@@ -120,6 +123,7 @@ class CartServiceTest {
                 .thenReturn(CheckoutConcurrencyService.CheckoutLocks.noop());
         lenient().when(checkoutIdempotencyService.begin(anyString(), nullable(String.class)))
                 .thenReturn(CheckoutIdempotencyService.CheckoutIdempotencyState.disabled());
+        lenient().when(authService.isCurrentUserOwner(anyString())).thenReturn(true);
     }
 
     @Test

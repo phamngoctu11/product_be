@@ -30,20 +30,17 @@ public class VoucherController {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getActiveTemplates()));
     }
 
-    @GetMapping("/wallet/{user_id}")
-    public ResponseEntity<ApiResponse<List<UserVoucherDTO>>> getMyWallet(
-            @PathVariable("user_id") String userId
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(voucherService.getMyWallet(userId)));
+    @GetMapping("/me/wallet")
+    public ResponseEntity<ApiResponse<List<UserVoucherDTO>>> getMyWallet() {
+        return ResponseEntity.ok(ApiResponse.success(voucherService.getMyWallet()));
     }
 
-    @PostMapping("/redeem")
-    public ResponseEntity<ApiResponse<Void>> redeemVoucher(
-            @RequestParam("userId") String userId,
+    @PostMapping("/me/redeem")
+    public ResponseEntity<ApiResponse<Void>> redeemMyVoucher(
             @Positive(message = "Template id must be positive") @RequestParam("templateId") Long templateId
     ) {
         try {
-            voucherService.redeemVoucher(userId, templateId);
+            voucherService.redeemVoucher(templateId);
             return ResponseEntity.ok(ApiResponse.success("Doi ma giam gia thanh cong! Da them vao vi cua ban."));
         } catch (IllegalStateException e) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
