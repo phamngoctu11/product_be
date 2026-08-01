@@ -1,11 +1,13 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.ReputationHistoryDTO;
 import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.nume.Role;
+import com.example.workflow.service.ReputationService;
 import com.example.workflow.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -15,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,6 +32,7 @@ import java.util.List;
 @Validated
 public class UserController {
     private final UserService userService;
+    private final ReputationService reputationService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody UserCreDTO dto) {
@@ -52,6 +56,13 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResDTO>> getMe() {
         return ResponseEntity.ok(ApiResponse.success(userService.getMyProfile()));
+    }
+
+    @GetMapping("/me/reputation-history")
+    public ResponseEntity<ApiResponse<Page<ReputationHistoryDTO>>> getMyReputationHistory(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(reputationService.getMyHistory(pageable)));
     }
 
     @PutMapping("/me")

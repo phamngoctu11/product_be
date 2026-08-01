@@ -131,5 +131,7 @@ public class PendingPaymentReservationTimeoutService {
         optionalCacheService.clear("dashboardStats");
         optionalCacheService.clear("products");
         optionalCacheService.clear("product");
+        optionalCacheService.clear("wishlistProducts");
+        optionalCacheService.clear("userVoucherWallet");
     }
 }

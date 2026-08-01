@@ -19,7 +19,6 @@ import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
-import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
 import com.example.workflow.service.redis.CheckoutIdempotencyService;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -75,9 +74,6 @@ class CartServiceTest {
     private CartItemRepository cartItemRepository;
 
     @Mock
-    private UserVoucherRepository userVoucherRepository;
-
-    @Mock
     private ProductVariantRepository productVariantRepository;
 
     @Mock
@@ -109,6 +105,9 @@ class CartServiceTest {
 
     @Mock
     private AuthService authService;
+
+    @Mock
+    private VoucherService voucherService;
 
     @InjectMocks
     private CartService cartService;

@@ -36,6 +36,7 @@ public class DeductInventoryDelegate implements JavaDelegate {
     private void clearProductCaches() {
         optionalCacheService.clear("products");
         optionalCacheService.clear("product");
+        optionalCacheService.clear("wishlistProducts");
         optionalCacheService.clear("bestSellingProducts");
     }
 }

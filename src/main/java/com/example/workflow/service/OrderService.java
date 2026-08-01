@@ -28,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -55,6 +56,8 @@ public class OrderService {
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
     private final AuthService authService;
+    private final ReputationService reputationService;
+    private final CartService cartService;
 
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
@@ -180,7 +183,7 @@ public class OrderService {
                 user.getEmail(),
                 user.getLastname(),
                 order.getId(),
-                order.getTotalPrice(),
+                resolveFinalPrice(order),
                 paymentMethodLabel
         );
     }
@@ -337,7 +340,8 @@ public class OrderService {
             @CacheEvict(value = "staffOrders", allEntries = true),
             @CacheEvict(value = "dashboardStats", allEntries = true),
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
+            @CacheEvict(value = "product", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true)
     })
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
         Order order = getOrderOrThrow(orderId);
@@ -402,8 +406,13 @@ public class OrderService {
         order.setStatus(OrderStatus.DELIVERED);
         order.setEndOrderTime(LocalDateTime.now());
 
-        currentUser.setReputation(currentUser.getReputation() + 2);
-        userRepository.save(currentUser);
+        reputationService.changeReputation(
+                currentUser,
+                2,
+                "Completed order #" + order.getId(),
+                "ORDER",
+                String.valueOf(order.getId())
+        );
         saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
         eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
 
@@ -569,25 +578,35 @@ public class OrderService {
     }
 
     private int calculateCancellationReputationDeduction(Order order) {
-        double totalPrice = order.getTotalPrice();
-        if (totalPrice < 1_000_000) {
+        double finalPrice = resolveFinalPrice(order);
+        if (finalPrice < 1_000_000) {
             return 1;
         }
-        if (totalPrice <= 5_000_000) {
+        if (finalPrice <= 5_000_000) {
             return 2;
         }
-        if (totalPrice <= 10_000_000) {
+        if (finalPrice <= 10_000_000) {
             return 3;
         }
         return 5;
     }
 
-    private void deductUserReputation(User user, int deduction) {
-        if (user.getReputation() < deduction) {
-            throw new IllegalStateException("Diem uy tin cua ban khong du de tu huy don nay.");
+    private double resolveFinalPrice(Order order) {
+        if (order.getFinalPrice() != null) {
+            return order.getFinalPrice();
         }
-        user.setReputation(user.getReputation() - deduction);
-        userRepository.save(user);
+        double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
+        return Math.max(0.0, order.getTotalPrice() - discountAmount);
+    }
+
+    private void deductUserReputation(User user, int deduction, Long orderId) {
+        reputationService.changeReputation(
+                user,
+                -deduction,
+                "Cancelled order #" + orderId,
+                "ORDER",
+                String.valueOf(orderId)
+        );
     }
 
     @Transactional
@@ -600,7 +619,8 @@ public class OrderService {
             @CacheEvict(value = "user", allEntries = true),
             @CacheEvict(value = "dashboardStats", allEntries = true),
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
+            @CacheEvict(value = "product", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true)
     })
     public void cancelOrder(Long id, String reason) {
         Order order = getOrderForUpdateOrThrow(id);
@@ -615,7 +635,7 @@ public class OrderService {
         }
 
         OrderStatus oldStatus = order.getStatus();
-        deductUserReputation(user, calculateCancellationReputationDeduction(order));
+        deductUserReputation(user, calculateCancellationReputationDeduction(order), id);
         deleteOrderProcessIfExists(id, "Customer cancelled order");
         inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");
         restoreVoucher(order.getUserVoucher());
@@ -633,6 +653,76 @@ public class OrderService {
 
         saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
         saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public ReorderResponseDTO reorderOrder(Long orderId) {
+        Order order = getOrderOrThrow(orderId);
+        String ownerId = order.getUser() == null ? null : order.getUser().getId();
+        if (!authService.isCurrentUserOwner(ownerId)) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
+        }
+        if (order.getStatus() != OrderStatus.DELIVERED && order.getStatus() != OrderStatus.CANCELLED) {
+            throw new AppException(
+                    HttpStatus.BAD_REQUEST,
+                    ConstantErrorCode.BAD_REQUEST_DETAIL,
+                    "Only delivered or cancelled orders can be reordered."
+            );
+        }
+
+        List<ReorderItemDTO> addedItems = new ArrayList<>();
+        List<ReorderItemDTO> skippedItems = new ArrayList<>();
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            return new ReorderResponseDTO(0, 0, addedItems, skippedItems);
+        }
+
+        for (OrderItem item : order.getItems()) {
+            Long variantId = item == null || item.getProductVariant() == null
+                    ? null
+                    : item.getProductVariant().getId();
+            String variantName = buildReorderVariantName(item, variantId);
+            int quantity = item == null ? 0 : Math.max(item.getQuantity(), 1);
+
+            try {
+                if (variantId == null) {
+                    throw new AppException(
+                            HttpStatus.BAD_REQUEST,
+                            ConstantErrorCode.BAD_REQUEST_DETAIL,
+                            "Order item does not have a valid product variant."
+                    );
+                }
+                validateReorderItemAvailable(item, variantId, quantity);
+                cartService.startAddToCartProcess(ownerId, variantId, quantity);
+                addedItems.add(new ReorderItemDTO(variantId, variantName, quantity, null));
+            } catch (AppException e) {
+                skippedItems.add(new ReorderItemDTO(variantId, variantName, quantity, e.getMessage()));
+            } catch (RuntimeException e) {
+                String skipReason = e.getMessage() == null ? "Cannot add this item to cart." : e.getMessage();
+                skippedItems.add(new ReorderItemDTO(variantId, variantName, quantity, skipReason));
+            }
+        }
+
+        return new ReorderResponseDTO(addedItems.size(), skippedItems.size(), addedItems, skippedItems);
+    }
+
+    private void validateReorderItemAvailable(OrderItem item, Long variantId, int quantity) {
+        ProductVariant variant = item == null ? null : item.getProductVariant();
+        if (variant == null || variant.isDelete() || variant.getProduct() == null || variant.getProduct().isDelete()) {
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND);
+        }
+        if (variant.getQuantity() < quantity) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variantId);
+        }
+    }
+
+    private String buildReorderVariantName(OrderItem item, Long variantId) {
+        if (item != null
+                && item.getProductVariant() != null
+                && item.getProductVariant().getVariantName() != null
+                && !item.getProductVariant().getVariantName().isBlank()) {
+            return item.getProductVariant().getVariantName();
+        }
+        return variantId == null ? "Unknown variant" : "Variant #" + variantId;
     }
 
     @Transactional(readOnly = true)
@@ -684,6 +774,7 @@ public class OrderService {
         optionalCacheService.clear("users");
         optionalCacheService.clear("dashboardStats");
         optionalCacheService.evict("user", userId);
+        optionalCacheService.clear("userVoucherWallet");
     }
 
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {

@@ -46,9 +46,14 @@ public class ProductService {
     private final InventoryTransactionService inventoryTransactionService;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<ProductDTO> getAllProducts(Pageable pageable) {
-        return repository.findAllByStockPriority(normalizePageable(pageable)).map(mapper::toDto);
+    @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable)")
+    public Page<ProductDTO> getAllProducts(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {
+        return repository.searchByStockPriority(
+                normalizeSearchKeyword(keyword),
+                normalizePrice(minPrice),
+                normalizePrice(maxPrice),
+                normalizePageable(pageable)
+        ).map(mapper::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +72,10 @@ public class ProductService {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true)
+            @CacheEvict(value = "bestSellingProducts", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public ProductDTO createProduct(ProductDTO dto, String userId) {
         User actor = getActor(userId);
@@ -84,7 +92,10 @@ public class ProductService {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
             @CacheEvict(value = "product", key = "#id"),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public void updateProduct(Long id, ProductDTO dto, String userId) {
         User actor = getActor(userId);
@@ -144,7 +155,10 @@ public class ProductService {
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "product", key = "#id"),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+            @CacheEvict(value = "staffCommissionDetails", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);
@@ -158,7 +172,10 @@ public class ProductService {
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#productId")
+            @CacheEvict(value = "product", key = "#productId"),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
         User actor = getActor(userId);
@@ -180,7 +197,10 @@ public class ProductService {
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
+            @CacheEvict(value = "product", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
         User actor = getActor(userId);
@@ -197,7 +217,10 @@ public class ProductService {
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
+            @CacheEvict(value = "product", key = "#id"),
+            @CacheEvict(value = "wishlistProducts", allEntries = true),
+            @CacheEvict(value = "wishlistStatus", allEntries = true),
+            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
     })
     public void deleteProduct(Long id, String userId) {
         getActor(userId);
@@ -294,6 +317,26 @@ public class ProductService {
         int page = pageable == null ? 0 : pageable.getPageNumber();
         int size = pageable == null ? 20 : pageable.getPageSize();
         return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+    }
+
+    public static String productsCacheKey(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {
+        int page = pageable == null ? 0 : Math.max(pageable.getPageNumber(), 0);
+        int size = pageable == null ? 20 : Math.min(Math.max(pageable.getPageSize(), 1), 100);
+        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+        String normalizedMinPrice = minPrice == null || minPrice < 0 ? "" : String.valueOf(minPrice);
+        String normalizedMaxPrice = maxPrice == null || maxPrice < 0 ? "" : String.valueOf(maxPrice);
+        return normalizedKeyword + '-' + normalizedMinPrice + '-' + normalizedMaxPrice + '-' + page + '-' + size;
+    }
+
+    private String normalizeSearchKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        return keyword.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Double normalizePrice(Double price) {
+        return price == null || price < 0 ? null : price;
     }
 
     private BestSellerRange resolveBestSellerRange(String period) {

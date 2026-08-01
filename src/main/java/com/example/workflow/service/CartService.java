@@ -40,7 +40,6 @@ public class CartService {
     private final CartMapper cartMapper;
     private final OrderRepository orderRepository;
     private final CartItemRepository cartItemRepository;
-    private final UserVoucherRepository userVoucherRepository;
     private final ProductVariantRepository productVariantRepository;
 
     private final RuntimeService runtimeService;
@@ -53,12 +52,11 @@ public class CartService {
     private final CheckoutConcurrencyService checkoutConcurrencyService;
     private final CheckoutIdempotencyService checkoutIdempotencyService;
     private final AuthService authService;
+    private final VoucherService voucherService;
 
     @CacheEvict(value = "carts", key = "#userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
-        if(!this.authService.isCurrentUserOwner(userId)){
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
-        }
+        assertCurrentUserOwnsCart(userId);
         if (quantity < 1) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
         }
@@ -77,6 +75,7 @@ public class CartService {
 
     @CacheEvict(value = "carts", key = "#userId")
     public void updateQuantity(String userId, Long variantId, int newQuantity) {
+        assertCurrentUserOwnsCart(userId);
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY);
         CartItem item = findCartItemOrThrow(cart, variantId);
         if (newQuantity <= 0) {
@@ -89,6 +88,7 @@ public class CartService {
 
     @CacheEvict(value = "carts", key = "#userId")
     public void removeFromCart(String userId, Long variantId) {
+        assertCurrentUserOwnsCart(userId);
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
         cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
         cartRepository.save(cart);
@@ -97,6 +97,7 @@ public class CartService {
     @Transactional(readOnly = true)
     @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
     public CartResDTO getCartByUserId(String userId) {
+        assertCurrentUserOwnsCart(userId);
         Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY_VI);
 
         CartResDTO dto = cartMapper.toDto(cart);
@@ -141,7 +142,8 @@ public class CartService {
             @CacheEvict(value = "staffOrders", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "dashboardStats", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "products", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "product", allEntries = true, beforeInvocation = true)
+            @CacheEvict(value = "product", allEntries = true, beforeInvocation = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true, beforeInvocation = true)
     })
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Map<String, String> approveCart(
@@ -152,6 +154,7 @@ public class CartService {
             String note,
             String idempotencyKey
     ) {
+        assertCurrentUserOwnsCart(userId);
         CheckoutIdempotencyService.CheckoutIdempotencyState idempotencyState =
                 checkoutIdempotencyService.begin(userId, idempotencyKey);
         if (idempotencyState.isReplay()) {
@@ -172,6 +175,12 @@ public class CartService {
         } catch (Exception e) {
             checkoutIdempotencyService.fail(idempotencyState);
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
+        }
+    }
+
+    private void assertCurrentUserOwnsCart(String userId) {
+        if (!authService.isCurrentUserOwner(userId)) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
         }
     }
 
@@ -214,8 +223,8 @@ public class CartService {
         Order order = createOrder(user, paymentMethod, note);
         double totalPrice = addCheckoutItems(order, itemsToCheckout);
 
-        UserVoucher appliedVoucher = applyVoucherForCheckout(userVoucherId, userId, totalPrice);
-        double discountAmount = calculateDiscountAmount(appliedVoucher, totalPrice);
+        UserVoucher appliedVoucher = voucherService.useVoucherForCheckout(userVoucherId, userId, totalPrice);
+        double discountAmount = voucherService.calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
         inventoryReservationService.reserve(order);
         Order savedOrder = orderRepository.saveAndFlush(order);
@@ -365,7 +374,7 @@ public class CartService {
                 user.getEmail(),
                 user.getLastname(),
                 savedOrder.getId(),
-                savedOrder.getTotalPrice(),
+                savedOrder.getFinalPrice(),
                 "Thanh toan khi nhan hang (COD)"
         );
     }
@@ -417,49 +426,6 @@ public class CartService {
 
     private double calculateCartItemAmount(CartItem cartItem) {
         return cartItem.getQuantity() * cartItem.getProductVariant().getPrice();
-    }
-
-    private UserVoucher applyVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
-        if (userVoucherId == null) {
-            return null;
-        }
-
-        UserVoucher voucher = userVoucherRepository.findById(userVoucherId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
-        validateVoucherForCheckout(voucher, userId, totalPrice);
-        voucher.setUsed(true);
-        voucher.setUsedDate(LocalDateTime.now());
-        return userVoucherRepository.save(voucher);
-    }
-
-    private void validateVoucherForCheckout(UserVoucher voucher, String userId, double totalPrice) {
-        if (voucher.isUsed()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
-        }
-        if (voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
-        }
-        if (!voucher.getUser().getId().equals(userId)) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.VOUCHER_INVALID);
-        }
-        if (totalPrice < voucher.getTemplate().getMinOrderValue()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
-        }
-    }
-
-    private double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
-        if (voucher == null) {
-            return 0.0;
-        }
-        if (voucher.getTemplate().getDiscountPercent() <= 0) {
-            return voucher.getTemplate().getMaxDiscountAmount();
-        }
-
-        double discountAmount = (totalPrice * voucher.getTemplate().getDiscountPercent()) / 100;
-        if (voucher.getTemplate().getMaxDiscountAmount() > 0 && discountAmount > voucher.getTemplate().getMaxDiscountAmount()) {
-            return voucher.getTemplate().getMaxDiscountAmount();
-        }
-        return discountAmount;
     }
 
 }

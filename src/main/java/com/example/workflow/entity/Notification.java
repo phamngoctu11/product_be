@@ -1,10 +1,10 @@
 package com.example.workflow.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,5 +27,5 @@ public class Notification {
     // Đánh dấu đã đọc hay chưa (để làm mất dấu chấm đỏ trên chuông)
     private boolean isRead = false;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now(Clock.systemUTC());
 }

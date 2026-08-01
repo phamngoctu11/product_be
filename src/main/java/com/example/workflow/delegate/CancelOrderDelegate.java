@@ -56,6 +56,8 @@ public class CancelOrderDelegate implements JavaDelegate {
         optionalCacheService.clear("dashboardStats");
         optionalCacheService.clear("products");
         optionalCacheService.clear("product");
+        optionalCacheService.clear("wishlistProducts");
+        optionalCacheService.clear("userVoucherWallet");
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
     }
 

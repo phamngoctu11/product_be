@@ -1,6 +1,7 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.CartVoucherOptionsDTO;
 import com.example.workflow.dto.UserVoucherDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
 import com.example.workflow.entity.VoucherTemplate;
@@ -12,6 +13,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,17 +33,27 @@ public class VoucherController {
     }
 
     @GetMapping("/me/wallet")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<List<UserVoucherDTO>>> getMyWallet() {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getMyWallet()));
     }
 
+    @GetMapping("/me/cart-options")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<ApiResponse<CartVoucherOptionsDTO>> getMyCartVoucherOptions(
+            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(voucherService.getCartVoucherOptions(subtotal)));
+    }
+
     @PostMapping("/me/redeem")
-    public ResponseEntity<ApiResponse<Void>> redeemMyVoucher(
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<ApiResponse<UserVoucherDTO>> redeemMyVoucher(
             @Positive(message = "Template id must be positive") @RequestParam("templateId") Long templateId
     ) {
         try {
-            voucherService.redeemVoucher(templateId);
-            return ResponseEntity.ok(ApiResponse.success("Doi ma giam gia thanh cong! Da them vao vi cua ban."));
+            UserVoucherDTO voucher = voucherService.redeemVoucher(templateId);
+            return ResponseEntity.ok(ApiResponse.success("Doi ma giam gia thanh cong! Da them vao vi cua ban.", voucher));
         } catch (IllegalStateException e) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         } catch (Exception e) {
@@ -50,6 +62,7 @@ public class VoucherController {
     }
 
     @PostMapping("/admin/campaigns")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
     public ResponseEntity<ApiResponse<VoucherTemplate>> createCampaign(@Valid @RequestBody VoucherTemplate template) {
         VoucherTemplate newCampaign = voucherService.createNewVoucherCampaign(template);
         return ResponseEntity.ok(ApiResponse.success(newCampaign));

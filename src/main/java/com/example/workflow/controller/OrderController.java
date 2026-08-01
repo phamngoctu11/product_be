@@ -7,6 +7,7 @@ import com.example.workflow.dto.OrderStatusHistoryDTO;
 import com.example.workflow.dto.ReceiptComplaintRequest;
 import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
+import com.example.workflow.dto.ReorderResponseDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
@@ -42,7 +43,7 @@ public class OrderController {
     private final OrderService orderService;
 
     @GetMapping("/me")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
             @RequestParam(required = false) Double minPrice,
@@ -57,7 +58,7 @@ public class OrderController {
 
 
     @GetMapping("/me/cancelled")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyCancelledOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
             @RequestParam(required = false) Double minPrice,
@@ -100,8 +101,17 @@ public class OrderController {
         }
     }
 
+    @PostMapping("/{order_id}/reorder")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<ApiResponse<ReorderResponseDTO>> reorderOrder(
+            @Positive @PathVariable("order_id") Long orderId
+    ) {
+        ReorderResponseDTO response = orderService.reorderOrder(orderId);
+        return ResponseEntity.ok(ApiResponse.success("Reorder processed", response));
+    }
+
     @PostMapping("/customer/confirm-receipt/{orderId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> confirmReceipt(
             @Positive @PathVariable Long orderId,
             @Valid @RequestBody ReceiptConfirmRequest request
@@ -117,7 +127,7 @@ public class OrderController {
     }
 
     @PostMapping("/customer/receipt-complaint/{orderId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> sendReceiptComplaint(
             @Positive @PathVariable Long orderId,
             @Valid @RequestBody ReceiptComplaintRequest request

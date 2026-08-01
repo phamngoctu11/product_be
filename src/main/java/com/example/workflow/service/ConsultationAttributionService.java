@@ -199,7 +199,8 @@ public class ConsultationAttributionService {
             @CacheEvict(value = "staffCommissionDetails", allEntries = true),
             @CacheEvict(value = "consultationReviews", allEntries = true),
             @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true)
+            @CacheEvict(value = "products", allEntries = true),
+            @CacheEvict(value = "wishlistProducts", allEntries = true)
     })
     public ConsultationReviewDTO createReview(Long attributionId, ConsultationReviewRequest request) {
         User user = getCurrentUser();

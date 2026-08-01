@@ -11,6 +11,7 @@ import com.example.workflow.service.OrderService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +34,7 @@ public class MomoController {
     }
 
     @PostMapping("/momo-pay")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(
             @Valid @RequestBody MomoPaymentRequest request
     ) {

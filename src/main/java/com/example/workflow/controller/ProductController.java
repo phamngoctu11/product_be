@@ -36,8 +36,13 @@ public class ProductController {
 
     // API GET cho phép tất cả mọi người (kể cả khách chưa đăng nhập) xem
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<ProductDTO>>> getAllProducts(@PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(service.getAllProducts(pageable)));
+    public ResponseEntity<ApiResponse<Page<ProductDTO>>> getAllProducts(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "minPrice", required = false) Double minPrice,
+            @RequestParam(value = "maxPrice", required = false) Double maxPrice,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(service.getAllProducts(keyword, minPrice, maxPrice, pageable)));
     }
 
     @GetMapping("/best-selling")
