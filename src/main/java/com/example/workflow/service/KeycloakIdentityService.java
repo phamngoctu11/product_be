@@ -107,6 +107,16 @@ public class KeycloakIdentityService {
         updateProfile(adminToken, userId, username, user.getFirstname(), user.getLastname(), user.getEmail());
     }
 
+    public void resetPassword(String userId, String newPassword, boolean temporary) {
+        String adminToken = getAdminToken();
+        Map<String, Object> credential = Map.of(
+                "type", "password",
+                "value", newPassword,
+                "temporary", temporary
+        );
+        exchangeAdmin(adminUrl("/users/" + userId + "/reset-password"), HttpMethod.PUT, adminToken, credential, Void.class);
+    }
+
     private void updateProfile(
             String adminToken,
             String userId,

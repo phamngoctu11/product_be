@@ -109,4 +109,26 @@ class KeycloakIdentityServiceTest {
 
         server.verify();
     }
+
+    @Test
+    void resetPasswordUsesKeycloakAdminResetPasswordEndpoint() {
+        String adminBase = "http://localhost:8180/admin/realms/my-workflow-dev";
+        server.expect(requestTo("http://localhost:8180/realms/master/protocol/openid-connect/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"access_token\":\"admin-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(adminBase + "/users/keycloak-user-id/reset-password"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().json("""
+                        {
+                          "type": "password",
+                          "value": "newSecret123",
+                          "temporary": false
+                        }
+                        """))
+                .andRespond(withSuccess());
+
+        service.resetPassword("keycloak-user-id", "newSecret123", false);
+
+        server.verify();
+    }
 }

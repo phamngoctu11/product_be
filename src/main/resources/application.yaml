@@ -2,6 +2,7 @@ server:
   port: 8080
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
   rate-limit:
     enabled: ${APP_RATE_LIMIT_ENABLED:true}
     login-credential:

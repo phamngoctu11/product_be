@@ -21,6 +21,8 @@ public class RateLimitPolicyResolver {
             "/api/payment/momo-callback"
     );
     private final List<RateLimitRule> rules = List.of(
+            sliding("auth-forgot-password", Set.of("POST"), Set.of("/api/auth/forgot-password"), 5, Duration.ofHours(1), true, RateLimitIdentity.IP),
+            sliding("auth-reset-password", Set.of("POST"), Set.of("/api/auth/reset-password"), 10, Duration.ofMinutes(15), true, RateLimitIdentity.IP),
             sliding("auth-register", Set.of("POST"), Set.of("/api/users"), 3, Duration.ofHours(1), true, RateLimitIdentity.IP),
             sliding("payment-create", Set.of("POST"), Set.of("/api/payment/momo-pay"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("upload-image", Set.of("POST"), Set.of("/api/upload/**"), 20, Duration.ofHours(1), true, RateLimitIdentity.USER_OR_IP),

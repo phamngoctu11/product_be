@@ -80,6 +80,10 @@ public enum ConstantErrorCode {
     INVALID_BEST_SELLER_PERIOD("Khoảng thời gian phải là một trong các giá trị: ngày, tuần, tháng"),
 
     PASSWORD_REQUIRED("Mật khẩu là bắt buộc"),
+    PASSWORD_CONFIRMATION_MISMATCH("Xác nhận mật khẩu không khớp"),
+    PASSWORD_RESET_TOKEN_INVALID("Liên kết đặt lại mật khẩu không hợp lệ"),
+    PASSWORD_RESET_TOKEN_EXPIRED("Liên kết đặt lại mật khẩu đã hết hạn"),
+    PASSWORD_UNCHANGED("Mật khẩu mới phải khác mật khẩu hiện tại"),
     USERNAME_ALREADY_EXISTS("Tên đăng nhập đã tồn tại"),
     EMAIL_ALREADY_EXISTS("Địa chỉ thư điện tử đã tồn tại"),
     PHONE_ALREADY_EXISTS("Số điện thoại đã tồn tại"),

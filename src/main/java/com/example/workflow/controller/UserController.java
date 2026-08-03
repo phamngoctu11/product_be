@@ -1,6 +1,7 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.ChangePasswordRequest;
 import com.example.workflow.dto.ReputationHistoryDTO;
 import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
@@ -9,6 +10,7 @@ import com.example.workflow.dto.UserResDTO;
 import com.example.workflow.nume.Role;
 import com.example.workflow.service.ReputationService;
 import com.example.workflow.service.UserService;
+import com.example.workflow.service.PasswordService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -33,6 +35,7 @@ import java.util.List;
 public class UserController {
     private final UserService userService;
     private final ReputationService reputationService;
+    private final PasswordService passwordService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody UserCreDTO dto) {
@@ -60,7 +63,7 @@ public class UserController {
 
     @GetMapping("/me/reputation-history")
     public ResponseEntity<ApiResponse<Page<ReputationHistoryDTO>>> getMyReputationHistory(
-            @PageableDefault(size = 20) Pageable pageable
+            @PageableDefault(size = 5) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(reputationService.getMyHistory(pageable)));
     }
@@ -70,6 +73,14 @@ public class UserController {
             @Valid @RequestBody UserProfileUpdateDTO request
     ) {
         return ResponseEntity.ok(ApiResponse.success(userService.updateMyProfile(request)));
+    }
+
+    @PutMapping("/me/password")
+    public ResponseEntity<ApiResponse<Void>> changeMyPassword(
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        passwordService.changeCurrentUserPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Doi mat khau thanh cong."));
     }
 
     @GetMapping("/{id}")

@@ -4,6 +4,7 @@ import com.example.workflow.dto.AuthResponse;
 import com.example.workflow.dto.LoginRequest;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.service.PasswordService;
 import com.example.workflow.service.redis.LoginRateLimitService;
 import com.example.workflow.service.AuthService;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,8 @@ import static org.mockito.Mockito.when;
 class AuthControllerTest {
     private final AuthService authService = mock(AuthService.class);
     private final LoginRateLimitService loginRateLimitService = mock(LoginRateLimitService.class);
-    private final AuthController controller = new AuthController(authService, loginRateLimitService);
+    private final PasswordService passwordService = mock(PasswordService.class);
+    private final AuthController controller = new AuthController(authService, loginRateLimitService, passwordService);
 
     @Test
     void loginChecksCredentialWindowAndClearsFailuresAfterSuccess() {

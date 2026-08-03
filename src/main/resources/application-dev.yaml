@@ -15,6 +15,7 @@ spring:
 
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost}
 

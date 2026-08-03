@@ -8,6 +8,7 @@ import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
+import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
@@ -145,6 +146,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED -> handleOrderConfirmationEmailRequested(payload);
             case EventTypes.ORDER_CANCELLATION_EMAIL_REQUESTED -> handleOrderCancellationEmailRequested(payload);
             case EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED -> handleReceiptComplaintEmailRequested(payload);
+            case EventTypes.PASSWORD_RESET_EMAIL_REQUESTED -> handlePasswordResetEmailRequested(payload);
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
@@ -195,6 +197,16 @@ public class RedisStreamEventConsumer {
                 event.customerEmail(),
                 event.note(),
                 event.mismatches()
+        );
+    }
+
+    private void handlePasswordResetEmailRequested(String payload) {
+        PasswordResetEmailRequestedEvent event = readPayload(payload, PasswordResetEmailRequestedEvent.class);
+        emailService.sendPasswordResetEmailNow(
+                event.toEmail(),
+                event.customerName(),
+                event.resetLink(),
+                event.expiresInMinutes()
         );
     }
 

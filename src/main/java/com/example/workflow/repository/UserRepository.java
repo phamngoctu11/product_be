@@ -17,6 +17,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, String> {
     boolean existsByUsername(String username);
     Optional<User> findByUsername(String username);
+    Optional<User> findByEmailIgnoreCaseAndIsDeleteFalse(String email);
+    Optional<User> findByUsernameIgnoreCaseAndIsDeleteFalse(String username);
     @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role,u.avatarUrl) FROM User u")//where u.isDelete = false
     Page<UserListDTO> findAllCustom(Pageable pageable);
 

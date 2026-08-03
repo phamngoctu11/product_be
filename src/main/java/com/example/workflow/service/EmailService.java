@@ -4,6 +4,7 @@ import com.example.workflow.dto.ReceiptMismatchDTO;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
+import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import jakarta.mail.MessagingException;
@@ -129,6 +130,28 @@ public class EmailService {
         }
     }
 
+    public void sendPasswordResetEmail(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
+        eventPublisher.publishAfterCommit(
+                EventTypes.PASSWORD_RESET_EMAIL_REQUESTED,
+                new PasswordResetEmailRequestedEvent(toEmail, customerName, resetLink, expiresInMinutes)
+        );
+    }
+
+    public void sendPasswordResetEmailNow(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(toEmail);
+            helper.setSubject("Dat lai mat khau tai khoan ShopVN");
+            helper.setText(buildPasswordResetHtml(customerName, resetLink, expiresInMinutes), true);
+
+            mailSender.send(message);
+            log.info("Sent password reset email to {}", toEmail);
+        } catch (MessagingException | RuntimeException e) {
+            log.warn("Optional password reset email failed for {}: {}", toEmail, e.getMessage());
+        }
+    }
+
     private String buildReceiptComplaintHtml(
             Long orderId,
             String customerName,
@@ -176,6 +199,29 @@ public class EmailService {
                 escapeHtml(customerEmail),
                 escapeHtml(note),
                 rows
+        );
+    }
+
+    private String buildPasswordResetHtml(String customerName, String resetLink, int expiresInMinutes) {
+        return """
+                <html>
+                <body style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
+                    <h2>Dat lai mat khau</h2>
+                    <p>Xin chao %s,</p>
+                    <p>Chung toi da nhan duoc yeu cau dat lai mat khau cho tai khoan cua ban.</p>
+                    <p>
+                        <a href="%s" style="display:inline-block;padding:12px 18px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">
+                            Dat lai mat khau
+                        </a>
+                    </p>
+                    <p>Duong dan nay co hieu luc trong %s phut va chi su dung duoc mot lan.</p>
+                    <p>Neu ban khong yeu cau thao tac nay, vui long bo qua email nay.</p>
+                </body>
+                </html>
+                """.formatted(
+                escapeHtml(customerName),
+                escapeHtml(resetLink),
+                expiresInMinutes
         );
     }
 

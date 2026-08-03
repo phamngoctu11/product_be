@@ -82,7 +82,7 @@ public class ReputationService {
 
     private Pageable normalizePageable(Pageable pageable) {
         int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        int size = pageable == null ? 5 : pageable.getPageSize();
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
     }
 }

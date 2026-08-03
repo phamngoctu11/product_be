@@ -2,8 +2,11 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.AuthResponse;
+import com.example.workflow.dto.ForgotPasswordRequest;
 import com.example.workflow.dto.LoginRequest;
+import com.example.workflow.dto.ResetPasswordRequest;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.service.PasswordService;
 import com.example.workflow.service.redis.LoginRateLimitService;
 import com.example.workflow.service.AuthService;
 import jakarta.validation.Valid;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final AuthService authService;
     private final LoginRateLimitService loginRateLimitService;
+    private final PasswordService passwordService;
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
@@ -35,5 +39,17 @@ public class AuthController {
             }
             throw ex;
         }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordService.requestPasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.success("Neu tai khoan ton tai, lien ket dat lai mat khau se duoc gui qua email."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Dat lai mat khau thanh cong."));
     }
 }
