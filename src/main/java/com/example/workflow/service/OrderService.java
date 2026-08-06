@@ -58,6 +58,7 @@ public class OrderService {
     private final AuthService authService;
     private final ReputationService reputationService;
     private final CartService cartService;
+    private final ProductReviewRepository productReviewRepository;
 
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
@@ -415,6 +416,13 @@ public class OrderService {
         );
         saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
         eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
+        saveAndSendNotification(
+                "Danh gia san pham",
+                "Don hang #" + orderId + " da hoan tat. Hay chia se trai nghiem cua ban cho tung san pham.",
+                orderId,
+                currentUser.getId(),
+                "/topic/user-notifications/" + currentUser.getId()
+        );
 
         taskService.complete(task.getId());
 
@@ -731,6 +739,7 @@ public class OrderService {
         assertCurrentUserCanViewOrder(order);
         OrderDTO dto = orderMapper.toDto(order);
         injectImageUrls(order, dto);
+        injectReviewStatuses(dto);
         return dto;
     }
 
@@ -746,6 +755,30 @@ public class OrderService {
                 }
             }
         }
+    }
+
+    private void injectReviewStatuses(OrderDTO dto) {
+        if (dto.getItems() == null || dto.getItems().isEmpty()) {
+            return;
+        }
+
+        List<Long> orderItemIds = dto.getItems().stream()
+                .map(OrderItemDTO::getOrderItemId)
+                .filter(id -> id != null)
+                .toList();
+        if (orderItemIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Long> reviewIdByOrderItemId = productReviewRepository.findByOrderItem_IdIn(orderItemIds)
+                .stream()
+                .collect(Collectors.toMap(review -> review.getOrderItem().getId(), ProductReview::getId));
+
+        dto.getItems().forEach(item -> {
+            Long reviewId = reviewIdByOrderItemId.get(item.getOrderItemId());
+            item.setReviewed(reviewId != null);
+            item.setReviewId(reviewId);
+        });
     }
 
     @Transactional(readOnly = true)

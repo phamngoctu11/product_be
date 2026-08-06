@@ -70,6 +70,11 @@ public enum ConstantErrorCode {
     ORDER_ITEM_VARIANT_INVALID("Sản phẩm trong đơn hàng không có biến thể hợp lệ."),
     CANNOT_CANCEL_ANOTHER_USERS_ORDER("Bạn không thể hủy đơn hàng của người dùng khác"),
     ORDER_CANNOT_BE_CANCELLED("Đơn hàng đã được duyệt hoặc xử lý nên người dùng không thể hủy"),
+    ORDER_ITEM_NOT_FOUND("Không tìm thấy sản phẩm trong đơn hàng"),
+    PRODUCT_REVIEW_NOT_ALLOWED("Chỉ có thể đánh giá sản phẩm đã nhận hàng"),
+    PRODUCT_REVIEW_ALREADY_EXISTS("Sản phẩm này trong đơn hàng đã được đánh giá"),
+    PRODUCT_REVIEW_NOT_FOUND("Không tìm thấy đánh giá sản phẩm"),
+    PRODUCT_REVIEW_CONTENT_REQUIRED("Vui lòng chọn số sao, nhập bình luận hoặc thêm hình ảnh để đánh giá"),
 
     PRODUCT_NOT_FOUND("Không tìm thấy sản phẩm"),
     VARIANT_NOT_IN_PRODUCT("Biến thể không thuộc sản phẩm này: %s"),

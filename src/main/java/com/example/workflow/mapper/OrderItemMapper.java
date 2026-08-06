@@ -12,8 +12,15 @@ import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring")
 public interface OrderItemMapper {
+    @Mapping(source = "id", target = "orderItemId")
     @Mapping(source = "productVariant.id", target = "variantId")
+    @Mapping(source = "productVariant.product.id", target = "productId")
+    @Mapping(source = "productVariant.product.productName", target = "productName")
     @Mapping(source = "productVariant.variantName", target = "variantName")
+    @Mapping(source = "productVariant.attributes", target = "attributes")
+    @Mapping(target = "reviewed", ignore = true)
+    @Mapping(target = "reviewId", ignore = true)
+    @Mapping(target = "imageUrl", ignore = true)
         // Note: Trường price của orderItem không cần map từ variant vì bảng OrderItem đã lưu sẵn price lúc chốt đơn rồi
     OrderItemDTO toDto(OrderItem orderItem);
     default ItemCheckRequest toCheckRequest(OrderItem orderItem) {
