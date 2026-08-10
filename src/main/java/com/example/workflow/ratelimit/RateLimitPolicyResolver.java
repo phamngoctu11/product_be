@@ -27,7 +27,7 @@ public class RateLimitPolicyResolver {
             sliding("payment-create", Set.of("POST"), Set.of("/api/payment/momo-pay"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("upload-image", Set.of("POST"), Set.of("/api/upload/**"), 20, Duration.ofHours(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("voucher-redeem", Set.of("POST"), Set.of("/api/vouchers/redeem"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
-            sliding("cart-write", WRITE_METHODS, Set.of("/api/cart/add", "/api/cart/update", "/api/cart/remove"), 60, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
+            sliding("cart-write", WRITE_METHODS, Set.of("/api/cart/items", "/api/cart/items/**"), 60, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("order-create", Set.of("POST"), Set.of("/api/cart/approve/**"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("order-write", WRITE_METHODS, Set.of("/api/orders/**"), 20, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("consultation-write", WRITE_METHODS, Set.of("/api/consultations/**", "/api/consultations", "/api/consultation-attributions/*/review"), 20, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),

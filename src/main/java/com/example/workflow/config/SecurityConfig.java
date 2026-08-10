@@ -46,6 +46,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/product-reviews/products/**", "/api/product-reviews/variants/*/public", "/api/product-reviews/variants/*/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/consultation-attributions/reviews/product/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vouchers/templates").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/cart").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/cart/items").permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/cart/items/**").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/cart/items/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payment/momo-callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/momo-mock-success").permitAll()
                         .requestMatchers("/ws/**", "/camunda/**").permitAll()
@@ -93,7 +97,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(parseAllowedOrigins());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Idempotency-Key"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Idempotency-Key", "X-Guest-Session-Id"));
         configuration.setExposedHeaders(Arrays.asList("Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -11,7 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name="cart")
+@Table(name = "cart", indexes = {
+        @Index(name = "idx_cart_guest_session_id", columnList = "guest_session_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,6 +28,9 @@ public class Cart {
     @JsonIgnore
     @JoinColumn(name="user_id", referencedColumnName = "id")
     private User user;
+
+    @Column(name = "guest_session_id", unique = true, length = 128)
+    private String guestSessionId;
 
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> items = new ArrayList<>();

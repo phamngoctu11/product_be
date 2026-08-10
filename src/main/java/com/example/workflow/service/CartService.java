@@ -19,22 +19,50 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CartService {
+    private static final Pattern GUEST_SESSION_ID_PATTERN = Pattern.compile("^[A-Za-z0-9._:-]{16,128}$");
+
+    public enum CartOwnerType {
+        USER,
+        GUEST
+    }
+
+    public record CartOwner(CartOwnerType type, String id) {
+        public static CartOwner user(String userId) {
+            return new CartOwner(CartOwnerType.USER, userId);
+        }
+
+        public static CartOwner guest(String guestSessionId) {
+            return new CartOwner(CartOwnerType.GUEST, guestSessionId);
+        }
+
+        public String cacheKey() {
+            return (type == CartOwnerType.USER ? "user-" : "guest-") + id;
+        }
+    }
+
     private final CartRepository cartRepository;
     private final UserRepository userRepository;
     private final CartMapper cartMapper;
@@ -54,52 +82,64 @@ public class CartService {
     private final AuthService authService;
     private final VoucherService voucherService;
 
-    @CacheEvict(value = "carts", key = "#userId")
-    public void startAddToCartProcess(String userId, Long variantId, int quantity) {
-        assertCurrentUserOwnsCart(userId);
-        if (quantity < 1) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
+    public CartOwner resolveOwner(String guestSessionId) {
+        Optional<String> currentCustomerId = getAuthenticatedCustomerId();
+        if (currentCustomerId.isPresent()) {
+            return CartOwner.user(currentCustomerId.get());
         }
-        ProductVariant variant = getActiveVariantOrThrow(variantId);
-        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
-        CartItem existingItem = findCartItem(cart, variantId);
-
-        if (existingItem == null) {
-            cart.getItems().add(createCartItem(cart, variant, quantity));
-        } else {
-            existingItem.setQuantity(existingItem.getQuantity() + quantity);
-        }
-
-        cartRepository.save(cart);
+        return CartOwner.guest(normalizeGuestSessionId(guestSessionId));
     }
 
-    @CacheEvict(value = "carts", key = "#userId")
-    public void updateQuantity(String userId, Long variantId, int newQuantity) {
-        assertCurrentUserOwnsCart(userId);
-        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY);
-        CartItem item = findCartItemOrThrow(cart, variantId);
-        if (newQuantity <= 0) {
-            cart.getItems().remove(item);
-        } else {
-            item.setQuantity(newQuantity);
-        }
-        cartRepository.save(cart);
+    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
+    public void addToCart(CartOwner owner, Long variantId, int quantity) {
+        Cart cart = getOrCreateCart(owner);
+        addVariantToCart(cart, variantId, quantity);
     }
 
-    @CacheEvict(value = "carts", key = "#userId")
-    public void removeFromCart(String userId, Long variantId) {
-        assertCurrentUserOwnsCart(userId);
-        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND);
-        cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
-        cartRepository.save(cart);
+    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
+    public void updateQuantity(CartOwner owner, Long variantId, int newQuantity) {
+        Cart cart = getExistingCart(owner, ConstantErrorCode.CART_EMPTY);
+        updateCartQuantity(cart, variantId, newQuantity);
+    }
+
+    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
+    public void removeFromCart(CartOwner owner, Long variantId) {
+        Cart cart = getExistingCart(owner, ConstantErrorCode.CART_NOT_FOUND);
+        removeVariantFromCart(cart, variantId);
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "carts", key = "#userId", unless = "#result == null")
+    @Cacheable(value = "carts", key = "#owner.cacheKey()", unless = "#result == null")
+    public CartResDTO getCart(CartOwner owner) {
+        return toActiveCartDto(getCartForRead(owner));
+    }
+
+    @CacheEvict(value = "carts", key = "'user-' + #userId")
+    public void startAddToCartProcess(String userId, Long variantId, int quantity) {
+        assertCurrentUserOwnsCart(userId);
+        addVariantToCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId, quantity);
+    }
+
+    @CacheEvict(value = "carts", key = "'user-' + #userId")
+    public void updateQuantity(String userId, Long variantId, int newQuantity) {
+        assertCurrentUserOwnsCart(userId);
+        updateCartQuantity(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY), variantId, newQuantity);
+    }
+
+    @CacheEvict(value = "carts", key = "'user-' + #userId")
+    public void removeFromCart(String userId, Long variantId) {
+        assertCurrentUserOwnsCart(userId);
+        removeVariantFromCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "carts", key = "'user-' + #userId", unless = "#result == null")
     public CartResDTO getCartByUserId(String userId) {
         assertCurrentUserOwnsCart(userId);
-        Cart cart = getCartOrThrow(userId, ConstantErrorCode.CART_EMPTY_VI);
+        return toActiveCartDto(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY_VI));
+    }
 
+    private CartResDTO toActiveCartDto(Cart cart) {
         CartResDTO dto = cartMapper.toDto(cart);
 
         if (dto.getItems() != null && cart.getItems() != null) {
@@ -134,7 +174,7 @@ public class CartService {
     // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
     // ==============================================================================
     @Caching(evict = {
-            @CacheEvict(value = "carts", key = "#userId", beforeInvocation = true),
+            @CacheEvict(value = "carts", key = "'user-' + #userId", beforeInvocation = true),
             @CacheEvict(value = "users", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "orders", allEntries = true, beforeInvocation = true),
             @CacheEvict(value = "pendingOrders", allEntries = true, beforeInvocation = true),
@@ -182,6 +222,38 @@ public class CartService {
         if (!authService.isCurrentUserOwner(userId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
         }
+    }
+
+    private void addVariantToCart(Cart cart, Long variantId, int quantity) {
+        if (quantity < 1) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
+        }
+
+        ProductVariant variant = getActiveVariantOrThrow(variantId);
+        CartItem existingItem = findCartItem(cart, variantId);
+
+        if (existingItem == null) {
+            cart.getItems().add(createCartItem(cart, variant, quantity));
+        } else {
+            existingItem.setQuantity(existingItem.getQuantity() + quantity);
+        }
+
+        cartRepository.save(cart);
+    }
+
+    private void updateCartQuantity(Cart cart, Long variantId, int newQuantity) {
+        CartItem item = findCartItemOrThrow(cart, variantId);
+        if (newQuantity <= 0) {
+            cart.getItems().remove(item);
+        } else {
+            item.setQuantity(newQuantity);
+        }
+        cartRepository.save(cart);
+    }
+
+    private void removeVariantFromCart(Cart cart, Long variantId) {
+        cart.getItems().removeIf(item -> item.getProductVariant().getId().equals(variantId));
+        cartRepository.save(cart);
     }
 
     private Map<String, String> approveCartInternal(
@@ -393,9 +465,102 @@ public class CartService {
         return getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND_VI);
     }
 
+    private Cart getCartForRead(CartOwner owner) {
+        CartOwner resolvedOwner = requireCartOwner(owner);
+        return switch (resolvedOwner.type()) {
+            case USER -> getCartOrThrow(resolvedOwner.id(), ConstantErrorCode.CART_EMPTY_VI);
+            case GUEST -> cartRepository.findByGuestSessionId(resolvedOwner.id())
+                    .orElseGet(() -> createEmptyGuestCart(resolvedOwner.id()));
+        };
+    }
+
+    private Cart getOrCreateCart(CartOwner owner) {
+        CartOwner resolvedOwner = requireCartOwner(owner);
+        return switch (resolvedOwner.type()) {
+            case USER -> getCartOrThrow(resolvedOwner.id(), ConstantErrorCode.CART_NOT_FOUND);
+            case GUEST -> getOrCreateGuestCart(resolvedOwner.id());
+        };
+    }
+
+    private Cart getExistingCart(CartOwner owner, ConstantErrorCode errorCode) {
+        CartOwner resolvedOwner = requireCartOwner(owner);
+        return switch (resolvedOwner.type()) {
+            case USER -> getCartOrThrow(resolvedOwner.id(), errorCode);
+            case GUEST -> getGuestCartOrThrow(resolvedOwner.id(), errorCode);
+        };
+    }
+
+    private CartOwner requireCartOwner(CartOwner owner) {
+        if (owner == null || owner.type() == null || !StringUtils.hasText(owner.id())) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cart owner is required.");
+        }
+        if (owner.type() == CartOwnerType.GUEST) {
+            return CartOwner.guest(normalizeGuestSessionId(owner.id()));
+        }
+        return CartOwner.user(owner.id().trim());
+    }
+
     private Cart getCartOrThrow(String userId, ConstantErrorCode errorCode) {
         return cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode));
+    }
+
+    private Cart createEmptyGuestCart(String guestSessionId) {
+        Cart emptyCart = new Cart();
+        emptyCart.setGuestSessionId(guestSessionId);
+        emptyCart.setItems(new ArrayList<>());
+        return emptyCart;
+    }
+
+    private Cart getOrCreateGuestCart(String guestSessionId) {
+        String normalizedSessionId = normalizeGuestSessionId(guestSessionId);
+        return cartRepository.findByGuestSessionId(normalizedSessionId)
+                .orElseGet(() -> {
+                    Cart cart = createEmptyGuestCart(normalizedSessionId);
+                    return cartRepository.save(cart);
+                });
+    }
+
+    private Cart getGuestCartOrThrow(String guestSessionId, ConstantErrorCode errorCode) {
+        String normalizedSessionId = normalizeGuestSessionId(guestSessionId);
+        return cartRepository.findByGuestSessionId(normalizedSessionId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode));
+    }
+
+    private Optional<String> getAuthenticatedCustomerId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            return Optional.empty();
+        }
+
+        if (!hasAuthority(authentication, "USER")) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
+        }
+
+        if (authentication.getPrincipal() instanceof Jwt jwt && StringUtils.hasText(jwt.getSubject())) {
+            return Optional.of(jwt.getSubject());
+        }
+
+        return Optional.of(userRepository.findByUsername(authentication.getName())
+                .map(User::getId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND)));
+    }
+
+    private boolean hasAuthority(Authentication authentication, String authority) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> authority.equals(grantedAuthority.getAuthority()));
+    }
+
+    private String normalizeGuestSessionId(String guestSessionId) {
+        if (!StringUtils.hasText(guestSessionId)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is required.");
+        }
+        String normalized = guestSessionId.trim();
+        if (!GUEST_SESSION_ID_PATTERN.matcher(normalized).matches()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is invalid.");
+        }
+        return normalized;
     }
 
     private OrderStatus resolveInitialOrderStatus(String paymentMethod) {

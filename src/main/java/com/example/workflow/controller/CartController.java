@@ -24,48 +24,50 @@ import java.util.Map;
 @RequestMapping("/api/cart")
 @RequiredArgsConstructor
 @Validated
-@PreAuthorize("hasAuthority('USER')")
 public class CartController {
+
+    private static final String GUEST_SESSION_HEADER = "X-Guest-Session-Id";
 
     private final CartService cartService;
 
-    @PostMapping("/add")
+    @PostMapping("/items")
     public ResponseEntity<ApiResponse<Void>> addToCart(
-            @RequestParam("userId") String userId,
+            @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
             @Positive(message = "Variant id must be positive") @RequestParam("variantId") Long variantId,
             @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
     ) {
-        cartService.startAddToCartProcess(userId, variantId, quantity);
+        cartService.addToCart(cartService.resolveOwner(guestSessionId), variantId, quantity);
         return ResponseEntity.ok(ApiResponse.success("Added to cart"));
     }
 
-    @PutMapping("/update")
+    @PutMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> update(
-            @RequestParam String userId,
-            @Positive(message = "Variant id must be positive") @RequestParam Long variantId,
+            @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
+            @Positive(message = "Variant id must be positive") @PathVariable Long variantId,
             @Min(value = 0, message = "Quantity must be zero or positive") @RequestParam int quantity
     ) {
-        cartService.updateQuantity(userId, variantId, quantity);
+        cartService.updateQuantity(cartService.resolveOwner(guestSessionId), variantId, quantity);
         return ResponseEntity.ok(ApiResponse.success("Updated quantity"));
     }
 
-    @DeleteMapping("/remove")
+    @DeleteMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> remove(
-            @RequestParam String userId,
-            @Positive(message = "Variant id must be positive") @RequestParam Long variantId
+            @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
+            @Positive(message = "Variant id must be positive") @PathVariable Long variantId
     ) {
-        cartService.removeFromCart(userId, variantId);
+        cartService.removeFromCart(cartService.resolveOwner(guestSessionId), variantId);
         return ResponseEntity.ok(ApiResponse.success("Removed from cart"));
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping
     public ResponseEntity<ApiResponse<CartResDTO>> getCart(
-            @PathVariable String userId
+            @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(cartService.getCartByUserId(userId)));
+        return ResponseEntity.ok(ApiResponse.success(cartService.getCart(cartService.resolveOwner(guestSessionId))));
     }
 
     @PostMapping("/approve/{userId}")
+    @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Map<String, String>>> approveCart(
             @PathVariable("userId") String userId,
             @Valid @NotEmpty(message = "Select at least one variant to checkout")
