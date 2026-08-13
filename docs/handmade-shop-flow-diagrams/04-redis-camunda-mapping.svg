@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1250" viewBox="0 0 1500 1250">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .title { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 34px; font-weight: 700; }
+      .subtitle { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 18px; }
+      .col-title { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 24px; font-weight: 700; }
+      .box { fill: #1e293b; stroke: #64748b; stroke-width: 2; rx: 16; }
+      .redis { fill: #3b1818; stroke: #ef4444; stroke-width: 2; rx: 16; }
+      .stream { fill: #312e81; stroke: #a5b4fc; stroke-width: 2; rx: 16; }
+      .camunda { fill: #432818; stroke: #fb923c; stroke-width: 2; rx: 16; }
+      .db { fill: #14323d; stroke: #22d3ee; stroke-width: 2; rx: 16; }
+      .text { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 17px; }
+      .small { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 14px; }
+      .bullet { fill: #e2e8f0; font-family: Arial, sans-serif; font-size: 16px; }
+      .arrow { stroke: #94a3b8; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .arrow-red { stroke: #ef4444; stroke-width: 2.5; fill: none; marker-end: url(#arrowRed); }
+      .arrow-purple { stroke: #a5b4fc; stroke-width: 2.5; fill: none; marker-end: url(#arrowPurple); }
+      .arrow-orange { stroke: #fb923c; stroke-width: 2.5; fill: none; marker-end: url(#arrowOrange); }
+      .note { fill: #111827; stroke: #facc15; stroke-width: 2; rx: 12; }
+      .note-text { fill: #fef3c7; font-family: Arial, sans-serif; font-size: 15px; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#94a3b8"/></marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#ef4444"/></marker>
+    <marker id="arrowPurple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#a5b4fc"/></marker>
+    <marker id="arrowOrange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#fb923c"/></marker>
+  </defs>
+
+  <rect class="bg" width="1500" height="1250"/>
+  <text class="title" x="60" y="60">Áp dụng Redis Cache, Redis Stream và Camunda</text>
+  <text class="subtitle" x="60" y="92">Redis để nhanh/tạm/event; Camunda để quản lý workflow handmade dài ngày có duyệt và rework.</text>
+
+  <rect class="redis" x="55" y="150" width="420" height="470"/>
+  <text class="col-title" x="155" y="195">Redis Cache</text>
+  <text class="small" x="95" y="225">Dữ liệu đọc nhiều, tạm thời, có TTL.</text>
+  <text class="bullet" x="95" y="270">• category:tree</text>
+  <text class="bullet" x="95" y="302">• product:list:{filter}</text>
+  <text class="bullet" x="95" y="334">• product:detail:{id}</text>
+  <text class="bullet" x="95" y="366">• best-selling / new-arrivals</text>
+  <text class="bullet" x="95" y="398">• voucher:public:{code}</text>
+  <text class="bullet" x="95" y="430">• guest-session:{sessionId}</text>
+  <text class="bullet" x="95" y="462">• checkout:idempotency:{key}</text>
+  <text class="bullet" x="95" y="494">• rate-limit:login/checkout</text>
+  <text class="bullet" x="95" y="526">• chat:presence:{userId}</text>
+  <text class="small" x="95" y="575">Không dùng Redis làm nguồn dữ liệu chính.</text>
+
+  <rect class="stream" x="540" y="150" width="420" height="470"/>
+  <text class="col-title" x="640" y="195">Redis Stream</text>
+  <text class="small" x="580" y="225">Event bất đồng bộ sau khi DB transaction thành công.</text>
+  <text class="bullet" x="580" y="270">• ORDER_CREATED</text>
+  <text class="bullet" x="580" y="302">• GUEST_ORDER_CREATED</text>
+  <text class="bullet" x="580" y="334">• CUSTOM_REQUEST_SUBMITTED</text>
+  <text class="bullet" x="580" y="366">• STAFF_ASSIGNED</text>
+  <text class="bullet" x="580" y="398">• CHECKPOINT_SUBMITTED</text>
+  <text class="bullet" x="580" y="430">• CHECKPOINT_APPROVED</text>
+  <text class="bullet" x="580" y="462">• CHECKPOINT_REWORK_REQUIRED</text>
+  <text class="bullet" x="580" y="494">• EMAIL_REQUESTED</text>
+  <text class="bullet" x="580" y="526">• NOTIFICATION_REQUESTED</text>
+  <text class="small" x="580" y="575">Consumer phải idempotent bằng eventId.</text>
+
+  <rect class="camunda" x="1025" y="150" width="420" height="470"/>
+  <text class="col-title" x="1130" y="195">Camunda</text>
+  <text class="small" x="1065" y="225">Workflow dài ngày, có người duyệt, timeout, rework.</text>
+  <text class="bullet" x="1065" y="270">• CustomRequestReviewProcess</text>
+  <text class="bullet" x="1065" y="302">• Quote acceptance / timeout</text>
+  <text class="bullet" x="1065" y="334">• OrderItemProductionProcess</text>
+  <text class="bullet" x="1065" y="366">• Manager assign staff</text>
+  <text class="bullet" x="1065" y="398">• Checkpoint review policy</text>
+  <text class="bullet" x="1065" y="430">• Rework loop</text>
+  <text class="bullet" x="1065" y="462">• Final QC</text>
+  <text class="bullet" x="1065" y="494">• ChangeRequestApprovalProcess</text>
+  <text class="small" x="1065" y="575">Không dùng Camunda cho search/cart CRUD.</text>
+
+  <rect class="box" x="100" y="700" width="280" height="78"/>
+  <text class="text" x="165" y="733">FE action</text>
+  <text class="small" x="137" y="759">Checkout / submit / approve</text>
+
+  <rect class="db" x="445" y="700" width="300" height="78"/>
+  <text class="text" x="552" y="733">DB</text>
+  <text class="small" x="492" y="759">Nguồn dữ liệu chính</text>
+
+  <rect class="camunda" x="810" y="700" width="300" height="78"/>
+  <text class="text" x="910" y="733">Camunda</text>
+  <text class="small" x="870" y="759">Start/complete task</text>
+
+  <rect class="stream" x="1175" y="700" width="280" height="78"/>
+  <text class="text" x="1255" y="733">Stream</text>
+  <text class="small" x="1222" y="759">Publish event</text>
+
+  <path class="arrow" d="M380 739 L445 739"/>
+  <path class="arrow-orange" d="M745 739 L810 739"/>
+  <path class="arrow-purple" d="M1110 739 L1175 739"/>
+
+  <rect class="box" x="195" y="870" width="1110" height="190"/>
+  <text class="col-title" x="595" y="915">Ví dụ: Staff submit checkpoint</text>
+  <text class="bullet" x="250" y="960">1. Backend lưu ProductionCheckpoint + ảnh vào DB.</text>
+  <text class="bullet" x="250" y="992">2. Backend complete Camunda task tương ứng với OrderItemProductionProcess.</text>
+  <text class="bullet" x="250" y="1024">3. Backend publish CHECKPOINT_SUBMITTED vào Redis Stream.</text>
+  <text class="bullet" x="250" y="1056">4. Consumer quyết định gửi chat cho user hoặc email cho guest, tùy policy.</text>
+
+  <rect class="note" x="120" y="1115" width="1260" height="86"/>
+  <text class="note-text" x="155" y="1148">Nguyên tắc triển khai: DB commit trước, workflow/event sau; event consumer idempotent; cache luôn có cơ chế invalidate/TTL.</text>
+  <text class="note-text" x="155" y="1178">Camunda chỉ dùng cho custom request, change request và production theo từng OrderItem; không dùng cho product search, cart CRUD, login/register.</text>
+</svg>

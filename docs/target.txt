@@ -1,0 +1,232 @@
+Chúng ta sẽ phát triển hệ thống hiện tại thành một shop bán đồ handmade đa danh mục, có 2 nhóm khách chính: user hệ thống và non-user/guest. User hệ thống có tài khoản, được dùng voucher cá nhân, tích điểm/reputation, tạo custom request, chat realtime với staff và theo dõi checkpoint trong hệ thống. Non-user/guest vẫn được xem sản phẩm, lọc/search, thêm giỏ hàng bằng guestSessionId, checkout bằng form thông tin cá nhân, dùng public voucher nếu hợp lệ, nhận email xác nhận đơn/checkpoint và có orderLookupToken để tra cứu đơn. Custom request chỉ dành cho user hệ thống để đảm bảo có lịch sử trao đổi, báo giá, duyệt yêu cầu và quản lý thay đổi rõ ràng.
+Về công nghệ áp dụng:
+•
+Redis Cache dùng cho category tree, product listing/filter/search, product detail, best-selling, public voucher template, guest session TTL, rate limit, idempotency checkout, cart summary phụ và chat presence.
+•
+Redis Stream dùng cho event bất đồng bộ như ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, STAFF_ASSIGNED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED, audit và thống kê.
+•
+Camunda dùng cho workflow dài ngày có con người tham gia: custom request approval, quote/acceptance, change request từ chat, phân staff theo OrderItem, production checkpoint, rework và final QC.
+•
+Database vẫn là nguồn dữ liệu chính cho cart, order, order item, custom request, payment, voucher usage, assignment, checkpoint, image/attachment. Redis không được dùng thay database.
+•
+WebSocket/chat dùng cho user hệ thống để trao đổi với staff và nhận checkpoint realtime.
+•
+Email dùng cho guest/non-user để xác nhận đơn, gửi checkpoint và link tra cứu đơn.
+Các entity/khái niệm chính cần triển khai hoặc mở rộng:
+GuestSession
+Cart
+Order
+OrderContactSnapshot
+OrderLookupToken
+OrderItem
+OrderItemAssignment
+ProductionCheckpoint
+ProductionCheckpointImage
+CustomRequest
+CustomRequestSpec
+CustomRequestAttachment
+CustomRequestQuote
+OrderItemChangeRequest
+VoucherTemplate
+UserVoucher
+Guest/PublicVoucherUsage
+Notification
+ChatThread
+ChatMessage
+Các rule nghiệp vụ đã chốt:
+•
+Product listing/detail public cho cả user và guest.
+•
+Cart của user gắn với userId; cart của guest gắn với guestSessionId.
+•
+Guest checkout bắt buộc nhập họ tên, email, số điện thoại, địa chỉ, ghi chú nếu có.
+•
+Sau guest checkout, tạo Order với userId = null, lưu contact snapshot và tạo orderLookupToken.
+•
+Custom request chỉ dành cho user hệ thống.
+•
+Guest muốn custom request thì được yêu cầu đăng nhập/tạo tài khoản.
+•
+User dùng voucher cá nhân, ví voucher, reputation.
+•
+Guest chỉ dùng public voucher hoặc voucher campaign giới hạn; không có voucher wallet/reputation.
+•
+Production workflow nên chạy theo từng OrderItem, không chỉ theo Order.
+•
+Staff được manager phân từng item.
+•
+Staff submit 2 mốc checkpoint chính: INITIAL_SHAPE và FINAL_PRODUCT.
+•
+Mỗi checkpoint stage có thể có nhiều attempt nếu bị yêu cầu sửa.
+•
+User nhận checkpoint qua chat socket.
+•
+Guest nhận checkpoint qua email.
+•
+Manager không nhất thiết duyệt mọi checkpoint của user, nhưng cần duyệt khi có thay đổi lớn/spec/giá/deadline hoặc final QC theo policy.
+•
+Với guest, nên auto gửi checkpoint 1 nếu rủi ro thấp, nhưng checkpoint final nên có manager QC trước khi gửi/giao.
+•
+Mọi thay đổi lớn từ chat phải tạo OrderItemChangeRequest, không chỉ lưu trong chat.
+•
+Không gọi thao tác staff là checkout; nên gọi là checkpoint hoặc production submission.
+Các sơ đồ luồng hoạt động đã thiết kế:
+1.
+Luồng tổng thể shop handmade
+Khách vào shop
+  → Xem danh sách sản phẩm
+  → Filter theo danh mục / giá / chất liệu / màu / keyword
+  → Nếu mua sản phẩm có sẵn: thêm cart
+  → Nếu muốn custom: tạo Custom Request, chỉ dành cho user
+  → Checkout
+  → Tạo Order
+  → Manager phân staff theo từng item
+  → Staff làm sản phẩm
+  → Checkpoint 1: hình dáng ban đầu + ảnh
+  → Checkpoint 2: sản phẩm hoàn thiện + ảnh
+  → Thông báo khách
+  → Giao hàng / hoàn tất
+2.
+Luồng guestSessionId
+FE tạo hoặc đọc guestSessionId
+  → Gửi X-Guest-Session-Id khi thao tác cart
+  → Backend tìm/tạo GuestSession
+  → Backend tìm/tạo Cart theo guestSessionId
+  → Guest thêm/sửa/xóa item
+  → Guest checkout
+  → Nhập thông tin cá nhân
+  → Tạo Order userId = null
+  → Lưu contact snapshot
+  → Tạo orderLookupToken
+  → Gửi email xác nhận đơn
+3.
+Luồng checkout user vs guest
+Checkout
+  → Nếu đã login:
+      lấy userId từ JWT
+      xác nhận thông tin giao hàng
+      áp dụng voucher user/reputation
+      tạo Order userId != null
+  → Nếu guest:
+      đọc guestSessionId
+      hiển thị form thông tin cá nhân
+      validate email/phone/address
+      áp dụng public voucher nếu có
+      tạo Order userId = null
+      tạo orderLookupToken
+      gửi email xác nhận
+  → Clear cart
+4.
+Luồng custom request cho user
+User login
+  → Tạo Custom Request
+  → Nhập chất liệu / màu / hình dáng / kích thước / ghi chú
+  → Upload ảnh tham khảo
+  → Manager review
+      → Reject
+      → Need more info
+      → Approve + quote
+  → User xác nhận báo giá
+      → Không đồng ý: request đóng/hủy
+      → Đồng ý: tạo Order
+  → Bắt đầu production workflow theo OrderItem
+5.
+Luồng sản xuất theo từng item
+Order đã được tạo/duyệt
+  → Tách từng OrderItem
+  → Manager gán staff cho từng item
+  → Staff nhận item
+  → Staff làm sản phẩm
+  → Submit checkpoint INITIAL_SHAPE + ảnh
+  → User/Manager phản hồi theo policy
+      → Đồng ý: tiếp tục
+      → Yêu cầu sửa: staff làm lại
+      → Đổi spec/giá/deadline: tạo ChangeRequest
+  → Submit checkpoint FINAL_PRODUCT + ảnh
+  → Final QC theo policy
+  → Item READY_TO_SHIP
+  → Khi tất cả item ready: Order READY_TO_SHIP
+6.
+Luồng thông báo cho khách
+Staff submit checkpoint
+  → Hệ thống tạo event CHECKPOINT_SUBMITTED
+  → Nếu cần manager review:
+      Manager duyệt
+      Nếu reject/rework: báo staff
+      Nếu approve: gửi khách
+  → Nếu không cần manager review:
+      gửi khách ngay
+  → Nếu order có userId:
+      gửi notification/chat realtime
+  → Nếu guest:
+      gửi email
+  → Lưu lịch sử notification
+7.
+Luồng user hệ thống
+User đăng nhập
+  → Xem/filter/search sản phẩm
+  → Chọn mua thường hoặc tạo custom request
+  → Nếu mua thường:
+      thêm cart theo userId
+      áp dụng voucher user/reputation
+      checkout bằng thông tin tài khoản
+      tạo order
+  → Nếu custom:
+      tạo request
+      manager duyệt/báo giá
+      user xác nhận
+      tạo order
+  → Nếu item handmade:
+      manager phân staff
+      staff submit checkpoint 1
+      gửi qua chat socket
+      user phản hồi
+      staff submit checkpoint 2
+      gửi qua chat socket
+      final QC nếu policy yêu cầu
+  → Giao hàng
+  → Hoàn tất
+8.
+Luồng non-user/guest
+Guest vào shop
+  → Hệ thống tạo/đọc guestSessionId
+  → Xem/filter/search sản phẩm
+  → Thêm cart theo guestSessionId
+  → Nếu muốn custom request:
+      yêu cầu đăng nhập/tạo tài khoản
+  → Checkout guest
+  → Nhập họ tên/email/phone/địa chỉ/ghi chú
+  → Áp dụng public voucher nếu có
+  → Tạo guest order
+  → Lưu contact snapshot
+  → Tạo orderLookupToken
+  → Gửi email xác nhận
+  → Nếu item handmade:
+      manager phân staff
+      staff submit checkpoint 1
+      auto email hoặc manager duyệt theo policy
+      staff submit checkpoint 2
+      manager final QC
+      gửi email checkpoint final
+  → Giao hàng
+  → Hoàn tất
+  → Email mời tạo tài khoản để nhận voucher/theo dõi tốt hơn
+9.
+Redis/Camunda mapping
+Redis Cache:
+  category, product listing/search, product detail, voucher template,
+  guest session TTL, rate limit, checkout idempotency, chat presence
+
+Redis Stream:
+  order created, guest order created, custom request submitted,
+  staff assigned, checkpoint submitted/approved/rework,
+  email requested, notification requested, audit, statistics
+
+Camunda:
+  custom request approval,
+  quote acceptance,
+  order item production,
+  staff assignment,
+  checkpoint review/rework,
+  final QC,
+  change request approval

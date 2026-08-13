@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1550" height="1650" viewBox="0 0 1550 1650">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .title { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 34px; font-weight: 700; }
+      .subtitle { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 18px; }
+      .box { fill: #1e293b; stroke: #64748b; stroke-width: 2; rx: 14; }
+      .user { fill: #123047; stroke: #38bdf8; stroke-width: 2; rx: 14; }
+      .manager { fill: #432818; stroke: #fb923c; stroke-width: 2; rx: 14; }
+      .staff { fill: #193b2d; stroke: #34d399; stroke-width: 2; rx: 14; }
+      .chat { fill: #312e81; stroke: #a5b4fc; stroke-width: 2; rx: 14; }
+      .decision { fill: #312e81; stroke: #a5b4fc; stroke-width: 2; }
+      .end { fill: #14532d; stroke: #86efac; stroke-width: 2; rx: 18; }
+      .text { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 17px; }
+      .small { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 14px; }
+      .arrow { stroke: #94a3b8; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .arrow-user { stroke: #38bdf8; stroke-width: 2.5; fill: none; marker-end: url(#arrowUser); }
+      .arrow-manager { stroke: #fb923c; stroke-width: 2.5; fill: none; marker-end: url(#arrowManager); }
+      .arrow-staff { stroke: #34d399; stroke-width: 2.5; fill: none; marker-end: url(#arrowStaff); }
+      .label { fill: #fde68a; font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; }
+      .note { fill: #111827; stroke: #facc15; stroke-width: 2; rx: 12; }
+      .note-text { fill: #fef3c7; font-family: Arial, sans-serif; font-size: 15px; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#94a3b8"/></marker>
+    <marker id="arrowUser" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#38bdf8"/></marker>
+    <marker id="arrowManager" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#fb923c"/></marker>
+    <marker id="arrowStaff" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#34d399"/></marker>
+  </defs>
+
+  <rect class="bg" width="1550" height="1650"/>
+  <text class="title" x="60" y="60">Luồng hoạt động: User hệ thống</text>
+  <text class="subtitle" x="60" y="92">User có voucher/reputation, custom request, chat socket và checkpoint realtime với staff.</text>
+
+  <rect class="user" x="590" y="130" width="360" height="64"/>
+  <text class="text" x="690" y="168">User đăng nhập</text>
+
+  <rect class="box" x="555" y="230" width="430" height="80"/>
+  <text class="text" x="640" y="262">Xem / filter / search sản phẩm</text>
+  <text class="small" x="610" y="288">Danh mục, keyword, giá, chất liệu, màu</text>
+  <path class="arrow-user" d="M770 194 L770 230"/>
+
+  <polygon class="decision" points="770,360 920,445 770,530 620,445"/>
+  <text class="text" x="700" y="440">Nhu cầu?</text>
+  <text class="small" x="682" y="465">Mua thường / custom</text>
+  <path class="arrow" d="M770 310 L770 360"/>
+
+  <rect class="user" x="160" y="600" width="360" height="90"/>
+  <text class="text" x="225" y="632">Mua sản phẩm thường</text>
+  <text class="small" x="225" y="658">Thêm vào cart theo userId</text>
+  <text class="small" x="225" y="680">Áp dụng voucher user / reputation</text>
+  <path class="arrow-user" d="M655 492 C560 570 470 600 340 600"/>
+  <text class="label" x="480" y="570">Mua thường</text>
+
+  <rect class="manager" x="1010" y="585" width="390" height="120"/>
+  <text class="text" x="1068" y="618">Custom Request</text>
+  <text class="small" x="1068" y="645">Thông số, chất liệu, màu, hình dáng</text>
+  <text class="small" x="1068" y="668">Upload ảnh tham khảo</text>
+  <text class="small" x="1068" y="691">Manager duyệt / từ chối / yêu cầu bổ sung</text>
+  <path class="arrow-manager" d="M885 492 C980 560 1100 585 1205 585"/>
+  <text class="label" x="1010" y="550">Custom</text>
+
+  <rect class="manager" x="1005" y="760" width="400" height="90"/>
+  <text class="text" x="1082" y="792">Báo giá + deadline</text>
+  <text class="small" x="1082" y="820">User xác nhận báo giá trước khi tạo order</text>
+  <path class="arrow-manager" d="M1205 705 L1205 760"/>
+
+  <rect class="user" x="505" y="770" width="370" height="82"/>
+  <text class="text" x="592" y="802">Checkout user</text>
+  <text class="small" x="565" y="828">Dùng profile + địa chỉ + voucher đã chọn</text>
+  <path class="arrow-user" d="M340 690 C390 750 465 798 505 810"/>
+  <path class="arrow-manager" d="M1005 812 L875 812"/>
+
+  <rect class="box" x="590" y="910" width="360" height="76"/>
+  <text class="text" x="690" y="942">Tạo Order</text>
+  <text class="small" x="650" y="968">Order + OrderItem + payment state</text>
+  <path class="arrow" d="M690 852 L720 910"/>
+  <path class="arrow" d="M770 852 L770 910"/>
+
+  <polygon class="decision" points="770,1040 920,1125 770,1210 620,1125"/>
+  <text class="text" x="713" y="1118">Loại item?</text>
+  <text class="small" x="685" y="1143">Có sẵn / handmade</text>
+  <path class="arrow" d="M770 986 L770 1040"/>
+
+  <rect class="box" x="125" y="1100" width="360" height="80"/>
+  <text class="text" x="210" y="1132">Hàng có sẵn</text>
+  <text class="small" x="210" y="1158">Đóng gói / giao hàng</text>
+  <path class="arrow" d="M620 1125 L485 1125"/>
+
+  <rect class="manager" x="1015" y="1085" width="390" height="95"/>
+  <text class="text" x="1088" y="1118">Manager phân staff</text>
+  <text class="small" x="1066" y="1145">Phân theo từng OrderItem, không chỉ Order</text>
+  <path class="arrow-manager" d="M920 1125 L1015 1125"/>
+
+  <rect class="staff" x="1015" y="1235" width="390" height="84"/>
+  <text class="text" x="1095" y="1268">Staff nhận item</text>
+  <text class="small" x="1085" y="1294">Bắt đầu production workflow</text>
+  <path class="arrow-staff" d="M1210 1180 L1210 1235"/>
+
+  <rect class="staff" x="980" y="1360" width="460" height="84"/>
+  <text class="text" x="1055" y="1393">Checkpoint 1: INITIAL_SHAPE</text>
+  <text class="small" x="1055" y="1419">Ảnh hình dáng ban đầu + ghi chú</text>
+  <path class="arrow-staff" d="M1210 1319 L1210 1360"/>
+
+  <rect class="chat" x="555" y="1360" width="350" height="84"/>
+  <text class="text" x="640" y="1393">Gửi qua chat socket</text>
+  <text class="small" x="603" y="1419">User phản hồi: đồng ý / sửa nhỏ</text>
+  <path class="arrow-user" d="M980 1402 L905 1402"/>
+
+  <polygon class="decision" points="730,1485 855,1555 730,1625 605,1555"/>
+  <text class="text" x="675" y="1550">Đổi lớn?</text>
+  <text class="small" x="652" y="1573">Spec / giá / deadline</text>
+  <path class="arrow-user" d="M730 1444 L730 1485"/>
+
+  <rect class="manager" x="1000" y="1510" width="360" height="78"/>
+  <text class="text" x="1065" y="1542">Change Request</text>
+  <text class="small" x="1047" y="1568">Manager duyệt thay đổi lớn</text>
+  <path class="arrow-manager" d="M855 1555 L1000 1555"/>
+
+  <rect class="staff" x="140" y="1390" width="330" height="84"/>
+  <text class="text" x="205" y="1423">Checkpoint 2: FINAL</text>
+  <text class="small" x="198" y="1449">Sản phẩm hoàn thiện + ảnh</text>
+  <path class="arrow-staff" d="M605 1555 C500 1540 420 1500 330 1474"/>
+  <path class="arrow-manager" d="M1180 1510 C1070 1450 930 1435 905 1420"/>
+
+  <rect class="manager" x="140" y="1260" width="330" height="82"/>
+  <text class="text" x="212" y="1293">Final QC theo policy</text>
+  <text class="small" x="185" y="1319">Bắt buộc với custom/rủi ro cao</text>
+  <path class="arrow-manager" d="M305 1390 L305 1342"/>
+
+  <rect class="end" x="140" y="970" width="330" height="78"/>
+  <text class="text" x="235" y="1003">READY_TO_SHIP</text>
+  <text class="small" x="202" y="1029">Giao hàng → Hoàn tất đơn</text>
+  <path class="arrow" d="M305 1260 L305 1180"/>
+  <path class="arrow" d="M305 1100 L305 1048"/>
+
+  <rect class="note" x="60" y="150" width="410" height="135"/>
+  <text class="note-text" x="85" y="182">Điểm khác biệt của user</text>
+  <text class="note-text" x="85" y="210">• Có Custom Request.</text>
+  <text class="note-text" x="85" y="236">• Có voucher ví / reputation.</text>
+  <text class="note-text" x="85" y="262">• Nhận checkpoint qua chat socket.</text>
+</svg>

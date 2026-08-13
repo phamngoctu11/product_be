@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1250" viewBox="0 0 1400 1250">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .title { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 34px; font-weight: 700; }
+      .subtitle { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 18px; }
+      .lane-title { fill: #e2e8f0; font-family: Arial, sans-serif; font-size: 22px; font-weight: 700; }
+      .box { fill: #1e293b; stroke: #64748b; stroke-width: 2; rx: 14; }
+      .box-user { fill: #123047; stroke: #38bdf8; stroke-width: 2; rx: 14; }
+      .box-guest { fill: #3a2945; stroke: #c084fc; stroke-width: 2; rx: 14; }
+      .box-manager { fill: #432818; stroke: #fb923c; stroke-width: 2; rx: 14; }
+      .box-staff { fill: #193b2d; stroke: #34d399; stroke-width: 2; rx: 14; }
+      .decision { fill: #312e81; stroke: #a5b4fc; stroke-width: 2; }
+      .text { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 17px; }
+      .small { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 14px; }
+      .arrow { stroke: #94a3b8; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .arrow-user { stroke: #38bdf8; stroke-width: 2.5; fill: none; marker-end: url(#arrowUser); }
+      .arrow-guest { stroke: #c084fc; stroke-width: 2.5; fill: none; marker-end: url(#arrowGuest); }
+      .arrow-warn { stroke: #fb923c; stroke-width: 2.5; fill: none; marker-end: url(#arrowWarn); }
+      .note { fill: #111827; stroke: #facc15; stroke-width: 2; rx: 12; }
+      .note-text { fill: #fef3c7; font-family: Arial, sans-serif; font-size: 15px; }
+      .section-line { stroke: #334155; stroke-width: 2; stroke-dasharray: 8 8; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowUser" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGuest" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#c084fc"/>
+    </marker>
+    <marker id="arrowWarn" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#fb923c"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="1250"/>
+  <text class="title" x="60" y="60">Tổng quan luồng shop handmade đa danh mục</text>
+  <text class="subtitle" x="60" y="92">Tách rõ user hệ thống và non-user/guest; custom request chỉ dành cho user; production tracking theo từng order item.</text>
+
+  <line class="section-line" x1="700" y1="130" x2="700" y2="1130"/>
+  <text class="lane-title" x="225" y="140">User hệ thống</text>
+  <text class="lane-title" x="930" y="140">Non-user / Guest</text>
+
+  <rect class="box" x="560" y="165" width="280" height="64"/>
+  <text class="text" x="602" y="203">Xem shop sản phẩm</text>
+
+  <rect class="box" x="515" y="260" width="370" height="78"/>
+  <text class="text" x="545" y="292">Filter / search</text>
+  <text class="small" x="545" y="318">Danh mục, keyword, giá, chất liệu, màu</text>
+
+  <path class="arrow" d="M700 229 L700 260"/>
+
+  <polygon class="decision" points="700,380 820,455 700,530 580,455"/>
+  <text class="text" x="635" y="450">Khách là ai?</text>
+  <text class="small" x="640" y="474">User hay Guest</text>
+  <path class="arrow" d="M700 338 L700 380"/>
+
+  <rect class="box-user" x="130" y="420" width="310" height="76"/>
+  <text class="text" x="165" y="452">User đã đăng nhập</text>
+  <text class="small" x="165" y="478">userId lấy từ JWT</text>
+  <path class="arrow-user" d="M580 455 L440 455"/>
+
+  <rect class="box-guest" x="960" y="420" width="310" height="76"/>
+  <text class="text" x="1000" y="452">Guest / non-user</text>
+  <text class="small" x="1000" y="478">guestSessionId + TTL</text>
+  <path class="arrow-guest" d="M820 455 L960 455"/>
+
+  <polygon class="decision" points="285,545 405,620 285,695 165,620"/>
+  <text class="text" x="220" y="615">Nhu cầu?</text>
+  <text class="small" x="215" y="640">Mua thường / custom</text>
+  <path class="arrow-user" d="M285 496 L285 545"/>
+
+  <rect class="box-user" x="60" y="760" width="260" height="78"/>
+  <text class="text" x="95" y="792">Thêm cart user</text>
+  <text class="small" x="95" y="818">Voucher wallet / reputation</text>
+  <path class="arrow-user" d="M230 675 L165 760"/>
+
+  <rect class="box-manager" x="350" y="735" width="300" height="106"/>
+  <text class="text" x="383" y="770">Custom Request</text>
+  <text class="small" x="383" y="796">Thông số, chất liệu, màu, ảnh mẫu</text>
+  <text class="small" x="383" y="820">Manager duyệt + báo giá</text>
+  <path class="arrow-warn" d="M355 675 L470 735"/>
+
+  <rect class="box-guest" x="900" y="560" width="300" height="86"/>
+  <text class="text" x="930" y="592">Cart guest</text>
+  <text class="small" x="930" y="618">X-Guest-Session-Id</text>
+  <text class="small" x="930" y="640">Public voucher nếu hợp lệ</text>
+  <path class="arrow-guest" d="M1115 496 L1115 560"/>
+
+  <rect class="box-guest" x="920" y="705" width="340" height="108"/>
+  <text class="text" x="950" y="738">Guest checkout form</text>
+  <text class="small" x="950" y="764">Họ tên, email, phone, địa chỉ</text>
+  <text class="small" x="950" y="788">Lưu contact snapshot + lookupToken</text>
+  <path class="arrow-guest" d="M1050 646 L1050 705"/>
+
+  <rect class="box-user" x="165" y="900" width="320" height="82"/>
+  <text class="text" x="204" y="934">Checkout user</text>
+  <text class="small" x="204" y="960">Dùng profile + voucher user</text>
+  <path class="arrow-user" d="M190 838 L290 900"/>
+  <path class="arrow-warn" d="M500 841 L390 900"/>
+
+  <rect class="box" x="540" y="1040" width="320" height="78"/>
+  <text class="text" x="615" y="1072">Tạo Order</text>
+  <text class="small" x="585" y="1098">Order tổng + OrderItem + snapshot</text>
+  <path class="arrow-user" d="M325 982 C350 1060 460 1079 540 1079"/>
+  <path class="arrow-guest" d="M1050 813 C1030 1010 915 1079 860 1079"/>
+
+  <rect class="box-manager" x="560" y="1155" width="280" height="62"/>
+  <text class="text" x="590" y="1192">Production workflow</text>
+  <path class="arrow" d="M700 1118 L700 1155"/>
+
+  <rect class="note" x="70" y="1045" width="390" height="100"/>
+  <text class="note-text" x="95" y="1076">Rule quan trọng</text>
+  <text class="note-text" x="95" y="1103">Custom request chỉ dành cho user.</text>
+  <text class="note-text" x="95" y="1128">Guest không dùng sessionId để bảo vệ order.</text>
+
+  <rect class="note" x="940" y="1045" width="360" height="100"/>
+  <text class="note-text" x="965" y="1076">Thông báo khách</text>
+  <text class="note-text" x="965" y="1103">User: chat socket + notification.</text>
+  <text class="note-text" x="965" y="1128">Guest: email + orderLookupToken.</text>
+</svg>

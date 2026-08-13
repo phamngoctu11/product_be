@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1550" height="1700" viewBox="0 0 1550 1700">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .title { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 34px; font-weight: 700; }
+      .subtitle { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 18px; }
+      .box { fill: #1e293b; stroke: #64748b; stroke-width: 2; rx: 14; }
+      .guest { fill: #3a2945; stroke: #c084fc; stroke-width: 2; rx: 14; }
+      .manager { fill: #432818; stroke: #fb923c; stroke-width: 2; rx: 14; }
+      .staff { fill: #193b2d; stroke: #34d399; stroke-width: 2; rx: 14; }
+      .email { fill: #3b3315; stroke: #facc15; stroke-width: 2; rx: 14; }
+      .decision { fill: #312e81; stroke: #a5b4fc; stroke-width: 2; }
+      .end { fill: #14532d; stroke: #86efac; stroke-width: 2; rx: 18; }
+      .text { fill: #f8fafc; font-family: Arial, sans-serif; font-size: 17px; }
+      .small { fill: #cbd5e1; font-family: Arial, sans-serif; font-size: 14px; }
+      .arrow { stroke: #94a3b8; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .arrow-guest { stroke: #c084fc; stroke-width: 2.5; fill: none; marker-end: url(#arrowGuest); }
+      .arrow-manager { stroke: #fb923c; stroke-width: 2.5; fill: none; marker-end: url(#arrowManager); }
+      .arrow-staff { stroke: #34d399; stroke-width: 2.5; fill: none; marker-end: url(#arrowStaff); }
+      .arrow-email { stroke: #facc15; stroke-width: 2.5; fill: none; marker-end: url(#arrowEmail); }
+      .label { fill: #fde68a; font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; }
+      .note { fill: #111827; stroke: #facc15; stroke-width: 2; rx: 12; }
+      .note-text { fill: #fef3c7; font-family: Arial, sans-serif; font-size: 15px; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#94a3b8"/></marker>
+    <marker id="arrowGuest" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#c084fc"/></marker>
+    <marker id="arrowManager" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#fb923c"/></marker>
+    <marker id="arrowStaff" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#34d399"/></marker>
+    <marker id="arrowEmail" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#facc15"/></marker>
+  </defs>
+
+  <rect class="bg" width="1550" height="1700"/>
+  <text class="title" x="60" y="60">Luồng hoạt động: Non-user / Guest</text>
+  <text class="subtitle" x="60" y="92">Guest dùng guestSessionId cho cart, checkout bằng form thông tin cá nhân, nhận cập nhật qua email.</text>
+
+  <rect class="guest" x="590" y="130" width="370" height="78"/>
+  <text class="text" x="665" y="162">Guest vào shop</text>
+  <text class="small" x="637" y="188">Tạo hoặc đọc guestSessionId</text>
+
+  <rect class="box" x="555" y="250" width="440" height="80"/>
+  <text class="text" x="640" y="282">Xem / filter / search sản phẩm</text>
+  <text class="small" x="610" y="308">Danh mục, keyword, giá, chất liệu, màu</text>
+  <path class="arrow-guest" d="M775 208 L775 250"/>
+
+  <polygon class="decision" points="775,380 925,465 775,550 625,465"/>
+  <text class="text" x="710" y="458">Nhu cầu?</text>
+  <text class="small" x="682" y="483">Mua thường / custom</text>
+  <path class="arrow" d="M775 330 L775 380"/>
+
+  <rect class="guest" x="220" y="620" width="360" height="92"/>
+  <text class="text" x="290" y="653">Mua sản phẩm thường</text>
+  <text class="small" x="270" y="679">Thêm cart theo guestSessionId</text>
+  <text class="small" x="270" y="700">Public voucher nếu hợp lệ</text>
+  <path class="arrow-guest" d="M650 512 C550 590 470 620 400 620"/>
+  <text class="label" x="500" y="585">Mua thường</text>
+
+  <rect class="manager" x="980" y="625" width="360" height="84"/>
+  <text class="text" x="1045" y="658">Custom Request</text>
+  <text class="small" x="1030" y="684">Yêu cầu đăng nhập / tạo tài khoản</text>
+  <path class="arrow-manager" d="M900 512 C990 585 1080 625 1160 625"/>
+  <text class="label" x="990" y="585">Custom</text>
+
+  <rect class="guest" x="510" y="780" width="430" height="115"/>
+  <text class="text" x="625" y="813">Guest checkout form</text>
+  <text class="small" x="570" y="840">Họ tên, email, phone, địa chỉ giao hàng</text>
+  <text class="small" x="570" y="864">Ghi chú, phương thức thanh toán</text>
+  <text class="small" x="570" y="886">Validate dữ liệu trước khi tạo order</text>
+  <path class="arrow-guest" d="M400 712 C430 760 490 815 510 835"/>
+
+  <rect class="box" x="515" y="955" width="420" height="95"/>
+  <text class="text" x="632" y="988">Tạo Guest Order</text>
+  <text class="small" x="575" y="1014">userId = null, lưu contact snapshot</text>
+  <text class="small" x="575" y="1036">Tạo orderLookupToken để tra cứu đơn</text>
+  <path class="arrow" d="M725 895 L725 955"/>
+
+  <rect class="email" x="515" y="1100" width="420" height="82"/>
+  <text class="text" x="603" y="1133">Email xác nhận đơn</text>
+  <text class="small" x="580" y="1159">Kèm mã/link tra cứu bằng lookupToken</text>
+  <path class="arrow-email" d="M725 1050 L725 1100"/>
+
+  <polygon class="decision" points="725,1235 875,1320 725,1405 575,1320"/>
+  <text class="text" x="668" y="1313">Loại item?</text>
+  <text class="small" x="640" y="1338">Có sẵn / handmade</text>
+  <path class="arrow" d="M725 1182 L725 1235"/>
+
+  <rect class="box" x="165" y="1280" width="350" height="78"/>
+  <text class="text" x="255" y="1313">Hàng có sẵn</text>
+  <text class="small" x="230" y="1339">Đóng gói / giao hàng</text>
+  <path class="arrow" d="M575 1320 L515 1320"/>
+
+  <rect class="manager" x="960" y="1270" width="390" height="95"/>
+  <text class="text" x="1035" y="1303">Manager phân staff</text>
+  <text class="small" x="1013" y="1330">Phân theo từng OrderItem handmade</text>
+  <path class="arrow-manager" d="M875 1320 L960 1320"/>
+
+  <rect class="staff" x="960" y="1420" width="390" height="84"/>
+  <text class="text" x="1047" y="1453">Staff nhận item</text>
+  <text class="small" x="1030" y="1479">Thực hiện sản phẩm handmade</text>
+  <path class="arrow-staff" d="M1155 1365 L1155 1420"/>
+
+  <rect class="staff" x="960" y="1545" width="390" height="84"/>
+  <text class="text" x="1015" y="1578">Checkpoint 1: INITIAL_SHAPE</text>
+  <text class="small" x="1030" y="1604">Ảnh hình dáng ban đầu + ghi chú</text>
+  <path class="arrow-staff" d="M1155 1504 L1155 1545"/>
+
+  <polygon class="decision" points="725,1515 850,1585 725,1655 600,1585"/>
+  <text class="text" x="660" y="1580">Cần duyệt?</text>
+  <text class="small" x="647" y="1603">Theo risk policy</text>
+  <path class="arrow-manager" d="M960 1585 L850 1585"/>
+
+  <rect class="email" x="260" y="1538" width="295" height="84"/>
+  <text class="text" x="320" y="1570">Email checkpoint 1</text>
+  <text class="small" x="312" y="1596">Auto gửi hoặc sau manager duyệt</text>
+  <path class="arrow-email" d="M600 1585 L555 1585"/>
+
+  <rect class="manager" x="165" y="1400" width="350" height="80"/>
+  <text class="text" x="240" y="1433">Manager final QC</text>
+  <text class="small" x="215" y="1459">Nên duyệt trước email final/giao hàng</text>
+  <path class="arrow-manager" d="M407 1538 L340 1480"/>
+
+  <rect class="email" x="165" y="1240" width="350" height="76"/>
+  <text class="text" x="228" y="1273">Email checkpoint final</text>
+  <text class="small" x="230" y="1297">Sản phẩm hoàn thiện + ảnh</text>
+  <path class="arrow-email" d="M340 1400 L340 1316"/>
+
+  <rect class="end" x="165" y="1110" width="350" height="78"/>
+  <text class="text" x="260" y="1143">READY_TO_SHIP</text>
+  <text class="small" x="238" y="1169">Giao hàng → Hoàn tất đơn</text>
+  <path class="arrow" d="M340 1240 L340 1188"/>
+  <path class="arrow" d="M340 1280 L340 1188"/>
+
+  <rect class="email" x="960" y="980" width="390" height="86"/>
+  <text class="text" x="1018" y="1013">Mời tạo tài khoản</text>
+  <text class="small" x="1018" y="1039">Nhận voucher, chat với staff, theo dõi đơn tốt hơn</text>
+
+  <rect class="note" x="70" y="160" width="410" height="135"/>
+  <text class="note-text" x="95" y="192">Điểm chính của guest</text>
+  <text class="note-text" x="95" y="220">• Cart dùng guestSessionId.</text>
+  <text class="note-text" x="95" y="246">• Không có Custom Request.</text>
+  <text class="note-text" x="95" y="272">• Checkpoint qua email + lookupToken.</text>
+</svg>
