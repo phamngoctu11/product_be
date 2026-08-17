@@ -1,0 +1,650 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_GuestPurchaseFlow" targetNamespace="http://handmade-shop/process/guest-purchase" exporter="Camunda Modeler" exporterVersion="5.49.0">
+  <bpmn:message id="Message_GuestPaymentSuccess" name="Msg_GuestPaymentSuccess" />
+  <bpmn:process id="GuestPurchaseFlow" name="Guest Purchase Flow" isExecutable="false" camunda:historyTimeToLive="180">
+    <bpmn:documentation>
+      Guest purchase flow for non-user checkout. Guest cart is identified by guestSessionId.
+      Guest order stores contact snapshot and orderLookupToken. Handmade items continue through
+      staff assignment and two checkpoint stages, with manager review depending on policy.
+    </bpmn:documentation>
+    <bpmn:startEvent id="Start_GuestCheckoutSubmitted" name="Guest checkout submitted">
+      <bpmn:outgoing>Flow_Start_To_ResolveSession</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_ResolveGuestSession" name="Resolve guest session" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">RESOLVE_GUEST_SESSION</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_To_ResolveSession</bpmn:incoming>
+      <bpmn:outgoing>Flow_ResolveSession_To_ValidateCheckout</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ValidateGuestCheckout" name="Validate cart, contact, voucher" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">VALIDATE_GUEST_CHECKOUT</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ResolveSession_To_ValidateCheckout</bpmn:incoming>
+      <bpmn:outgoing>Flow_ValidateCheckout_To_GatewayValid</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_GuestCheckoutValid" name="Checkout valid?">
+      <bpmn:incoming>Flow_ValidateCheckout_To_GatewayValid</bpmn:incoming>
+      <bpmn:outgoing>Flow_CheckoutInvalid_To_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_CheckoutValid_To_Reserve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_RejectGuestCheckout" name="Reject checkout" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">REJECT_GUEST_CHECKOUT</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_CheckoutInvalid_To_Reject</bpmn:incoming>
+      <bpmn:outgoing>Flow_Reject_To_EndRejected</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_GuestCheckoutRejected" name="Checkout rejected">
+      <bpmn:incoming>Flow_Reject_To_EndRejected</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_ReserveInventoryAndVoucher" name="Reserve stock and voucher" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">RESERVE_STOCK_AND_VOUCHER</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_CheckoutValid_To_Reserve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Reserve_To_PaymentGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_GuestPaymentMethod" name="Payment method">
+      <bpmn:incoming>Flow_Reserve_To_PaymentGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_COD_To_CreateOrder</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Online_To_CreatePayment</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_CreateGuestPayment" name="Create online payment" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">CREATE_GUEST_PAYMENT</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Online_To_CreatePayment</bpmn:incoming>
+      <bpmn:outgoing>Flow_CreatePayment_To_WaitPayment</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:eventBasedGateway id="Gateway_WaitGuestPayment" name="Wait payment result">
+      <bpmn:incoming>Flow_CreatePayment_To_WaitPayment</bpmn:incoming>
+      <bpmn:outgoing>Flow_WaitPayment_To_PaymentSuccess</bpmn:outgoing>
+      <bpmn:outgoing>Flow_WaitPayment_To_PaymentTimeout</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Event_GuestPaymentSuccess" name="Payment success">
+      <bpmn:incoming>Flow_WaitPayment_To_PaymentSuccess</bpmn:incoming>
+      <bpmn:outgoing>Flow_PaymentSuccess_To_CreateOrder</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_GuestPaymentSuccess" messageRef="Message_GuestPaymentSuccess" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Event_GuestPaymentTimeout" name="Payment timeout 15m">
+      <bpmn:incoming>Flow_WaitPayment_To_PaymentTimeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_PaymentTimeout_To_CancelReservation</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_GuestPaymentTimeout">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT15M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_CancelGuestReservation" name="Cancel reservation" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">CANCEL_GUEST_RESERVATION</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_PaymentTimeout_To_CancelReservation</bpmn:incoming>
+      <bpmn:outgoing>Flow_CancelReservation_To_EndExpired</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_GuestPaymentExpired" name="Payment expired">
+      <bpmn:incoming>Flow_CancelReservation_To_EndExpired</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_CreateGuestOrder" name="Create guest order" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">CREATE_GUEST_ORDER</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_COD_To_CreateOrder</bpmn:incoming>
+      <bpmn:incoming>Flow_PaymentSuccess_To_CreateOrder</bpmn:incoming>
+      <bpmn:outgoing>Flow_CreateOrder_To_SaveSnapshot</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_SaveGuestSnapshotLookupToken" name="Save contact snapshot and lookup token" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">SAVE_GUEST_CONTACT_SNAPSHOT</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_CreateOrder_To_SaveSnapshot</bpmn:incoming>
+      <bpmn:outgoing>Flow_SaveSnapshot_To_PublishOrderCreated</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Publish GUEST_ORDER_CREATED event" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">PUBLISH_WORKFLOW_EVENT</camunda:inputParameter>
+          <camunda:inputParameter name="eventType">GUEST_ORDER_CREATED</camunda:inputParameter>
+          <camunda:inputParameter name="streamName">order-events</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_SaveSnapshot_To_PublishOrderCreated</bpmn:incoming>
+      <bpmn:outgoing>Flow_PublishOrderCreated_To_HandmadeGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_ContainsHandmadeItems" name="Contains handmade items?">
+      <bpmn:incoming>Flow_PublishOrderCreated_To_HandmadeGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_NoHandmade_To_PackReadyMade</bpmn:outgoing>
+      <bpmn:outgoing>Flow_HasHandmade_To_AssignStaff</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_StaffPackReadyMadeItems" name="Staff packs ready-made items" camunda:candidateGroups="STAFF">
+      <bpmn:incoming>Flow_NoHandmade_To_PackReadyMade</bpmn:incoming>
+      <bpmn:outgoing>Flow_PackReadyMade_To_SendReadyEmail</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_SendGuestReadyToShipEmail" name="Send ready-to-ship email" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">SEND_EMAIL</camunda:inputParameter>
+          <camunda:inputParameter name="emailType">GUEST_READY_TO_SHIP</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_PackReadyMade_To_SendReadyEmail</bpmn:incoming>
+      <bpmn:outgoing>Flow_SendReadyEmail_To_EndReadyMade</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_GuestOrderReadyMadeReady" name="Ready-made order ready to ship">
+      <bpmn:incoming>Flow_SendReadyEmail_To_EndReadyMade</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="Task_ManagerAssignStaffByItem" name="Manager assigns staff by item" camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_HasHandmade_To_AssignStaff</bpmn:incoming>
+      <bpmn:outgoing>Flow_AssignStaff_To_SubmitInitial</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_StaffSubmitInitialCheckpoint" name="Staff submits INITIAL_SHAPE checkpoint" camunda:candidateGroups="STAFF">
+      <bpmn:incoming>Flow_AssignStaff_To_SubmitInitial</bpmn:incoming>
+      <bpmn:incoming>Flow_ReworkInitial_To_SubmitInitial</bpmn:incoming>
+      <bpmn:outgoing>Flow_SubmitInitial_To_InitialReviewPolicy</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_InitialCheckpointReviewPolicy" name="Need manager review?">
+      <bpmn:incoming>Flow_SubmitInitial_To_InitialReviewPolicy</bpmn:incoming>
+      <bpmn:outgoing>Flow_InitialReviewNotRequired_To_SendInitialEmail</bpmn:outgoing>
+      <bpmn:outgoing>Flow_InitialReviewRequired_To_ManagerReviewInitial</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_ManagerReviewInitialCheckpoint" name="Manager reviews INITIAL_SHAPE" camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_InitialReviewRequired_To_ManagerReviewInitial</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManagerReviewInitial_To_InitialApprovedGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_InitialCheckpointApproved" name="Initial approved?">
+      <bpmn:incoming>Flow_ManagerReviewInitial_To_InitialApprovedGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_InitialRejected_To_ReworkInitial</bpmn:outgoing>
+      <bpmn:outgoing>Flow_InitialApproved_To_SendInitialEmail</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_StaffReworkInitialCheckpoint" name="Staff reworks initial shape" camunda:candidateGroups="STAFF">
+      <bpmn:incoming>Flow_InitialRejected_To_ReworkInitial</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReworkInitial_To_SubmitInitial</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_SendGuestInitialCheckpointEmail" name="Send checkpoint 1 email to guest" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">SEND_EMAIL</camunda:inputParameter>
+          <camunda:inputParameter name="emailType">GUEST_CHECKPOINT_INITIAL_SHAPE</camunda:inputParameter>
+          <camunda:inputParameter name="checkpointStage">INITIAL_SHAPE</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_InitialReviewNotRequired_To_SendInitialEmail</bpmn:incoming>
+      <bpmn:incoming>Flow_InitialApproved_To_SendInitialEmail</bpmn:incoming>
+      <bpmn:outgoing>Flow_SendInitialEmail_To_SubmitFinal</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_StaffSubmitFinalCheckpoint" name="Staff submits FINAL_PRODUCT checkpoint" camunda:candidateGroups="STAFF">
+      <bpmn:incoming>Flow_SendInitialEmail_To_SubmitFinal</bpmn:incoming>
+      <bpmn:incoming>Flow_ReworkFinal_To_SubmitFinal</bpmn:incoming>
+      <bpmn:outgoing>Flow_SubmitFinal_To_ManagerFinalQC</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ManagerFinalQC" name="Manager final QC" camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_SubmitFinal_To_ManagerFinalQC</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManagerFinalQC_To_FinalApprovedGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_FinalCheckpointApproved" name="Final approved?">
+      <bpmn:incoming>Flow_ManagerFinalQC_To_FinalApprovedGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_FinalRejected_To_ReworkFinal</bpmn:outgoing>
+      <bpmn:outgoing>Flow_FinalApproved_To_SendFinalEmail</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_StaffReworkFinalCheckpoint" name="Staff reworks final product" camunda:candidateGroups="STAFF">
+      <bpmn:incoming>Flow_FinalRejected_To_ReworkFinal</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReworkFinal_To_SubmitFinal</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_SendGuestFinalCheckpointEmail" name="Send final checkpoint email to guest" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">SEND_EMAIL</camunda:inputParameter>
+          <camunda:inputParameter name="emailType">GUEST_CHECKPOINT_FINAL_PRODUCT</camunda:inputParameter>
+          <camunda:inputParameter name="checkpointStage">FINAL_PRODUCT</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_FinalApproved_To_SendFinalEmail</bpmn:incoming>
+      <bpmn:outgoing>Flow_SendFinalEmail_To_MarkReady</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_MarkGuestOrderItemReady" name="Mark item ready to ship" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">MARK_ORDER_ITEM_READY_TO_SHIP</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_SendFinalEmail_To_MarkReady</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkReady_To_EndHandmadeReady</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_GuestHandmadeOrderReady" name="Handmade item ready to ship">
+      <bpmn:incoming>Flow_MarkReady_To_EndHandmadeReady</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_To_ResolveSession" sourceRef="Start_GuestCheckoutSubmitted" targetRef="Task_ResolveGuestSession" />
+    <bpmn:sequenceFlow id="Flow_ResolveSession_To_ValidateCheckout" sourceRef="Task_ResolveGuestSession" targetRef="Task_ValidateGuestCheckout" />
+    <bpmn:sequenceFlow id="Flow_ValidateCheckout_To_GatewayValid" sourceRef="Task_ValidateGuestCheckout" targetRef="Gateway_GuestCheckoutValid" />
+    <bpmn:sequenceFlow id="Flow_CheckoutInvalid_To_Reject" name="Invalid" sourceRef="Gateway_GuestCheckoutValid" targetRef="Task_RejectGuestCheckout">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${guestCheckoutValid == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_CheckoutValid_To_Reserve" name="Valid" sourceRef="Gateway_GuestCheckoutValid" targetRef="Task_ReserveInventoryAndVoucher">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${guestCheckoutValid == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Reject_To_EndRejected" sourceRef="Task_RejectGuestCheckout" targetRef="End_GuestCheckoutRejected" />
+    <bpmn:sequenceFlow id="Flow_Reserve_To_PaymentGateway" sourceRef="Task_ReserveInventoryAndVoucher" targetRef="Gateway_GuestPaymentMethod" />
+    <bpmn:sequenceFlow id="Flow_COD_To_CreateOrder" name="COD" sourceRef="Gateway_GuestPaymentMethod" targetRef="Task_CreateGuestOrder">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentMethod == 'COD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Online_To_CreatePayment" name="ONLINE" sourceRef="Gateway_GuestPaymentMethod" targetRef="Task_CreateGuestPayment">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentMethod == 'ONLINE'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_CreatePayment_To_WaitPayment" sourceRef="Task_CreateGuestPayment" targetRef="Gateway_WaitGuestPayment" />
+    <bpmn:sequenceFlow id="Flow_WaitPayment_To_PaymentSuccess" sourceRef="Gateway_WaitGuestPayment" targetRef="Event_GuestPaymentSuccess" />
+    <bpmn:sequenceFlow id="Flow_WaitPayment_To_PaymentTimeout" sourceRef="Gateway_WaitGuestPayment" targetRef="Event_GuestPaymentTimeout" />
+    <bpmn:sequenceFlow id="Flow_PaymentSuccess_To_CreateOrder" sourceRef="Event_GuestPaymentSuccess" targetRef="Task_CreateGuestOrder" />
+    <bpmn:sequenceFlow id="Flow_PaymentTimeout_To_CancelReservation" sourceRef="Event_GuestPaymentTimeout" targetRef="Task_CancelGuestReservation" />
+    <bpmn:sequenceFlow id="Flow_CancelReservation_To_EndExpired" sourceRef="Task_CancelGuestReservation" targetRef="End_GuestPaymentExpired" />
+    <bpmn:sequenceFlow id="Flow_CreateOrder_To_SaveSnapshot" sourceRef="Task_CreateGuestOrder" targetRef="Task_SaveGuestSnapshotLookupToken" />
+    <bpmn:sequenceFlow id="Flow_SaveSnapshot_To_PublishOrderCreated" sourceRef="Task_SaveGuestSnapshotLookupToken" targetRef="Task_PublishGuestOrderCreated" />
+    <bpmn:sequenceFlow id="Flow_PublishOrderCreated_To_HandmadeGateway" sourceRef="Task_PublishGuestOrderCreated" targetRef="Gateway_ContainsHandmadeItems" />
+    <bpmn:sequenceFlow id="Flow_NoHandmade_To_PackReadyMade" name="No" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_StaffPackReadyMadeItems">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_HasHandmade_To_AssignStaff" name="Yes" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_ManagerAssignStaffByItem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_PackReadyMade_To_SendReadyEmail" sourceRef="Task_StaffPackReadyMadeItems" targetRef="Task_SendGuestReadyToShipEmail" />
+    <bpmn:sequenceFlow id="Flow_SendReadyEmail_To_EndReadyMade" sourceRef="Task_SendGuestReadyToShipEmail" targetRef="End_GuestOrderReadyMadeReady" />
+    <bpmn:sequenceFlow id="Flow_AssignStaff_To_SubmitInitial" sourceRef="Task_ManagerAssignStaffByItem" targetRef="Task_StaffSubmitInitialCheckpoint" />
+    <bpmn:sequenceFlow id="Flow_SubmitInitial_To_InitialReviewPolicy" sourceRef="Task_StaffSubmitInitialCheckpoint" targetRef="Gateway_InitialCheckpointReviewPolicy" />
+    <bpmn:sequenceFlow id="Flow_InitialReviewNotRequired_To_SendInitialEmail" name="No" sourceRef="Gateway_InitialCheckpointReviewPolicy" targetRef="Task_SendGuestInitialCheckpointEmail">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkpoint1RequiresManagerReview == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_InitialReviewRequired_To_ManagerReviewInitial" name="Yes" sourceRef="Gateway_InitialCheckpointReviewPolicy" targetRef="Task_ManagerReviewInitialCheckpoint">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkpoint1RequiresManagerReview == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ManagerReviewInitial_To_InitialApprovedGateway" sourceRef="Task_ManagerReviewInitialCheckpoint" targetRef="Gateway_InitialCheckpointApproved" />
+    <bpmn:sequenceFlow id="Flow_InitialRejected_To_ReworkInitial" name="Rework" sourceRef="Gateway_InitialCheckpointApproved" targetRef="Task_StaffReworkInitialCheckpoint">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkpoint1Approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_InitialApproved_To_SendInitialEmail" name="Approve" sourceRef="Gateway_InitialCheckpointApproved" targetRef="Task_SendGuestInitialCheckpointEmail">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkpoint1Approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ReworkInitial_To_SubmitInitial" sourceRef="Task_StaffReworkInitialCheckpoint" targetRef="Task_StaffSubmitInitialCheckpoint" />
+    <bpmn:sequenceFlow id="Flow_SendInitialEmail_To_SubmitFinal" sourceRef="Task_SendGuestInitialCheckpointEmail" targetRef="Task_StaffSubmitFinalCheckpoint" />
+    <bpmn:sequenceFlow id="Flow_SubmitFinal_To_ManagerFinalQC" sourceRef="Task_StaffSubmitFinalCheckpoint" targetRef="Task_ManagerFinalQC" />
+    <bpmn:sequenceFlow id="Flow_ManagerFinalQC_To_FinalApprovedGateway" sourceRef="Task_ManagerFinalQC" targetRef="Gateway_FinalCheckpointApproved" />
+    <bpmn:sequenceFlow id="Flow_FinalRejected_To_ReworkFinal" name="Rework" sourceRef="Gateway_FinalCheckpointApproved" targetRef="Task_StaffReworkFinalCheckpoint">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${finalApproved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FinalApproved_To_SendFinalEmail" name="Approve" sourceRef="Gateway_FinalCheckpointApproved" targetRef="Task_SendGuestFinalCheckpointEmail">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${finalApproved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ReworkFinal_To_SubmitFinal" sourceRef="Task_StaffReworkFinalCheckpoint" targetRef="Task_StaffSubmitFinalCheckpoint" />
+    <bpmn:sequenceFlow id="Flow_SendFinalEmail_To_MarkReady" sourceRef="Task_SendGuestFinalCheckpointEmail" targetRef="Task_MarkGuestOrderItemReady" />
+    <bpmn:sequenceFlow id="Flow_MarkReady_To_EndHandmadeReady" sourceRef="Task_MarkGuestOrderItemReady" targetRef="End_GuestHandmadeOrderReady" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_GuestPurchaseFlow">
+    <bpmndi:BPMNPlane id="BPMNPlane_GuestPurchaseFlow" bpmnElement="GuestPurchaseFlow">
+      <bpmndi:BPMNShape id="Start_GuestCheckoutSubmitted_di" bpmnElement="Start_GuestCheckoutSubmitted">
+        <dc:Bounds x="160" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="137" y="345" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ResolveGuestSession_di" bpmnElement="Task_ResolveGuestSession">
+        <dc:Bounds x="260" y="280" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ValidateGuestCheckout_di" bpmnElement="Task_ValidateGuestCheckout">
+        <dc:Bounds x="440" y="280" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_GuestCheckoutValid_di" bpmnElement="Gateway_GuestCheckoutValid" isMarkerVisible="true">
+        <dc:Bounds x="655" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="641" y="352" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RejectGuestCheckout_di" bpmnElement="Task_RejectGuestCheckout">
+        <dc:Bounds x="630" y="430" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestCheckoutRejected_di" bpmnElement="End_GuestCheckoutRejected">
+        <dc:Bounds x="815" y="452" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="790" y="495" width="89" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveInventoryAndVoucher_di" bpmnElement="Task_ReserveInventoryAndVoucher">
+        <dc:Bounds x="790" y="280" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_GuestPaymentMethod_di" bpmnElement="Gateway_GuestPaymentMethod" isMarkerVisible="true">
+        <dc:Bounds x="1010" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="994" y="352" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateGuestPayment_di" bpmnElement="Task_CreateGuestPayment">
+        <dc:Bounds x="965" y="120" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_WaitGuestPayment_di" bpmnElement="Gateway_WaitGuestPayment">
+        <dc:Bounds x="1160" y="135" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1140" y="92" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_GuestPaymentSuccess_di" bpmnElement="Event_GuestPaymentSuccess">
+        <dc:Bounds x="1310" y="85" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1287" y="48" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_GuestPaymentTimeout_di" bpmnElement="Event_GuestPaymentTimeout">
+        <dc:Bounds x="1310" y="205" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1282" y="248" width="93" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CancelGuestReservation_di" bpmnElement="Task_CancelGuestReservation">
+        <dc:Bounds x="1450" y="183" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestPaymentExpired_di" bpmnElement="End_GuestPaymentExpired">
+        <dc:Bounds x="1635" y="205" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1614" y="248" width="79" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateGuestOrder_di" bpmnElement="Task_CreateGuestOrder">
+        <dc:Bounds x="1240" y="280" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SaveGuestSnapshotLookupToken_di" bpmnElement="Task_SaveGuestSnapshotLookupToken">
+        <dc:Bounds x="1430" y="280" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_PublishGuestOrderCreated_di" bpmnElement="Task_PublishGuestOrderCreated">
+        <dc:Bounds x="1650" y="280" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ContainsHandmadeItems_di" bpmnElement="Gateway_ContainsHandmadeItems" isMarkerVisible="true">
+        <dc:Bounds x="1890" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1872" y="352" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_StaffPackReadyMadeItems_di" bpmnElement="Task_StaffPackReadyMadeItems">
+        <dc:Bounds x="2030" y="160" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendGuestReadyToShipEmail_di" bpmnElement="Task_SendGuestReadyToShipEmail">
+        <dc:Bounds x="2240" y="160" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestOrderReadyMadeReady_di" bpmnElement="End_GuestOrderReadyMadeReady">
+        <dc:Bounds x="2460" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2434" y="225" width="89" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerAssignStaffByItem_di" bpmnElement="Task_ManagerAssignStaffByItem">
+        <dc:Bounds x="2030" y="400" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_StaffSubmitInitialCheckpoint_di" bpmnElement="Task_StaffSubmitInitialCheckpoint">
+        <dc:Bounds x="2240" y="400" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_InitialCheckpointReviewPolicy_di" bpmnElement="Gateway_InitialCheckpointReviewPolicy" isMarkerVisible="true">
+        <dc:Bounds x="2485" y="415" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2467" y="472" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerReviewInitialCheckpoint_di" bpmnElement="Task_ManagerReviewInitialCheckpoint">
+        <dc:Bounds x="2625" y="280" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_InitialCheckpointApproved_di" bpmnElement="Gateway_InitialCheckpointApproved" isMarkerVisible="true">
+        <dc:Bounds x="2860" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2843" y="352" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_StaffReworkInitialCheckpoint_di" bpmnElement="Task_StaffReworkInitialCheckpoint">
+        <dc:Bounds x="2820" y="520" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendGuestInitialCheckpointEmail_di" bpmnElement="Task_SendGuestInitialCheckpointEmail">
+        <dc:Bounds x="3000" y="400" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_StaffSubmitFinalCheckpoint_di" bpmnElement="Task_StaffSubmitFinalCheckpoint">
+        <dc:Bounds x="3220" y="400" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerFinalQC_di" bpmnElement="Task_ManagerFinalQC">
+        <dc:Bounds x="3440" y="400" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_FinalCheckpointApproved_di" bpmnElement="Gateway_FinalCheckpointApproved" isMarkerVisible="true">
+        <dc:Bounds x="3640" y="415" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3625" y="472" width="82" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_StaffReworkFinalCheckpoint_di" bpmnElement="Task_StaffReworkFinalCheckpoint">
+        <dc:Bounds x="3600" y="560" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendGuestFinalCheckpointEmail_di" bpmnElement="Task_SendGuestFinalCheckpointEmail">
+        <dc:Bounds x="3810" y="400" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MarkGuestOrderItemReady_di" bpmnElement="Task_MarkGuestOrderItemReady">
+        <dc:Bounds x="4030" y="400" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestHandmadeOrderReady_di" bpmnElement="End_GuestHandmadeOrderReady">
+        <dc:Bounds x="4250" y="422" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4228" y="465" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_153xs43_di" bpmnElement="Event_153xs43">
+        <dc:Bounds x="1032" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_To_ResolveSession_di" bpmnElement="Flow_Start_To_ResolveSession">
+        <di:waypoint x="196" y="320" />
+        <di:waypoint x="260" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ResolveSession_To_ValidateCheckout_di" bpmnElement="Flow_ResolveSession_To_ValidateCheckout">
+        <di:waypoint x="380" y="320" />
+        <di:waypoint x="440" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ValidateCheckout_To_GatewayValid_di" bpmnElement="Flow_ValidateCheckout_To_GatewayValid">
+        <di:waypoint x="580" y="320" />
+        <di:waypoint x="655" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckoutInvalid_To_Reject_di" bpmnElement="Flow_CheckoutInvalid_To_Reject">
+        <di:waypoint x="680" y="345" />
+        <di:waypoint x="680" y="430" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="686" y="384" width="34" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckoutValid_To_Reserve_di" bpmnElement="Flow_CheckoutValid_To_Reserve">
+        <di:waypoint x="705" y="320" />
+        <di:waypoint x="790" y="320" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="736" y="302" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Reject_To_EndRejected_di" bpmnElement="Flow_Reject_To_EndRejected">
+        <di:waypoint x="750" y="470" />
+        <di:waypoint x="815" y="470" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Reserve_To_PaymentGateway_di" bpmnElement="Flow_Reserve_To_PaymentGateway">
+        <di:waypoint x="930" y="320" />
+        <di:waypoint x="1010" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_COD_To_CreateOrder_di" bpmnElement="Flow_COD_To_CreateOrder">
+        <di:waypoint x="1060" y="320" />
+        <di:waypoint x="1240" y="320" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1138" y="302" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Online_To_CreatePayment_di" bpmnElement="Flow_Online_To_CreatePayment">
+        <di:waypoint x="1035" y="295" />
+        <di:waypoint x="1035" y="200" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1043" y="241" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CreatePayment_To_WaitPayment_di" bpmnElement="Flow_CreatePayment_To_WaitPayment">
+        <di:waypoint x="1105" y="160" />
+        <di:waypoint x="1160" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_WaitPayment_To_PaymentSuccess_di" bpmnElement="Flow_WaitPayment_To_PaymentSuccess">
+        <di:waypoint x="1210" y="160" />
+        <di:waypoint x="1258" y="160" />
+        <di:waypoint x="1258" y="103" />
+        <di:waypoint x="1310" y="103" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_WaitPayment_To_PaymentTimeout_di" bpmnElement="Flow_WaitPayment_To_PaymentTimeout">
+        <di:waypoint x="1210" y="160" />
+        <di:waypoint x="1258" y="160" />
+        <di:waypoint x="1258" y="223" />
+        <di:waypoint x="1310" y="223" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentSuccess_To_CreateOrder_di" bpmnElement="Flow_PaymentSuccess_To_CreateOrder">
+        <di:waypoint x="1346" y="103" />
+        <di:waypoint x="1370" y="103" />
+        <di:waypoint x="1370" y="260" />
+        <di:waypoint x="1305" y="260" />
+        <di:waypoint x="1305" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentTimeout_To_CancelReservation_di" bpmnElement="Flow_PaymentTimeout_To_CancelReservation">
+        <di:waypoint x="1346" y="223" />
+        <di:waypoint x="1450" y="223" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CancelReservation_To_EndExpired_di" bpmnElement="Flow_CancelReservation_To_EndExpired">
+        <di:waypoint x="1580" y="223" />
+        <di:waypoint x="1635" y="223" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CreateOrder_To_SaveSnapshot_di" bpmnElement="Flow_CreateOrder_To_SaveSnapshot">
+        <di:waypoint x="1370" y="320" />
+        <di:waypoint x="1430" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SaveSnapshot_To_PublishOrderCreated_di" bpmnElement="Flow_SaveSnapshot_To_PublishOrderCreated">
+        <di:waypoint x="1590" y="320" />
+        <di:waypoint x="1650" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PublishOrderCreated_To_HandmadeGateway_di" bpmnElement="Flow_PublishOrderCreated_To_HandmadeGateway">
+        <di:waypoint x="1820" y="320" />
+        <di:waypoint x="1890" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_NoHandmade_To_PackReadyMade_di" bpmnElement="Flow_NoHandmade_To_PackReadyMade">
+        <di:waypoint x="1915" y="295" />
+        <di:waypoint x="1915" y="200" />
+        <di:waypoint x="2030" y="200" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1925" y="241" width="15" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HasHandmade_To_AssignStaff_di" bpmnElement="Flow_HasHandmade_To_AssignStaff">
+        <di:waypoint x="1915" y="345" />
+        <di:waypoint x="1915" y="440" />
+        <di:waypoint x="2030" y="440" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1924" y="387" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PackReadyMade_To_SendReadyEmail_di" bpmnElement="Flow_PackReadyMade_To_SendReadyEmail">
+        <di:waypoint x="2180" y="200" />
+        <di:waypoint x="2240" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SendReadyEmail_To_EndReadyMade_di" bpmnElement="Flow_SendReadyEmail_To_EndReadyMade">
+        <di:waypoint x="2390" y="200" />
+        <di:waypoint x="2460" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AssignStaff_To_SubmitInitial_di" bpmnElement="Flow_AssignStaff_To_SubmitInitial">
+        <di:waypoint x="2180" y="440" />
+        <di:waypoint x="2240" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SubmitInitial_To_InitialReviewPolicy_di" bpmnElement="Flow_SubmitInitial_To_InitialReviewPolicy">
+        <di:waypoint x="2400" y="440" />
+        <di:waypoint x="2485" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_InitialReviewNotRequired_To_SendInitialEmail_di" bpmnElement="Flow_InitialReviewNotRequired_To_SendInitialEmail">
+        <di:waypoint x="2535" y="440" />
+        <di:waypoint x="3000" y="440" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2762" y="422" width="15" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_InitialReviewRequired_To_ManagerReviewInitial_di" bpmnElement="Flow_InitialReviewRequired_To_ManagerReviewInitial">
+        <di:waypoint x="2510" y="415" />
+        <di:waypoint x="2510" y="320" />
+        <di:waypoint x="2625" y="320" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2520" y="363" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManagerReviewInitial_To_InitialApprovedGateway_di" bpmnElement="Flow_ManagerReviewInitial_To_InitialApprovedGateway">
+        <di:waypoint x="2775" y="320" />
+        <di:waypoint x="2860" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_InitialRejected_To_ReworkInitial_di" bpmnElement="Flow_InitialRejected_To_ReworkInitial">
+        <di:waypoint x="2885" y="345" />
+        <di:waypoint x="2885" y="520" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2893" y="428" width="42" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_InitialApproved_To_SendInitialEmail_di" bpmnElement="Flow_InitialApproved_To_SendInitialEmail">
+        <di:waypoint x="2910" y="320" />
+        <di:waypoint x="3080" y="320" />
+        <di:waypoint x="3080" y="400" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2983" y="302" width="47" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReworkInitial_To_SubmitInitial_di" bpmnElement="Flow_ReworkInitial_To_SubmitInitial">
+        <di:waypoint x="2820" y="560" />
+        <di:waypoint x="2320" y="560" />
+        <di:waypoint x="2320" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SendInitialEmail_To_SubmitFinal_di" bpmnElement="Flow_SendInitialEmail_To_SubmitFinal">
+        <di:waypoint x="3160" y="440" />
+        <di:waypoint x="3220" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SubmitFinal_To_ManagerFinalQC_di" bpmnElement="Flow_SubmitFinal_To_ManagerFinalQC">
+        <di:waypoint x="3380" y="440" />
+        <di:waypoint x="3440" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManagerFinalQC_To_FinalApprovedGateway_di" bpmnElement="Flow_ManagerFinalQC_To_FinalApprovedGateway">
+        <di:waypoint x="3580" y="440" />
+        <di:waypoint x="3640" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalRejected_To_ReworkFinal_di" bpmnElement="Flow_FinalRejected_To_ReworkFinal">
+        <di:waypoint x="3665" y="465" />
+        <di:waypoint x="3665" y="560" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3673" y="509" width="42" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalApproved_To_SendFinalEmail_di" bpmnElement="Flow_FinalApproved_To_SendFinalEmail">
+        <di:waypoint x="3690" y="440" />
+        <di:waypoint x="3810" y="440" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3735" y="422" width="47" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReworkFinal_To_SubmitFinal_di" bpmnElement="Flow_ReworkFinal_To_SubmitFinal">
+        <di:waypoint x="3600" y="600" />
+        <di:waypoint x="3300" y="600" />
+        <di:waypoint x="3300" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SendFinalEmail_To_MarkReady_di" bpmnElement="Flow_SendFinalEmail_To_MarkReady">
+        <di:waypoint x="3970" y="440" />
+        <di:waypoint x="4030" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkReady_To_EndHandmadeReady_di" bpmnElement="Flow_MarkReady_To_EndHandmadeReady">
+        <di:waypoint x="4180" y="440" />
+        <di:waypoint x="4250" y="440" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

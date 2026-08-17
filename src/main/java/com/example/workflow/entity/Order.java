@@ -55,6 +55,18 @@ public class Order {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "guest_session_id", length = 128)
+    private String guestSessionId;
+
+    @Column(name = "recipient_name", length = 120)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", length = 30)
+    private String recipientPhone;
+
+    @Column(name = "shipping_address", columnDefinition = "TEXT")
+    private String shippingAddress;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
     private User manager;

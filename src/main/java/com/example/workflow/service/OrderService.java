@@ -1,6 +1,8 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.*;
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -13,7 +15,6 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.redis.DomainEventPublisher;
-import com.example.workflow.service.redis.OptionalCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
@@ -46,7 +47,6 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final UserRepository userRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final OptionalCacheService optionalCacheService;
     private final OrderStatusHistoryMapper historyMapper;
     private final TaskService taskService;
     private final RuntimeService runtimeService;
@@ -190,12 +190,14 @@ public class OrderService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "warehouse order claimed", value = {
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void claimWarehouseOrder(Long orderId) {
         Order order = getOrderOrThrow(orderId);
@@ -215,12 +217,14 @@ public class OrderService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "staff assigned to order", value = {
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void assignStaffToOrder(Long orderId, String staffId) {
         Order order = getOrderOrThrow(orderId);
@@ -242,12 +246,14 @@ public class OrderService {
     // Station 1: manager review
     // ==========================================
     @Transactional
+    @DeferredCacheEvicts(reason = "manager reviewed order", value = {
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
         Order order = getOrderOrThrow(orderId);
@@ -269,13 +275,14 @@ public class OrderService {
             if (assignedStaff != null) {
                 saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc giao cho ban phu trach xuat kho.", orderId, assignedStaff.getId(), "/topic/user-notifications/" + assignedStaff.getId());
             }
-            saveAndSendNotification("Don hang da duyet", "Don #" + orderId + " dang duoc chuan bi.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            saveCustomerNotificationIfSystemUser(order, "Don hang da duyet", "Don #" + orderId + " dang duoc chuan bi.");
         } else {
             order.setWarehouseStaff(null);
             order.setCancelReason("Quan ly tu choi: " + request.getCancelReason());
             variables.put("isApproved", false);
             // Rejected orders are cancelled by the workflow delegate.
-            saveAndSendNotification("Don hang bi tu choi", "Ly do: " + request.getCancelReason(), orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            saveCustomerNotificationIfSystemUser(order, "Don hang bi tu choi", "Ly do: " + request.getCancelReason());
+            sendGuestCancellationEmailIfNeeded(order);
         }
 
         if (request.isApproved()) {
@@ -290,12 +297,13 @@ public class OrderService {
     // Station 2: warehouse export
     // ==========================================
     @Transactional
+    @DeferredCacheEvicts(reason = "staff exported order", value = {
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
         Order order = getOrderOrThrow(orderId);
@@ -334,15 +342,17 @@ public class OrderService {
     // Station 3: manager KCS reconciliation
     // ==========================================
     @Transactional
+    @DeferredCacheEvicts(reason = "manager KCS checked order", value = {
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "products", allEntries = true),
+            @DeferredCacheEvict(cacheName = "product", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true)
+            @CacheEvict(value = "staffOrders", allEntries = true)
     })
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
         Order order = getOrderOrThrow(orderId);
@@ -359,7 +369,7 @@ public class OrderService {
         OrderStatus oldStatus = order.getStatus();
         if (isPassed) {
             order.setStatus(OrderStatus.SHIPPING);
-            saveAndSendNotification("Don hang dang giao", "Don hang #" + orderId + " da xuat kho va dang tren duong giao den ban.", orderId, order.getUser().getId(), "/topic/user-notifications/" + order.getUser().getId());
+            saveCustomerNotificationIfSystemUser(order, "Don hang dang giao", "Don hang #" + orderId + " da xuat kho va dang tren duong giao den ban.");
         } else {
             order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
             String message = " vui long kiem tra lai so luong xuat.";
@@ -377,13 +387,15 @@ public class OrderService {
     // Station 4: customer receipt confirmation
     // ==========================================
     @Transactional
+    @DeferredCacheEvicts(reason = "customer confirmed receipt", value = {
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "bestSellingProducts", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true)
+            @CacheEvict(value = "user", allEntries = true)
     })
     public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
         Order order = getOrderOrThrow(orderId);
@@ -618,17 +630,18 @@ public class OrderService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "order cancelled", value = {
+            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "products", allEntries = true),
+            @DeferredCacheEvict(cacheName = "product", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true)
+            @CacheEvict(value = "userVoucherWallet", allEntries = true)
     })
     public void cancelOrder(Long id, String reason) {
         Order order = getOrderForUpdateOrThrow(id);
@@ -656,8 +669,6 @@ public class OrderService {
                 EventTypes.ORDER_CANCELLED,
                 new OrderCancelledEvent(order.getId(), order.getCancelReason())
         );
-
-        clearRelatedCaches(user.getId());
 
         saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
         saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
@@ -799,27 +810,44 @@ public class OrderService {
         historyRepository.save(history);
     }
 
-    private void clearRelatedCaches(String userId) {
-        optionalCacheService.clear("orders");
-        optionalCacheService.clear("pendingOrders");
-        optionalCacheService.clear("warehouseOrders");
-        optionalCacheService.clear("staffOrders");
-        optionalCacheService.clear("users");
-        optionalCacheService.clear("dashboardStats");
-        optionalCacheService.evict("user", userId);
-        optionalCacheService.clear("userVoucherWallet");
-    }
-
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
         notificationService.sendNotification(title, content, orderId, targetUserId, null, destination);
     }
+
+    private void saveCustomerNotificationIfSystemUser(Order order, String title, String content) {
+        if (order == null || order.getUser() == null || order.getUser().getId() == null) {
+            return;
+        }
+        saveAndSendNotification(
+                title,
+                content,
+                order.getId(),
+                order.getUser().getId(),
+                "/topic/user-notifications/" + order.getUser().getId()
+        );
+    }
+
+    private void sendGuestCancellationEmailIfNeeded(Order order) {
+        if (order == null || order.getUser() != null || order.getEmail() == null || order.getEmail().isBlank()) {
+            return;
+        }
+        emailService.sendOrderCancellationEmail(
+                order.getEmail(),
+                order.getRecipientName(),
+                order.getId(),
+                order.getCancelReason()
+        );
+    }
     @Transactional
+    @DeferredCacheEvicts(reason = "momo callback processed", value = {
+            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true)
+            @CacheEvict(value = "userVoucherWallet", allEntries = true)
     })
     public void processMomoCallbackResult(Long orderId, String resultCode) {
         Order order = getOrderForUpdateOrThrow(orderId);
@@ -834,7 +862,6 @@ public class OrderService {
             handleFailedMomoPayment(order, resultCode);
         }
 
-        clearRelatedCaches(order.getUser().getId());
     }
 
     private void handleSuccessfulMomoPayment(Order order) {

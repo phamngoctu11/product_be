@@ -1,5 +1,7 @@
 package com.example.workflow.service;
 
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.StaffCommissionDetailDTO;
 import com.example.workflow.dto.StaffCommissionSummaryDTO;
 import com.example.workflow.entity.ConsultationRequest;
@@ -173,9 +175,9 @@ public class StaffCommissionService {
         refreshKeys(refreshKeys);
     }
 
-    @Caching(evict = {
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    @DeferredCacheEvicts(reason = "staff commission summaries refreshed", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
     })
     public void refreshSummaries(Collection<CommissionRefreshKey> commissionRefreshKeys) {
         if (commissionRefreshKeys == null || commissionRefreshKeys.isEmpty()) {

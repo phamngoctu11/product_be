@@ -2,6 +2,7 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartResDTO;
+import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.CartService;
@@ -68,7 +69,7 @@ public class CartController {
 
     @PostMapping("/approve/{userId}")
     @PreAuthorize("hasAuthority('USER')")
-    public ResponseEntity<ApiResponse<Map<String, String>>> approveCart(
+    public ResponseEntity<ApiResponse<CheckoutResponseDTO>> approveCart(
             @PathVariable("userId") String userId,
             @Valid @NotEmpty(message = "Select at least one variant to checkout")
             @RequestBody List<@Positive(message = "Variant id must be positive") Long> productIdsToCheckout,
@@ -80,7 +81,7 @@ public class CartController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         try {
-            Map<String, String> response = cartService.approveCart(
+            Map<String, String> rawResponse = cartService.approveCart(
                     userId,
                     productIdsToCheckout,
                     userVoucherId,
@@ -88,7 +89,8 @@ public class CartController {
                     note,
                     idempotencyKey
             );
-            return ResponseEntity.ok(ApiResponse.success(response));
+            CheckoutResponseDTO response = CheckoutResponseDTO.fromMap(rawResponse);
+            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {

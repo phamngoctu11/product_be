@@ -1,5 +1,7 @@
 package com.example.workflow.service;
 
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
@@ -70,12 +72,14 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "product created", value = {
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "bestSellingProducts", allEntries = true)
     })
     public ProductDTO createProduct(ProductDTO dto, String userId) {
         User actor = getActor(userId);
@@ -88,14 +92,16 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "product updated", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id"),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "product", key = "#id")
     })
     public void updateProduct(Long id, ProductDTO dto, String userId) {
         User actor = getActor(userId);
@@ -152,13 +158,15 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "product basic info updated", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", key = "#id"),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "product", key = "#id")
     })
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);
@@ -169,13 +177,15 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "product variant added", value = {
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#productId"),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "product", key = "#productId")
     })
     public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
         User actor = getActor(userId);
@@ -194,13 +204,15 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "stock imported", value = {
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "product", allEntries = true)
     })
     public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
         User actor = getActor(userId);
@@ -214,13 +226,15 @@ public class ProductService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "product deleted", value = {
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "products", allEntries = true),
             @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id"),
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", allEntries = true),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
+            @CacheEvict(value = "product", key = "#id")
     })
     public void deleteProduct(Long id, String userId) {
         getActor(userId);

@@ -4,13 +4,14 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderStatusHistory;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.OrderStatusHistoryRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.redis.DomainEventPublisher;
-import com.example.workflow.service.redis.OptionalCacheService;
+import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
@@ -37,7 +38,7 @@ public class PendingPaymentReservationTimeoutService {
     private final UserVoucherRepository userVoucherRepository;
     private final OrderStatusHistoryRepository historyRepository;
     private final DomainEventPublisher eventPublisher;
-    private final OptionalCacheService optionalCacheService;
+    private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
 
     @Value("${checkout.reservation-timeout.minutes:15}")
     private long timeoutMinutes;
@@ -123,15 +124,17 @@ public class PendingPaymentReservationTimeoutService {
     }
 
     private void clearRelatedCaches() {
-        optionalCacheService.clear("orders");
-        optionalCacheService.clear("pendingOrders");
-        optionalCacheService.clear("warehouseOrders");
-        optionalCacheService.clear("staffOrders");
-        optionalCacheService.clear("users");
-        optionalCacheService.clear("dashboardStats");
-        optionalCacheService.clear("products");
-        optionalCacheService.clear("product");
-        optionalCacheService.clear("wishlistProducts");
-        optionalCacheService.clear("userVoucherWallet");
+        cacheEvictionPublisher.publishEventually("pending payment reservation timeout", List.of(
+                CacheEvictionEntry.allEntries("orders"),
+                CacheEvictionEntry.allEntries("pendingOrders"),
+                CacheEvictionEntry.allEntries("warehouseOrders"),
+                CacheEvictionEntry.allEntries("staffOrders"),
+                CacheEvictionEntry.allEntries("users"),
+                CacheEvictionEntry.allEntries("dashboardStats"),
+                CacheEvictionEntry.allEntries("products"),
+                CacheEvictionEntry.allEntries("product"),
+                CacheEvictionEntry.allEntries("wishlistProducts"),
+                CacheEvictionEntry.allEntries("userVoucherWallet")
+        ));
     }
 }

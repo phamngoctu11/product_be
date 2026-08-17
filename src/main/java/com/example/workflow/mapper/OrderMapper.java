@@ -11,14 +11,16 @@ import org.mapstruct.Mapping;
 public interface OrderMapper {
 
     @Mapping(source = "user.id", target = "user_id")
-    @Mapping(source = "user.lastname", target = "lastname")
-    @Mapping(target = "customerName", expression = "java(buildFullName(order.getUser()))")
+    @Mapping(target = "lastname", expression = "java(resolveLastname(order))")
+    @Mapping(target = "customerName", expression = "java(resolveCustomerName(order))")
+    @Mapping(target = "customer", expression = "java(resolveCustomerInfo(order))")
+    @Mapping(target = "email", expression = "java(resolveCustomerEmail(order))")
     @Mapping(source = "userVoucher.template.name", target = "voucherName")
     @Mapping(target = "totalPrice", expression = "java(resolveTotalPrice(order))")
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
     OrderDTO toDto(Order order);
 
-    @Mapping(target = "customerName", expression = "java(buildFullName(order.getUser()))")
+    @Mapping(target = "customerName", expression = "java(resolveCustomerName(order))")
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
     @Mapping(target = "staffName", expression = "java(buildFullName(order.getWarehouseStaff()))")
     OrderListDTO toListDto(Order order);
@@ -27,7 +29,63 @@ public interface OrderMapper {
         if (user == null) {
             return null;
         }
-        return (user.getLastname() + " " + user.getFirstname()).trim();
+        String lastname = user.getLastname() == null ? "" : user.getLastname().trim();
+        String firstname = user.getFirstname() == null ? "" : user.getFirstname().trim();
+        return (lastname + " " + firstname).trim();
+    }
+
+    default String resolveCustomerName(Order order) {
+        if (order == null) {
+            return null;
+        }
+        String userName = buildFullName(order.getUser());
+        if (userName != null && !userName.isBlank()) {
+            return userName;
+        }
+        return order.getRecipientName();
+    }
+
+    default String resolveLastname(Order order) {
+        if (order == null) {
+            return null;
+        }
+        if (order.getUser() != null) {
+            return order.getUser().getLastname();
+        }
+        return order.getRecipientName();
+    }
+
+    default OrderDTO.CustomerInfo resolveCustomerInfo(Order order) {
+        if (order == null) {
+            return null;
+        }
+        User user = order.getUser();
+        if (user != null) {
+            return OrderDTO.CustomerInfo.user(
+                    user.getId(),
+                    buildFullName(user),
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getAddress()
+            );
+        }
+        return OrderDTO.CustomerInfo.guest(
+                order.getGuestSessionId(),
+                order.getRecipientName(),
+                order.getEmail(),
+                order.getRecipientPhone(),
+                order.getShippingAddress()
+        );
+    }
+
+    default String resolveCustomerEmail(Order order) {
+        if (order == null) {
+            return null;
+        }
+        if (order.getUser() != null) {
+            return order.getUser().getEmail();
+        }
+        return order.getEmail();
     }
 
     default double resolveTotalPrice(Order order) {

@@ -2,6 +2,10 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
+import com.example.workflow.dto.CheckoutResponseDTO;
+import com.example.workflow.dto.GuestCheckoutRequest;
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
@@ -114,6 +118,49 @@ public class CartService {
         return toActiveCartDto(getCartForRead(owner));
     }
 
+    @DeferredCacheEvicts(reason = "guest checkout", value = {
+            @DeferredCacheEvict(cacheName = "orders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "pendingOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "products", allEntries = true),
+            @DeferredCacheEvict(cacheName = "product", allEntries = true)
+    })
+    @CacheEvict(value = "carts", key = "'guest-' + #guestSessionId.trim()")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public CheckoutResponseDTO checkoutGuestCart(
+            String guestSessionId,
+            GuestCheckoutRequest request,
+            String idempotencyKey
+    ) {
+        String normalizedGuestSessionId = normalizeGuestSessionId(guestSessionId);
+        List<Long> variantIdsToCheckout = normalizeCheckoutVariantIds(request.getVariantIds());
+        String ownerKey = CartOwner.guest(normalizedGuestSessionId).cacheKey();
+
+        CheckoutIdempotencyService.CheckoutIdempotencyState idempotencyState =
+                checkoutIdempotencyService.begin(ownerKey, idempotencyKey);
+        if (idempotencyState.isReplay()) {
+            return CheckoutResponseDTO.fromMap(idempotencyState.response());
+        }
+
+        try {
+            Map<String, String> response;
+            try (CheckoutConcurrencyService.CheckoutLocks ignored =
+                         checkoutConcurrencyService.acquireCheckoutLocks(ownerKey, variantIdsToCheckout)) {
+                response = checkoutGuestCartInternal(normalizedGuestSessionId, request, variantIdsToCheckout);
+            }
+            checkoutIdempotencyService.complete(idempotencyState, response);
+            return CheckoutResponseDTO.fromMap(response);
+        } catch (AppException e) {
+            checkoutIdempotencyService.fail(idempotencyState);
+            throw e;
+        } catch (Exception e) {
+            checkoutIdempotencyService.fail(idempotencyState);
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
+        }
+    }
+
     @CacheEvict(value = "carts", key = "'user-' + #userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
         assertCurrentUserOwnsCart(userId);
@@ -173,17 +220,20 @@ public class CartService {
     // ==============================================================================
     // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
     // ==============================================================================
+    @DeferredCacheEvicts(reason = "user checkout", value = {
+            @DeferredCacheEvict(cacheName = "users", allEntries = true),
+            @DeferredCacheEvict(cacheName = "pendingOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "products", allEntries = true),
+            @DeferredCacheEvict(cacheName = "product", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
+    })
     @Caching(evict = {
-            @CacheEvict(value = "carts", key = "'user-' + #userId", beforeInvocation = true),
-            @CacheEvict(value = "users", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "orders", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "staffOrders", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "dashboardStats", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "products", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "product", allEntries = true, beforeInvocation = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true, beforeInvocation = true)
+            @CacheEvict(value = "carts", key = "'user-' + #userId"),
+            @CacheEvict(value = "orders", allEntries = true),
+            @CacheEvict(value = "userVoucherWallet", allEntries = true, condition = "#userVoucherId != null")
     })
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Map<String, String> approveCart(
@@ -278,10 +328,38 @@ public class CartService {
         sendCodOrderNotifications(user, savedOrder);
         sendOrderConfirmationEmail(user, savedOrder);
 
-        Map<String, String> response = new HashMap<>();
-        response.put("status", "SUCCESS");
-        response.put("message", "Tao don COD thanh cong! Dang cho xuat kho.");
-        return response;
+        return buildCheckoutResponseMap(savedOrder, "SUCCESS", "Tao don COD thanh cong! Dang cho xuat kho.");
+    }
+
+    private Map<String, String> checkoutGuestCartInternal(
+            String guestSessionId,
+            GuestCheckoutRequest request,
+            List<Long> variantIdsToCheckout
+    ) {
+        Long orderId = transactionTemplate.execute(status -> {
+            Cart cart = getExistingCart(CartOwner.guest(guestSessionId), ConstantErrorCode.CART_EMPTY);
+            List<CartItem> itemsToCheckout = resolveCheckoutItems(cart, variantIdsToCheckout);
+
+            Order order = createGuestOrder(guestSessionId, request);
+            double totalPrice = addCheckoutItems(order, itemsToCheckout);
+            applyOrderTotals(order, totalPrice, 0.0, null);
+
+            inventoryReservationService.reserve(order);
+            Order savedOrder = orderRepository.saveAndFlush(order);
+            inventoryReservationService.recordReservations(savedOrder);
+            eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
+
+            cartItemRepository.deleteAll(itemsToCheckout);
+            cart.getItems().removeAll(itemsToCheckout);
+            cartRepository.save(cart);
+
+            startGuestApproveCartProcess(savedOrder.getId(), guestSessionId);
+            return savedOrder.getId();
+        });
+
+        Order savedOrder = getOrderOrThrow(orderId);
+        sendGuestOrderConfirmationEmail(savedOrder);
+        return buildGuestCheckoutResponseMap(savedOrder);
     }
 
     private Long createOrderFromCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
@@ -362,6 +440,21 @@ public class CartService {
         return order;
     }
 
+    private Order createGuestOrder(String guestSessionId, GuestCheckoutRequest request) {
+        Order order = new Order();
+        order.setGuestSessionId(guestSessionId);
+        order.setRecipientName(normalizeText(request.getCustomerName()));
+        order.setRecipientPhone(normalizeText(request.getPhone()));
+        order.setEmail(normalizeText(request.getEmail()));
+        order.setShippingAddress(normalizeText(request.getShippingAddress()));
+        order.setNote(normalizeText(request.getNote()));
+        order.setStartOrderTime(LocalDateTime.now());
+        order.setPaymentMethod("COD");
+        order.setStatus(OrderStatus.PENDING_APPROVAL);
+        order.setItems(new ArrayList<>());
+        return order;
+    }
+
     private double addCheckoutItems(Order order, List<CartItem> itemsToCheckout) {
         double totalPrice = 0;
         for (CartItem cartItem : itemsToCheckout) {
@@ -392,6 +485,38 @@ public class CartService {
         runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
     }
 
+    private void startGuestApproveCartProcess(Long orderId, String guestSessionId) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("orderId", orderId);
+        variables.put("guestSessionId", guestSessionId);
+        variables.put("paymentMethod", "COD");
+        variables.put("stockReserved", true);
+        variables.put("stockDeducted", false);
+        variables.put("guestOrder", true);
+        runtimeService.startProcessInstanceByKey("ApproveCartProcess", "guest-" + guestSessionId, variables);
+    }
+
+    private void sendGuestOrderConfirmationEmail(Order order) {
+        if (!StringUtils.hasText(order.getEmail())) {
+            return;
+        }
+        emailService.sendOrderConfirmationEmail(
+                order.getEmail(),
+                order.getRecipientName(),
+                order.getId(),
+                order.getFinalPrice(),
+                "Thanh toan khi nhan hang (COD)"
+        );
+    }
+
+    private Map<String, String> buildGuestCheckoutResponseMap(Order order) {
+        return buildCheckoutResponseMap(
+                order,
+                order.getStatus().name(),
+                "Tao don guest COD thanh cong. Don hang dang cho quan ly duyet."
+        );
+    }
+
     private Map<String, String> buildOnlinePaymentResponse(Order savedOrder) throws Exception {
         Long orderId = savedOrder.getId();
         Map<String, String> momoPaymentData = momoService.createPaymentData(
@@ -403,17 +528,27 @@ public class CartService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.MOMO_PAY_URL_MISSING);
         }
 
-        Map<String, String> response = new HashMap<>();
-        response.putAll(momoPaymentData);
-        response.put("status", "REDIRECT");
-        response.put("url", momoPayUrl);
-        response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
-        response.put(
-                "message",
+        Map<String, String> response = buildCheckoutResponseMap(
+                savedOrder,
+                "REDIRECT",
                 momoService.isMockPaymentEnabled()
                         ? "Mo URL mock de gia lap thanh toan thanh cong."
                         : "Vui long thanh toan qua MoMo de hoan tat."
         );
+        response.putAll(momoPaymentData);
+        response.put("url", momoPayUrl);
+        response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
+        return response;
+    }
+
+    private Map<String, String> buildCheckoutResponseMap(Order order, String status, String message) {
+        Map<String, String> response = new HashMap<>();
+        response.put("orderId", String.valueOf(order.getId()));
+        response.put("status", status);
+        response.put("totalPrice", String.valueOf(order.getTotalPrice()));
+        response.put("finalPrice", String.valueOf(resolveOrderFinalPrice(order)));
+        response.put("paymentMethod", order.getPaymentMethod());
+        response.put("message", message);
         return response;
     }
 
@@ -561,6 +696,36 @@ public class CartService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is invalid.");
         }
         return normalized;
+    }
+
+    private List<Long> normalizeCheckoutVariantIds(List<Long> variantIds) {
+        if (variantIds == null || variantIds.isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
+        }
+        List<Long> normalized = variantIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
+        }
+        return normalized;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private double resolveOrderFinalPrice(Order order) {
+        if (order.getFinalPrice() != null) {
+            return order.getFinalPrice();
+        }
+        double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
+        return Math.max(0.0, order.getTotalPrice() - discountAmount);
     }
 
     private OrderStatus resolveInitialOrderStatus(String paymentMethod) {

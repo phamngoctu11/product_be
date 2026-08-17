@@ -84,6 +84,7 @@ class SecurityConfigTest {
         assertThat(cors.getAllowedOrigins())
                 .containsExactly("http://localhost:4200", "https://app.example.com");
         assertThat(cors.getAllowedMethods()).contains("GET", "POST", "PUT", "DELETE", "OPTIONS");
+        assertThat(cors.getAllowedHeaders()).contains("Authorization", "X-Guest-Session-Id");
         assertThat(cors.getAllowCredentials()).isTrue();
     }
 

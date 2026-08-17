@@ -1,5 +1,7 @@
 package com.example.workflow.service;
 
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.ConsultationReviewDTO;
 import com.example.workflow.dto.ConsultationReviewRequest;
 import com.example.workflow.dto.ConsultationSaleAttributionDTO;
@@ -69,10 +71,10 @@ public class ConsultationAttributionService {
     private double consultationBonusPercent;
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "consultationAttributions", allEntries = true),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    @DeferredCacheEvicts(reason = "consultation order attributions recorded", value = {
+            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
     })
     public void recordOrderAttributions(Order order) {
         if (order == null || order.getUser() == null || order.getItems() == null || order.getStartOrderTime() == null) {
@@ -121,10 +123,10 @@ public class ConsultationAttributionService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "consultationAttributions", allEntries = true),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    @DeferredCacheEvicts(reason = "consultation order attributions confirmed", value = {
+            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
     })
     public void confirmOrderAttributions(Long orderId) {
         LocalDateTime now = LocalDateTime.now();
@@ -146,10 +148,10 @@ public class ConsultationAttributionService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "consultationAttributions", allEntries = true),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+    @DeferredCacheEvicts(reason = "consultation order attributions cancelled", value = {
+            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
     })
     public void cancelOrderAttributions(Long orderId) {
         LocalDateTime now = LocalDateTime.now();
@@ -194,13 +196,15 @@ public class ConsultationAttributionService {
     }
 
     @Transactional
+    @DeferredCacheEvicts(reason = "consultation review created", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
+            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "consultationAttributions", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true),
             @CacheEvict(value = "consultationReviews", allEntries = true),
             @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "wishlistProducts", allEntries = true)
+            @CacheEvict(value = "products", allEntries = true)
     })
     public ConsultationReviewDTO createReview(Long attributionId, ConsultationReviewRequest request) {
         User user = getCurrentUser();

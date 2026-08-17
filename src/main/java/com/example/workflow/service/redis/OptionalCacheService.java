@@ -1,5 +1,7 @@
 package com.example.workflow.service.redis;
 
+import com.example.workflow.event.payload.CacheEvictionEntry;
+import com.example.workflow.event.payload.CacheEvictionRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -39,6 +41,26 @@ public class OptionalCacheService {
             log.warn("Optional cache evict failed for cache '{}' key '{}': {}", cacheName, key, e.getMessage());
             return false;
         }
+    }
+
+    public void apply(CacheEvictionRequestedEvent event) {
+        if (event == null || event.entries() == null || event.entries().isEmpty()) {
+            return;
+        }
+        for (CacheEvictionEntry entry : event.entries()) {
+            apply(entry);
+        }
+    }
+
+    private void apply(CacheEvictionEntry entry) {
+        if (entry == null || entry.cacheName() == null || entry.cacheName().isBlank()) {
+            return;
+        }
+        if (entry.allEntries()) {
+            clear(entry.cacheName());
+            return;
+        }
+        evict(entry.cacheName(), entry.key());
     }
 
     public CacheClearResult clearAllAvailableCaches() {

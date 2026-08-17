@@ -146,9 +146,7 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "userVoucherWallet", allEntries = true)
-    })
+    @CacheEvict(value = "userVoucherWallet", allEntries = true, condition = "#userVoucherId != null")
     public UserVoucher useVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
         if (userVoucherId == null) {
             return null;
@@ -170,9 +168,7 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "voucherTemplates", allEntries = true)
-    })
+    @CacheEvict(value = "voucherTemplates", allEntries = true)
     public VoucherTemplate createNewVoucherCampaign(VoucherTemplate request) {
         request.setId(null);
         request.setActive(true);

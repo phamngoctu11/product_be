@@ -230,3 +230,204 @@ Camunda:
   checkpoint review/rework,
   final QC,
   change request approval
+CHƯƠNG 1:triển khai
+I,Phase 2 — Guest checkout data model
+Mục tiêu:
+•
+DB hỗ trợ order của guest.
+Thêm/sửa entity:
+Order.user nullable
+Order.guestSessionId
+OrderContactSnapshot
+Order.orderLookupToken hoặc bảng OrderLookupToken
+Thông tin snapshot:
+fullName
+email
+phone
+address
+note
+Test:
+•
+Migration/JPA chạy được.
+•
+Tạo order user vẫn hoạt động.
+•
+Tạo order guest lưu được userId = null.
+•
+Không ảnh hưởng order hiện tại.
+Phase 3 — Guest checkout API đồng bộ, chưa Camunda
+Mục tiêu:
+•
+Guest có thể checkout tạo order thật.
+•
+Chưa đưa Camunda vào runtime.
+•
+Chưa cần email thật nếu muốn đơn giản.
+API đề xuất:
+POST /api/checkout/guest
+Header: X-Guest-Session-Id
+Body:
+{
+  "fullName": "...",
+  "email": "...",
+  "phone": "...",
+  "address": "...",
+  "note": "...",
+  "paymentMethod": "COD",
+  "voucherCode": "..."
+}
+Backend xử lý:
+validate guestSessionId
+validate cart
+validate contact
+validate voucher public nếu có
+reserve/deduct tùy chính sách hiện tại
+create guest order
+save contact snapshot
+generate lookup token
+clear guest cart
+return orderId + lookupToken/maskedEmail
+Test:
+•
+Checkout guest COD thành công.
+•
+Cart trống sau checkout.
+•
+Order detail có snapshot.
+•
+Thiếu email/phone/address trả 400.
+•
+Cart rỗng trả 400.
+•
+Bấm checkout lặp không tạo 2 đơn nếu có idempotency key.
+Phase 4 — Email + Redis Stream
+Mục tiêu:
+•
+Tách gửi email khỏi checkout transaction.
+•
+Checkout xong publish event.
+Event:
+GUEST_ORDER_CREATED
+Consumer:
+Email consumer gửi email xác nhận đơn
+Notification/audit consumer nếu cần
+Test:
+•
+Checkout tạo event.
+•
+Consumer nhận event.
+•
+EmailService được gọi.
+•
+Event xử lý lại không gửi trùng nếu có eventId.
+Nếu chưa muốn gửi email thật, dùng log/mock email trước.
+Phase 5 — Public voucher cho guest
+Mục tiêu:
+•
+Tách rõ user voucher và guest/public voucher.
+Quy tắc:
+•
+User dùng UserVoucher, reputation.
+•
+Guest dùng public voucher/campaign voucher.
+•
+Guest voucher chống abuse bằng email/phone hash + sessionId.
+Test:
+•
+Guest dùng voucher hợp lệ.
+•
+Voucher hết hạn/không đủ điều kiện bị từ chối.
+•
+Một email/phone không dùng lại voucher một lần nếu rule không cho.
+•
+User voucher cũ không bị ảnh hưởng.
+Phase này có thể làm trước Phase 4 nếu voucher cần ngay, nhưng mình khuyên để sau guest checkout cơ bản.
+Phase 6 — Workflow delegate framework cho Camunda
+Mục tiêu:
+•
+Chuẩn bị runtime cho BPMN nhưng chưa gắn toàn bộ business.
+Tạo:
+WorkflowTaskDelegate
+WorkflowTaskHandler interface
+WorkflowTaskHandlerRegistry
+Handler ban đầu:
+RESOLVE_GUEST_SESSION
+VALIDATE_GUEST_CHECKOUT
+PUBLISH_WORKFLOW_EVENT
+SEND_EMAIL
+Test:
+•
+Unit test registry tìm đúng handler.
+•
+Unknown taskType throw lỗi rõ.
+•
+Handler đọc/ghi process variables được.
+•
+BPMN service task dùng ${workflowTaskDelegate} chạy được trong test process nhỏ.
+Phase 7 — Bật Camunda cho guest purchase từng phần
+Mục tiêu:
+•
+Không thay toàn bộ checkout ngay.
+•
+Bật Camunda ở đoạn ít rủi ro trước.
+Cách làm an toàn:
+1.
+Đầu tiên chỉ dùng Camunda sau khi order đã tạo:
+POST /checkout/guest
+  → create order đồng bộ
+  → start GuestPurchaseFlow với orderId
+  → process bắt đầu từ publish/email/handmade branch
+2.
+Sau khi ổn mới cân nhắc đưa validate/payment/create order vào Camunda.
+Lý do: create order/payment là phần nhạy cảm, không nên chuyển vào workflow quá sớm.
+Test:
+•
+Order tạo xong start process instance.
+•
+Process gửi email xác nhận.
+•
+Incident không làm mất order.
+•
+Nếu Camunda lỗi, checkout vẫn không tạo đơn mồ côi hoặc có trạng thái rõ.
+Phase 8 — Handmade production checkpoint cho guest
+Mục tiêu:
+•
+Order item handmade đi qua assignment/checkpoint/final QC.
+Thêm entity:
+OrderItemAssignment
+ProductionCheckpoint
+ProductionCheckpointImage
+ProductionDecision
+API:
+POST /api/order-items/{itemId}/assign-staff
+POST /api/order-items/{itemId}/checkpoints
+POST /api/order-items/{itemId}/checkpoints/{checkpointId}/review
+Test:
+•
+Manager assign staff.
+•
+Staff submit checkpoint 1.
+•
+Nếu policy không cần duyệt: gửi email checkpoint 1.
+•
+Nếu cần duyệt: tạo manager task.
+•
+Manager reject → staff rework.
+•
+Staff submit final.
+•
+Manager final QC approve → item ready.
+•
+Khi tất cả item ready → order ready to ship.
+Thứ tự triển khai thực tế nên bắt đầu
+Mình khuyên bắt đầu bằng 3 phase đầu:
+1. Guest session + cart foundation
+2. Guest checkout data model
+3. Guest checkout API đồng bộ
+Sau 3 phase này, bạn đã có luồng guest mua hàng chạy được mà chưa phụ thuộc Camunda/Redis Stream phức tạp.
+Sau đó mới thêm:
+4. Email/Redis Stream
+5. Voucher guest
+6. Workflow delegate framework
+7. Camunda runtime
+8. Production checkpoint

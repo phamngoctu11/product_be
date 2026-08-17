@@ -11,6 +11,7 @@ public final class EventTypes {
     public static final String ORDER_DELIVERED = "ORDER_DELIVERED";
     public static final String ORDER_CANCELLED = "ORDER_CANCELLED";
     public static final String STAFF_COMMISSION_REFRESH_REQUESTED = "STAFF_COMMISSION_REFRESH_REQUESTED";
+    public static final String CACHE_EVICTION_REQUESTED = "CACHE_EVICTION_REQUESTED";
 
     private EventTypes() {
     }

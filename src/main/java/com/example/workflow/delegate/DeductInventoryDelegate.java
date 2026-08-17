@@ -1,20 +1,23 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
+import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.InventoryReservationService;
-import com.example.workflow.service.redis.OptionalCacheService;
+import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @RequiredArgsConstructor
 @Component("deductInventoryDelegate")
 public class DeductInventoryDelegate implements JavaDelegate {
     private final OrderRepository orderRepository;
-    private final OptionalCacheService optionalCacheService;
+    private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
     private final InventoryReservationService inventoryReservationService;
 
     @Override
@@ -34,9 +37,11 @@ public class DeductInventoryDelegate implements JavaDelegate {
     }
 
     private void clearProductCaches() {
-        optionalCacheService.clear("products");
-        optionalCacheService.clear("product");
-        optionalCacheService.clear("wishlistProducts");
-        optionalCacheService.clear("bestSellingProducts");
+        cacheEvictionPublisher.publishEventually("camunda inventory deducted", List.of(
+                CacheEvictionEntry.allEntries("products"),
+                CacheEvictionEntry.allEntries("product"),
+                CacheEvictionEntry.allEntries("wishlistProducts"),
+                CacheEvictionEntry.allEntries("bestSellingProducts")
+        ));
     }
 }

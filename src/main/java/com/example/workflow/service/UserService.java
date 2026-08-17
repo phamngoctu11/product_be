@@ -1,5 +1,7 @@
 package com.example.workflow.service;
 
+import com.example.workflow.cache.DeferredCacheEvict;
+import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserProfileUpdateDTO;
@@ -180,11 +182,13 @@ public class UserService {
         return userMapper.toResponse(getCurrentUser());
     }
 
+    @DeferredCacheEvicts(reason = "my profile updated", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", allEntries = true),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+            @CacheEvict(value = "user", allEntries = true)
     })
     public UserResDTO updateMyProfile(UserProfileUpdateDTO request) {
         User user = getCurrentUser();
@@ -195,11 +199,13 @@ public class UserService {
         return userMapper.toResponse(userRepository.save(user));
     }
 
+    @DeferredCacheEvicts(reason = "user updated", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", key = "#id"),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+            @CacheEvict(value = "user", key = "#id")
     })
     public UserResDTO updateUser(String id, UserCreDTO request) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);
@@ -257,11 +263,13 @@ public class UserService {
         }
     }
 
+    @DeferredCacheEvicts(reason = "user deleted", value = {
+            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
+    })
     @Caching(evict = {
             @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", key = "#id"),
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
+            @CacheEvict(value = "user", key = "#id")
     })
     public void deleteUser(String id) {
         User user = getUserOrThrow(id, ConstantErrorCode.USER_NOT_FOUND_TO_UPDATE);

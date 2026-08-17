@@ -2,6 +2,7 @@ package com.example.workflow.service.redis;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.CacheEvictionRequestedEvent;
 import com.example.workflow.event.payload.NotificationRequestedEvent;
 import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -50,6 +51,7 @@ public class RedisStreamEventConsumer {
     private final OrderRepository orderRepository;
     private final ConsultationAttributionService consultationAttributionService;
     private final StaffCommissionService staffCommissionService;
+    private final OptionalCacheService optionalCacheService;
 
     @Value("${workflow.events.redis-stream.group:" + DEFAULT_GROUP + "}")
     private String groupName;
@@ -151,6 +153,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
             case EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED -> handleStaffCommissionRefreshRequested(payload);
+            case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
             default -> log.debug("Ignoring unknown Redis Stream event type {}", type);
         }
     }
@@ -230,6 +233,11 @@ public class RedisStreamEventConsumer {
     private void handleStaffCommissionRefreshRequested(String payload) {
         StaffCommissionRefreshRequestedEvent event = readPayload(payload, StaffCommissionRefreshRequestedEvent.class);
         staffCommissionService.refreshSummaries(event.refreshKeys());
+    }
+
+    private void handleCacheEvictionRequested(String payload) {
+        CacheEvictionRequestedEvent event = readPayload(payload, CacheEvictionRequestedEvent.class);
+        optionalCacheService.apply(event);
     }
 
     private <T> T readPayload(String payload, Class<T> payloadType) {

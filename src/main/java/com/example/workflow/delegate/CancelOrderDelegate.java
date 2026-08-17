@@ -2,6 +2,7 @@ package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.UserVoucher;
+import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -9,12 +10,14 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.InventoryReservationService;
-import com.example.workflow.service.redis.OptionalCacheService;
+import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @RequiredArgsConstructor
 @Component("cancelOrderDelegate")
@@ -22,7 +25,7 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
-    private final OptionalCacheService optionalCacheService;
+    private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
 
@@ -50,14 +53,17 @@ public class CancelOrderDelegate implements JavaDelegate {
                 new OrderCancelledEvent(order.getId(), order.getCancelReason())
         );
 
-        String userId = order.getUser() == null ? null : order.getUser().getId();
-        optionalCacheService.evict("orders", userId);
-        optionalCacheService.clear("pendingOrders");
-        optionalCacheService.clear("dashboardStats");
-        optionalCacheService.clear("products");
-        optionalCacheService.clear("product");
-        optionalCacheService.clear("wishlistProducts");
-        optionalCacheService.clear("userVoucherWallet");
+        cacheEvictionPublisher.publishEventually("camunda order cancelled", List.of(
+                CacheEvictionEntry.allEntries("orders"),
+                CacheEvictionEntry.allEntries("pendingOrders"),
+                CacheEvictionEntry.allEntries("warehouseOrders"),
+                CacheEvictionEntry.allEntries("staffOrders"),
+                CacheEvictionEntry.allEntries("dashboardStats"),
+                CacheEvictionEntry.allEntries("products"),
+                CacheEvictionEntry.allEntries("product"),
+                CacheEvictionEntry.allEntries("wishlistProducts"),
+                CacheEvictionEntry.allEntries("userVoucherWallet")
+        ));
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
     }
 
