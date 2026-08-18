@@ -8,6 +8,7 @@ import com.example.workflow.cache.DeferredCacheEvict;
 import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -342,23 +343,24 @@ public class CartService {
 
             Order order = createGuestOrder(guestSessionId, request);
             double totalPrice = addCheckoutItems(order, itemsToCheckout);
-            applyOrderTotals(order, totalPrice, 0.0, null);
+            VoucherService.AppliedGuestVoucher appliedGuestVoucher =
+                    voucherService.applyGuestVoucherForCheckout(request.getVoucherCode(), totalPrice);
+            applyGuestOrderTotals(order, totalPrice, appliedGuestVoucher);
 
             inventoryReservationService.reserve(order);
             Order savedOrder = orderRepository.saveAndFlush(order);
             inventoryReservationService.recordReservations(savedOrder);
-            eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
 
             cartItemRepository.deleteAll(itemsToCheckout);
             cart.getItems().removeAll(itemsToCheckout);
             cartRepository.save(cart);
 
             startGuestApproveCartProcess(savedOrder.getId(), guestSessionId);
+            eventPublisher.publishAfterCommit(EventTypes.GUEST_ORDER_CREATED, new GuestOrderCreatedEvent(savedOrder.getId()));
             return savedOrder.getId();
         });
 
         Order savedOrder = getOrderOrThrow(orderId);
-        sendGuestOrderConfirmationEmail(savedOrder);
         return buildGuestCheckoutResponseMap(savedOrder);
     }
 
@@ -474,6 +476,17 @@ public class CartService {
         order.setUserVoucher(appliedVoucher);
     }
 
+    private void applyGuestOrderTotals(Order order, double totalPrice, VoucherService.AppliedGuestVoucher appliedVoucher) {
+        double discountAmount = appliedVoucher == null ? 0.0 : appliedVoucher.discountAmount();
+        double finalPrice = Math.max(0, totalPrice - discountAmount);
+        order.setTotalPrice(totalPrice);
+        order.setDiscountAmount(discountAmount);
+        order.setFinalPrice(finalPrice);
+        if (appliedVoucher != null && appliedVoucher.template() != null) {
+            order.setGuestVoucherTemplate(appliedVoucher.template());
+        }
+    }
+
     private void startApproveCartProcess(Long orderId, String userId, String paymentMethod, String note) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("orderId", orderId);
@@ -494,19 +507,6 @@ public class CartService {
         variables.put("stockDeducted", false);
         variables.put("guestOrder", true);
         runtimeService.startProcessInstanceByKey("ApproveCartProcess", "guest-" + guestSessionId, variables);
-    }
-
-    private void sendGuestOrderConfirmationEmail(Order order) {
-        if (!StringUtils.hasText(order.getEmail())) {
-            return;
-        }
-        emailService.sendOrderConfirmationEmail(
-                order.getEmail(),
-                order.getRecipientName(),
-                order.getId(),
-                order.getFinalPrice(),
-                "Thanh toan khi nhan hang (COD)"
-        );
     }
 
     private Map<String, String> buildGuestCheckoutResponseMap(Order order) {
@@ -546,10 +546,24 @@ public class CartService {
         response.put("orderId", String.valueOf(order.getId()));
         response.put("status", status);
         response.put("totalPrice", String.valueOf(order.getTotalPrice()));
+        response.put("discountAmount", String.valueOf(order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount()));
         response.put("finalPrice", String.valueOf(resolveOrderFinalPrice(order)));
         response.put("paymentMethod", order.getPaymentMethod());
+        putVoucherResponseFields(response, order);
         response.put("message", message);
         return response;
+    }
+
+    private void putVoucherResponseFields(Map<String, String> response, Order order) {
+        if (order.getUserVoucher() != null && order.getUserVoucher().getTemplate() != null) {
+            response.put("voucherCode", order.getUserVoucher().getTemplate().getCode());
+            response.put("voucherName", order.getUserVoucher().getTemplate().getName());
+            return;
+        }
+        if (order.getGuestVoucherTemplate() != null) {
+            response.put("voucherCode", order.getGuestVoucherTemplate().getCode());
+            response.put("voucherName", order.getGuestVoucherTemplate().getName());
+        }
     }
 
     private void sendCodOrderNotifications(User user, Order savedOrder) {

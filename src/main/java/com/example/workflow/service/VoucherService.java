@@ -48,6 +48,26 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "voucherTemplates", key = "'management-active'", unless = "#result == null")
+    public List<VoucherTemplateDTO> getActiveTemplatesForManagement() {
+        return templateRepository.findAvailableTemplatesForManagement(LocalDateTime.now())
+                .stream()
+                .map(voucherMapper::toTemplateDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "guestVoucherTemplates", key = "'active-' + #subtotal", unless = "#result == null")
+    public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal) {
+        double safeSubtotal = Math.max(0, subtotal);
+        return templateRepository.findAvailableGuestTemplates(LocalDateTime.now())
+                .stream()
+                .map(template -> buildCartOption(null, template, "GUEST", safeSubtotal))
+                .sorted(cartOptionComparator())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     @Cacheable(
             value = "userVoucherWallet",
             key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName()",
@@ -160,6 +180,46 @@ public class VoucherService {
         return userVoucherRepository.save(voucher);
     }
 
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "guestVoucherTemplates", allEntries = true, condition = "T(org.springframework.util.StringUtils).hasText(#voucherCode)"),
+            @CacheEvict(value = "voucherTemplates", allEntries = true, condition = "T(org.springframework.util.StringUtils).hasText(#voucherCode)")
+    })
+    public AppliedGuestVoucher applyGuestVoucherForCheckout(String voucherCode, double totalPrice) {
+        if (!org.springframework.util.StringUtils.hasText(voucherCode)) {
+            return AppliedGuestVoucher.none();
+        }
+
+        String normalizedCode = voucherCode.trim();
+        LocalDateTime now = LocalDateTime.now();
+        VoucherTemplate template = templateRepository.findByCodeIgnoreCase(normalizedCode)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
+        validateGuestVoucherForCheckout(template, totalPrice, now);
+
+        double discountAmount = calculateDiscountAmount(template, totalPrice);
+        int updatedRows = templateRepository.decrementGuestQuantity(template.getId(), now);
+        if (updatedRows == 0) {
+            throw new AppException(
+                    HttpStatus.BAD_REQUEST,
+                    ConstantErrorCode.BAD_REQUEST_DETAIL,
+                    "Voucher is out of stock or expired."
+            );
+        }
+        return new AppliedGuestVoucher(template, discountAmount);
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "guestVoucherTemplates", allEntries = true, condition = "#template != null"),
+            @CacheEvict(value = "voucherTemplates", allEntries = true, condition = "#template != null")
+    })
+    public void restoreGuestVoucher(VoucherTemplate template) {
+        if (template == null || template.getId() == null || !template.isGuestVoucher()) {
+            return;
+        }
+        templateRepository.incrementGuestQuantity(template.getId());
+    }
+
     public double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
         if (voucher == null) {
             return 0.0;
@@ -168,7 +228,10 @@ public class VoucherService {
     }
 
     @Transactional
-    @CacheEvict(value = "voucherTemplates", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "voucherTemplates", allEntries = true),
+            @CacheEvict(value = "guestVoucherTemplates", allEntries = true)
+    })
     public VoucherTemplate createNewVoucherCampaign(VoucherTemplate request) {
         request.setId(null);
         request.setActive(true);
@@ -186,6 +249,9 @@ public class VoucherService {
     }
 
     private void validateTemplateForRedeem(VoucherTemplate template, LocalDateTime now) {
+        if (template.isGuestVoucher()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
+        }
         if (!template.isActive() || template.getQuantity() <= 0) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher is not available.");
         }
@@ -280,6 +346,21 @@ public class VoucherService {
         }
     }
 
+    private void validateGuestVoucherForCheckout(VoucherTemplate template, double totalPrice, LocalDateTime now) {
+        if (!template.isGuestVoucher()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
+        }
+        if (!template.isActive() || template.getQuantity() <= 0) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher is not available.");
+        }
+        if (template.getExpiryDate().isBefore(now)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
+        }
+        if (totalPrice < template.getMinOrderValue()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
+        }
+    }
+
     private double calculateDiscountAmount(VoucherTemplate template, double totalPrice) {
         if (template.getDiscountPercent() <= 0) {
             return Math.min(totalPrice, template.getMaxDiscountAmount());
@@ -290,5 +371,15 @@ public class VoucherService {
             return template.getMaxDiscountAmount();
         }
         return Math.min(totalPrice, discountAmount);
+    }
+
+    public record AppliedGuestVoucher(VoucherTemplate template, double discountAmount) {
+        public static AppliedGuestVoucher none() {
+            return new AppliedGuestVoucher(null, 0.0);
+        }
+
+        public boolean applied() {
+            return template != null && discountAmount > 0;
+        }
     }
 }

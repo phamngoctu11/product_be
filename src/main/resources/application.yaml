@@ -29,6 +29,13 @@ workflow:
       consumer-name: ${WORKFLOW_EVENTS_REDIS_STREAM_CONSUMER_NAME:${spring.application.name:workflow-app}}
       batch-size: ${WORKFLOW_EVENTS_REDIS_STREAM_BATCH_SIZE:20}
       poll-delay-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_POLL_DELAY_MS:1000}
+      idempotency-ttl-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_IDEMPOTENCY_TTL_MS:604800000}
+      retry:
+        enabled-types: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_ENABLED_TYPES:NOTIFICATION_REQUESTED,ORDER_CONFIRMATION_EMAIL_REQUESTED,ORDER_CANCELLATION_EMAIL_REQUESTED,RECEIPT_COMPLAINT_EMAIL_REQUESTED,PASSWORD_RESET_EMAIL_REQUESTED,GUEST_ORDER_CREATED,ORDER_CREATED,ORDER_DELIVERED,ORDER_CANCELLED,STAFF_COMMISSION_REFRESH_REQUESTED,CACHE_EVICTION_REQUESTED}
+        max-attempts: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_MAX_ATTEMPTS:5}
+        backoff-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_BACKOFF_MS:5000,30000,120000,600000,1800000}
+        metadata-ttl-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_METADATA_TTL_MS:604800000}
+        dlq-stream-key: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_DLQ_STREAM_KEY:stream:workflow-events:dlq}
 checkout:
   lock:
     wait-ms: ${CHECKOUT_LOCK_WAIT_MS:1000}
@@ -71,9 +78,9 @@ spring:
           starttls:
             enable: true
   datasource:
-    url: ${DB_URL:jdbc:mysql://103.149.170.20:3306/db_A46623}
-    username: ${DB_USERNAME:A46623}
-    password: ${DB_PASSWORD:A46623@thanglong}
+    url: ${DB_URL:jdbc:mysql://103.149.170.20:3306/A45488}
+    username: ${DB_USERNAME:A45488}
+    password: ${DB_PASSWORD:A45488@thanglong}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     mongodb:

@@ -37,25 +37,22 @@ public class EmailService {
 
     public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
         try {
-            Context context = new Context();
-            context.setVariable("customerName", customerName);
-            context.setVariable("orderId", orderId);
-            context.setVariable("totalPrice", totalPrice);
-            context.setVariable("paymentMethod", paymentMethod);
-
-            String htmlContent = templateEngine.process("order-confirmation", context);
-
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setTo(toEmail);
-            helper.setSubject("Order confirmation #" + orderId);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(message);
-            log.info("Sent order confirmation email for order {} to {}", orderId, toEmail);
-        } catch (MessagingException | RuntimeException e) {
+            sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod);
+        } catch (RuntimeException e) {
             log.warn("Optional order confirmation email failed for order {}: {}", orderId, e.getMessage());
         }
+    }
+
+    public void sendOrderConfirmationEmailNowOrThrow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+        Context context = new Context();
+        context.setVariable("customerName", customerName);
+        context.setVariable("orderId", orderId);
+        context.setVariable("totalPrice", totalPrice);
+        context.setVariable("paymentMethod", paymentMethod);
+
+        String htmlContent = templateEngine.process("order-confirmation", context);
+        sendHtmlEmailOrThrow(toEmail, "Order confirmation #" + orderId, htmlContent);
+        log.info("Sent order confirmation email for order {} to {}", orderId, toEmail);
     }
 
     public void sendOrderCancellationEmail(String toEmail, String customerName, Long orderId, String reason) {
@@ -67,24 +64,21 @@ public class EmailService {
 
     public void sendOrderCancellationEmailNow(String toEmail, String customerName, Long orderId, String reason) {
         try {
-            Context context = new Context();
-            context.setVariable("customerName", customerName);
-            context.setVariable("orderId", orderId);
-            context.setVariable("reason", reason);
-
-            String htmlContent = templateEngine.process("order-cancelled", context);
-
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setTo(toEmail);
-            helper.setSubject("Order cancelled #" + orderId);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(message);
-            log.info("Sent order cancellation email for order {} to {}", orderId, toEmail);
-        } catch (MessagingException | RuntimeException e) {
+            sendOrderCancellationEmailNowOrThrow(toEmail, customerName, orderId, reason);
+        } catch (RuntimeException e) {
             log.warn("Optional order cancellation email failed for order {}: {}", orderId, e.getMessage());
         }
+    }
+
+    public void sendOrderCancellationEmailNowOrThrow(String toEmail, String customerName, Long orderId, String reason) {
+        Context context = new Context();
+        context.setVariable("customerName", customerName);
+        context.setVariable("orderId", orderId);
+        context.setVariable("reason", reason);
+
+        String htmlContent = templateEngine.process("order-cancelled", context);
+        sendHtmlEmailOrThrow(toEmail, "Order cancelled #" + orderId, htmlContent);
+        log.info("Sent order cancellation email for order {} to {}", orderId, toEmail);
     }
 
     public void sendReceiptComplaintEmail(
@@ -117,17 +111,30 @@ public class EmailService {
         }
 
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setTo(toEmails.toArray(new String[0]));
-            helper.setSubject("Receipt quantity complaint for order #" + orderId);
-            helper.setText(buildReceiptComplaintHtml(orderId, customerName, customerEmail, note, mismatches), true);
-
-            mailSender.send(message);
-            log.info("Sent receipt complaint email for order {}", orderId);
-        } catch (MessagingException | RuntimeException e) {
+            sendReceiptComplaintEmailNowOrThrow(toEmails, orderId, customerName, customerEmail, note, mismatches);
+        } catch (RuntimeException e) {
             log.warn("Optional receipt complaint email failed for order {}: {}", orderId, e.getMessage());
         }
+    }
+
+    public void sendReceiptComplaintEmailNowOrThrow(
+            List<String> toEmails,
+            Long orderId,
+            String customerName,
+            String customerEmail,
+            String note,
+            List<ReceiptMismatchDTO> mismatches
+    ) {
+        if (toEmails == null || toEmails.isEmpty()) {
+            return;
+        }
+
+        sendHtmlEmailOrThrow(
+                toEmails.toArray(new String[0]),
+                "Receipt quantity complaint for order #" + orderId,
+                buildReceiptComplaintHtml(orderId, customerName, customerEmail, note, mismatches)
+        );
+        log.info("Sent receipt complaint email for order {}", orderId);
     }
 
     public void sendPasswordResetEmail(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
@@ -139,16 +146,36 @@ public class EmailService {
 
     public void sendPasswordResetEmailNow(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
         try {
+            sendPasswordResetEmailNowOrThrow(toEmail, customerName, resetLink, expiresInMinutes);
+        } catch (RuntimeException e) {
+            log.warn("Optional password reset email failed for {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    public void sendPasswordResetEmailNowOrThrow(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
+        sendHtmlEmailOrThrow(
+                toEmail,
+                "Dat lai mat khau tai khoan ShopVN",
+                buildPasswordResetHtml(customerName, resetLink, expiresInMinutes)
+        );
+        log.info("Sent password reset email to {}", toEmail);
+    }
+
+    private void sendHtmlEmailOrThrow(String toEmail, String subject, String htmlContent) {
+        sendHtmlEmailOrThrow(new String[]{toEmail}, subject, htmlContent);
+    }
+
+    private void sendHtmlEmailOrThrow(String[] toEmails, String subject, String htmlContent) {
+        try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setTo(toEmail);
-            helper.setSubject("Dat lai mat khau tai khoan ShopVN");
-            helper.setText(buildPasswordResetHtml(customerName, resetLink, expiresInMinutes), true);
+            helper.setTo(toEmails);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            log.info("Sent password reset email to {}", toEmail);
         } catch (MessagingException | RuntimeException e) {
-            log.warn("Optional password reset email failed for {}: {}", toEmail, e.getMessage());
+            throw new IllegalStateException("Email delivery failed: " + e.getMessage(), e);
         }
     }
 

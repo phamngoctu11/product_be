@@ -47,4 +47,7 @@ public class VoucherTemplate {
 
     @Column(name = "is_active")
     private boolean isActive = true;
+
+    @Column(name = "is_guest_voucher", nullable = false, columnDefinition = "boolean default false")
+    private boolean guestVoucher = false;
 }

@@ -2,13 +2,17 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
+import com.example.workflow.dto.CheckoutResponseDTO;
+import com.example.workflow.dto.GuestCheckoutRequest;
 import com.example.workflow.entity.Cart;
 import com.example.workflow.entity.CartItem;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
+import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.exception.AppException;
@@ -460,6 +464,96 @@ class CartServiceTest {
         verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    void checkoutGuestCartPublishesGuestOrderCreatedEventWithoutSendingEmailInline() {
+        String guestSessionId = "guest-session-0001";
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        CartItem item = cartItem(variant, 2);
+        Cart cart = guestCartWithItems(1L, guestSessionId, item);
+        GuestCheckoutRequest request = guestCheckoutRequest(11L);
+        AtomicReference<Order> savedOrder = new AtomicReference<>();
+        when(cartRepository.findByGuestSessionId(guestSessionId)).thenReturn(Optional.of(cart));
+        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(200L);
+            savedOrder.set(order);
+            return order;
+        });
+        when(orderRepository.findById(200L)).thenAnswer(invocation -> Optional.of(savedOrder.get()));
+
+        CheckoutResponseDTO response = cartService.checkoutGuestCart(guestSessionId, request, null);
+
+        assertThat(response.getOrderId()).isEqualTo(200L);
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL.name());
+        assertThat(cart.getItems()).isEmpty();
+        assertThat(savedOrder.get()).satisfies(order -> {
+            assertThat(order.getUser()).isNull();
+            assertThat(order.getGuestSessionId()).isEqualTo(guestSessionId);
+            assertThat(order.getEmail()).isEqualTo("guest@example.com");
+            assertThat(order.getPaymentMethod()).isEqualTo("COD");
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL);
+            assertThat(order.getFinalPrice()).isEqualTo(50.0);
+        });
+        verify(cartItemRepository).deleteAll(List.of(item));
+        verify(cartRepository).save(cart);
+        verify(inventoryReservationService).reserve(savedOrder.get());
+        verify(inventoryReservationService).recordReservations(savedOrder.get());
+        ArgumentCaptor<GuestOrderCreatedEvent> eventCaptor = ArgumentCaptor.forClass(GuestOrderCreatedEvent.class);
+        verify(eventPublisher).publishAfterCommit(eq(EventTypes.GUEST_ORDER_CREATED), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().orderId()).isEqualTo(200L);
+        verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.ORDER_CREATED), any());
+        verify(emailService, never()).sendOrderConfirmationEmail(any(), any(), any(), any(), any());
+        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(runtimeService).startProcessInstanceByKey(eq("ApproveCartProcess"), eq("guest-" + guestSessionId), variablesCaptor.capture());
+        assertThat(variablesCaptor.getValue())
+                .containsEntry("orderId", 200L)
+                .containsEntry("guestSessionId", guestSessionId)
+                .containsEntry("paymentMethod", "COD")
+                .containsEntry("stockReserved", true)
+                .containsEntry("stockDeducted", false)
+                .containsEntry("guestOrder", true);
+    }
+
+    @Test
+    void checkoutGuestCartAppliesGuestVoucherWithAtomicServiceResult() {
+        String guestSessionId = "guest-session-0002";
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        CartItem item = cartItem(variant, 2);
+        Cart cart = guestCartWithItems(1L, guestSessionId, item);
+        GuestCheckoutRequest request = guestCheckoutRequest(11L);
+        request.setVoucherCode("WELCOME10");
+        VoucherTemplate guestVoucher = new VoucherTemplate();
+        guestVoucher.setId(7L);
+        guestVoucher.setCode("WELCOME10");
+        guestVoucher.setName("Guest welcome");
+        guestVoucher.setGuestVoucher(true);
+        AtomicReference<Order> savedOrder = new AtomicReference<>();
+        when(cartRepository.findByGuestSessionId(guestSessionId)).thenReturn(Optional.of(cart));
+        when(voucherService.applyGuestVoucherForCheckout("WELCOME10", 50.0))
+                .thenReturn(new VoucherService.AppliedGuestVoucher(guestVoucher, 10.0));
+        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(201L);
+            savedOrder.set(order);
+            return order;
+        });
+        when(orderRepository.findById(201L)).thenAnswer(invocation -> Optional.of(savedOrder.get()));
+
+        CheckoutResponseDTO response = cartService.checkoutGuestCart(guestSessionId, request, null);
+
+        assertThat(response.getOrderId()).isEqualTo(201L);
+        assertThat(response.getTotalPrice()).isEqualTo(50.0);
+        assertThat(response.getDiscountAmount()).isEqualTo(10.0);
+        assertThat(response.getFinalPrice()).isEqualTo(40.0);
+        assertThat(response.getVoucherCode()).isEqualTo("WELCOME10");
+        assertThat(response.getVoucherName()).isEqualTo("Guest welcome");
+        assertThat(savedOrder.get()).satisfies(order -> {
+            assertThat(order.getDiscountAmount()).isEqualTo(10.0);
+            assertThat(order.getFinalPrice()).isEqualTo(40.0);
+            assertThat(order.getGuestVoucherTemplate()).isSameAs(guestVoucher);
+        });
+    }
+
     private User user(Long id) {
         User user = new User();
         user.setId(String.valueOf(id));
@@ -473,6 +567,25 @@ class CartServiceTest {
         cart.setUser(user);
         cart.setItems(new ArrayList<>(List.of(items)));
         return cart;
+    }
+
+    private Cart guestCartWithItems(Long id, String guestSessionId, CartItem... items) {
+        Cart cart = new Cart();
+        cart.setId(id);
+        cart.setGuestSessionId(guestSessionId);
+        cart.setItems(new ArrayList<>(List.of(items)));
+        return cart;
+    }
+
+    private GuestCheckoutRequest guestCheckoutRequest(Long variantId) {
+        GuestCheckoutRequest request = new GuestCheckoutRequest();
+        request.setCustomerName("Guest Customer");
+        request.setPhone("0900000000");
+        request.setEmail("guest@example.com");
+        request.setShippingAddress("Guest address");
+        request.setNote("Guest note");
+        request.setVariantIds(List.of(variantId));
+        return request;
     }
 
     private Product product(boolean deleted, String imageUrl) {

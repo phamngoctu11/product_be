@@ -3,6 +3,7 @@ package com.example.workflow.delegate;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
+import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
@@ -11,6 +12,7 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.VoucherService;
 import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
@@ -34,13 +36,15 @@ class CancelOrderDelegateTest {
     private final DeferredCacheEvictionPublisher cacheEvictionPublisher = mock(DeferredCacheEvictionPublisher.class);
     private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
     private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
+    private final VoucherService voucherService = mock(VoucherService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderRepository,
             userVoucherRepository,
             cacheEvictionPublisher,
             eventPublisher,
-            inventoryReservationService
+            inventoryReservationService,
+            voucherService
     );
 
     @Test
@@ -92,7 +96,24 @@ class CancelOrderDelegateTest {
         verify(cacheEvictionPublisher).publishEventually(eq("camunda order cancelled"), cacheEntriesCaptor.capture());
         assertThat(cacheEntriesCaptor.getValue())
                 .extracting(CacheEvictionEntry::cacheName)
-                .contains("orders", "pendingOrders", "products", "product", "userVoucherWallet");
+                .contains("orders", "pendingOrders", "products", "product", "userVoucherWallet", "guestVoucherTemplates");
+    }
+
+    @Test
+    void restoresGuestVoucherForGuestOrderCancellation() {
+        VoucherTemplate guestVoucher = new VoucherTemplate();
+        guestVoucher.setId(7L);
+        guestVoucher.setGuestVoucher(true);
+        Order order = new Order();
+        order.setId(10L);
+        order.setGuestVoucherTemplate(guestVoucher);
+        order.setItems(List.of());
+        when(execution.getVariable("orderId")).thenReturn(10L);
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+
+        delegate.execute(execution);
+
+        verify(voucherService).restoreGuestVoucher(guestVoucher);
     }
 
     @Test

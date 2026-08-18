@@ -3,6 +3,7 @@ package com.example.workflow.service.redis;
 import com.example.workflow.entity.Order;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.CacheEvictionRequestedEvent;
+import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.NotificationRequestedEvent;
 import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -31,6 +32,7 @@ import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -52,6 +54,8 @@ public class RedisStreamEventConsumer {
     private final ConsultationAttributionService consultationAttributionService;
     private final StaffCommissionService staffCommissionService;
     private final OptionalCacheService optionalCacheService;
+    private final RedisEventIdempotencyService eventIdempotencyService;
+    private final RedisStreamRetryTemplate retryTemplate;
 
     @Value("${workflow.events.redis-stream.group:" + DEFAULT_GROUP + "}")
     private String groupName;
@@ -127,22 +131,46 @@ public class RedisStreamEventConsumer {
     private void handleRecords(List<MapRecord<String, Object, Object>> records) {
         for (MapRecord<String, Object, Object> record : records) {
             try {
-                handleRecord(record);
-                redisTemplate.opsForStream().acknowledge(DomainEventPublisher.STREAM_KEY, groupName, record.getId());
+                RedisStreamEventContext context = toContext(record);
+                if (context.eventType() == null || EventTypes.STREAM_BOOTSTRAP.equals(context.eventType())) {
+                    acknowledge(record);
+                    continue;
+                }
+
+                RedisStreamRetryTemplate.RetryDecision decision = retryTemplate.execute(
+                        context,
+                        () -> handleRecord(context.eventType(), context.payload())
+                );
+                if (decision == RedisStreamRetryTemplate.RetryDecision.ACK) {
+                    acknowledge(record);
+                }
             } catch (RuntimeException e) {
                 log.warn("Failed to handle Redis Stream event {}: {}", record.getId(), e.getMessage(), e);
             }
         }
     }
 
-    private void handleRecord(MapRecord<String, Object, Object> record) {
+    private RedisStreamEventContext toContext(MapRecord<String, Object, Object> record) {
         Map<Object, Object> body = record.getValue();
         String type = asString(body.get("type"));
-        if (type == null || EventTypes.STREAM_BOOTSTRAP.equals(type)) {
-            return;
-        }
-
         String payload = asString(body.get("payload"));
+        return new RedisStreamEventContext(
+                DomainEventPublisher.STREAM_KEY,
+                groupName,
+                consumerName,
+                record.getId().getValue(),
+                asString(body.get("eventId")),
+                type,
+                payload,
+                asString(body.get("occurredAt"))
+        );
+    }
+
+    private void acknowledge(MapRecord<String, Object, Object> record) {
+        redisTemplate.opsForStream().acknowledge(DomainEventPublisher.STREAM_KEY, groupName, record.getId());
+    }
+
+    private void handleRecord(String type, String payload) {
         switch (type) {
             case EventTypes.NOTIFICATION_REQUESTED -> handleNotificationRequested(payload);
             case EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED -> handleOrderConfirmationEmailRequested(payload);
@@ -150,6 +178,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED -> handleReceiptComplaintEmailRequested(payload);
             case EventTypes.PASSWORD_RESET_EMAIL_REQUESTED -> handlePasswordResetEmailRequested(payload);
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
+            case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
             case EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED -> handleStaffCommissionRefreshRequested(payload);
@@ -172,7 +201,7 @@ public class RedisStreamEventConsumer {
 
     private void handleOrderConfirmationEmailRequested(String payload) {
         OrderConfirmationEmailRequestedEvent event = readPayload(payload, OrderConfirmationEmailRequestedEvent.class);
-        emailService.sendOrderConfirmationEmailNow(
+        emailService.sendOrderConfirmationEmailNowOrThrow(
                 event.toEmail(),
                 event.customerName(),
                 event.orderId(),
@@ -183,7 +212,7 @@ public class RedisStreamEventConsumer {
 
     private void handleOrderCancellationEmailRequested(String payload) {
         OrderCancellationEmailRequestedEvent event = readPayload(payload, OrderCancellationEmailRequestedEvent.class);
-        emailService.sendOrderCancellationEmailNow(
+        emailService.sendOrderCancellationEmailNowOrThrow(
                 event.toEmail(),
                 event.customerName(),
                 event.orderId(),
@@ -193,7 +222,7 @@ public class RedisStreamEventConsumer {
 
     private void handleReceiptComplaintEmailRequested(String payload) {
         ReceiptComplaintEmailRequestedEvent event = readPayload(payload, ReceiptComplaintEmailRequestedEvent.class);
-        emailService.sendReceiptComplaintEmailNow(
+        emailService.sendReceiptComplaintEmailNowOrThrow(
                 event.toEmails(),
                 event.orderId(),
                 event.customerName(),
@@ -205,7 +234,7 @@ public class RedisStreamEventConsumer {
 
     private void handlePasswordResetEmailRequested(String payload) {
         PasswordResetEmailRequestedEvent event = readPayload(payload, PasswordResetEmailRequestedEvent.class);
-        emailService.sendPasswordResetEmailNow(
+        emailService.sendPasswordResetEmailNowOrThrow(
                 event.toEmail(),
                 event.customerName(),
                 event.resetLink(),
@@ -218,6 +247,37 @@ public class RedisStreamEventConsumer {
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(() -> new IllegalStateException("Order not found for ORDER_CREATED event: " + event.orderId()));
         consultationAttributionService.recordOrderAttributions(order);
+    }
+
+    private void handleGuestOrderCreated(String payload) {
+        GuestOrderCreatedEvent event = readPayload(payload, GuestOrderCreatedEvent.class);
+        if (event.orderId() == null) {
+            throw new IllegalArgumentException("Guest order created event must contain orderId");
+        }
+
+        Order order = orderRepository.findById(event.orderId())
+                .orElseThrow(() -> new IllegalStateException("Order not found for GUEST_ORDER_CREATED event: " + event.orderId()));
+        if (order.getUser() != null) {
+            log.debug("Skipping GUEST_ORDER_CREATED email for system user order {}", event.orderId());
+            return;
+        }
+        if (!StringUtils.hasText(order.getEmail())) {
+            log.debug("Skipping guest order confirmation email for order {} because email is empty", event.orderId());
+            return;
+        }
+        if (eventIdempotencyService.isCompleted(EventTypes.GUEST_ORDER_CREATED, event.orderId())) {
+            log.debug("Skipping duplicate GUEST_ORDER_CREATED email for order {}", event.orderId());
+            return;
+        }
+
+        emailService.sendOrderConfirmationEmailNowOrThrow(
+                order.getEmail(),
+                order.getRecipientName(),
+                order.getId(),
+                order.getFinalPrice(),
+                "Thanh toan khi nhan hang (COD)"
+        );
+        eventIdempotencyService.markCompleted(EventTypes.GUEST_ORDER_CREATED, event.orderId());
     }
 
     private void handleOrderDelivered(String payload) {

@@ -33,6 +33,9 @@ public class GuestCheckoutRequest {
     @Size(max = 1000, message = "Note must be at most 1000 characters")
     private String note;
 
+    @Size(max = 64, message = "Voucher code must be at most 64 characters")
+    private String voucherCode;
+
     @NotEmpty(message = "Select at least one variant to checkout")
     private List<@Positive(message = "Variant id must be positive") Long> variantIds;
 }

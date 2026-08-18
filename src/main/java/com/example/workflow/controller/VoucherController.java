@@ -3,6 +3,7 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartVoucherOptionsDTO;
 import com.example.workflow.dto.UserVoucherDTO;
+import com.example.workflow.dto.VoucherCartOptionDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
 import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.exception.AppException;
@@ -28,8 +29,22 @@ public class VoucherController {
     private final VoucherService voucherService;
 
     @GetMapping("/templates")
+    @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'MANAGER')")
     public ResponseEntity<ApiResponse<List<VoucherTemplateDTO>>> getTemplates() {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getActiveTemplates()));
+    }
+
+    @GetMapping("/admin/templates")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
+    public ResponseEntity<ApiResponse<List<VoucherTemplateDTO>>> getManagementTemplates() {
+        return ResponseEntity.ok(ApiResponse.success(voucherService.getActiveTemplatesForManagement()));
+    }
+
+    @GetMapping("/guest")
+    public ResponseEntity<ApiResponse<List<VoucherCartOptionDTO>>> getGuestVouchers(
+            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(voucherService.getGuestVoucherOptions(subtotal)));
     }
 
     @GetMapping("/me/wallet")

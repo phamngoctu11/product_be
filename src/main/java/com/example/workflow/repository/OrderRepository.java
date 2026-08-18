@@ -29,6 +29,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "LEFT JOIN FETCH pv.product " +
             "LEFT JOIN FETCH o.userVoucher uv " +
             "LEFT JOIN FETCH uv.template " +
+            "LEFT JOIN FETCH o.guestVoucherTemplate " +
             "WHERE o.id = :id")
     Optional<Order> findById(@Param("id") Long id);
 
@@ -40,6 +41,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "LEFT JOIN FETCH pv.product " +
             "LEFT JOIN FETCH o.userVoucher uv " +
             "LEFT JOIN FETCH uv.template " +
+            "LEFT JOIN FETCH o.guestVoucherTemplate " +
             "WHERE o.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
@@ -139,6 +141,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "LEFT JOIN FETCH pv.product " +
             "LEFT JOIN FETCH o.userVoucher uv " +
             "LEFT JOIN FETCH uv.template " +
+            "LEFT JOIN FETCH o.guestVoucherTemplate " +
             "WHERE o.id IN :orderIds")
     List<Order> findFullOrdersByIds(@Param("orderIds") List<Long> orderIds);
 

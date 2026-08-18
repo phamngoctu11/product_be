@@ -40,6 +40,10 @@ public class Order {
     @JoinColumn(name = "user_voucher_id")
     private UserVoucher userVoucher;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "guest_voucher_template_id")
+    private VoucherTemplate guestVoucherTemplate;
+
     @Column(name = "discount_amount")
     private Double discountAmount = 0.0;
 

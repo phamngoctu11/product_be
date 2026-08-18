@@ -191,10 +191,10 @@ public class OrderService {
 
     @Transactional
     @DeferredCacheEvicts(reason = "warehouse order claimed", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "orders", allEntries = true)
     })
     @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
             @CacheEvict(value = "warehouseOrders", allEntries = true),
             @CacheEvict(value = "staffOrders", allEntries = true)
@@ -218,13 +218,13 @@ public class OrderService {
 
     @Transactional
     @DeferredCacheEvicts(reason = "staff assigned to order", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
+            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
+            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true)
     })
     @Caching(evict = {
             @CacheEvict(value = "orders", allEntries = true),
             @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
+            @CacheEvict(value = "warehouseOrders", allEntries = true)
     })
     public void assignStaffToOrder(Long orderId, String staffId) {
         Order order = getOrderOrThrow(orderId);

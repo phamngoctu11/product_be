@@ -10,6 +10,7 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.InventoryReservationService;
+import com.example.workflow.service.VoucherService;
 import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
@@ -28,6 +29,7 @@ public class CancelOrderDelegate implements JavaDelegate {
     private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
+    private final VoucherService voucherService;
 
     @Override
     @Transactional
@@ -46,6 +48,7 @@ public class CancelOrderDelegate implements JavaDelegate {
         }
 
         restoreVoucher(order.getUserVoucher());
+        restoreGuestVoucher(order);
 
         orderRepository.save(order);
         eventPublisher.publishAfterCommit(
@@ -62,7 +65,8 @@ public class CancelOrderDelegate implements JavaDelegate {
                 CacheEvictionEntry.allEntries("products"),
                 CacheEvictionEntry.allEntries("product"),
                 CacheEvictionEntry.allEntries("wishlistProducts"),
-                CacheEvictionEntry.allEntries("userVoucherWallet")
+                CacheEvictionEntry.allEntries("userVoucherWallet"),
+                CacheEvictionEntry.allEntries("guestVoucherTemplates")
         ));
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
     }
@@ -74,5 +78,12 @@ public class CancelOrderDelegate implements JavaDelegate {
         appliedVoucher.setUsed(false);
         appliedVoucher.setUsedDate(null);
         userVoucherRepository.save(appliedVoucher);
+    }
+
+    private void restoreGuestVoucher(Order order) {
+        if (order == null || order.getUser() != null) {
+            return;
+        }
+        voucherService.restoreGuestVoucher(order.getGuestVoucherTemplate());
     }
 }

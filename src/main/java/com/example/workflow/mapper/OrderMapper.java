@@ -15,7 +15,7 @@ public interface OrderMapper {
     @Mapping(target = "customerName", expression = "java(resolveCustomerName(order))")
     @Mapping(target = "customer", expression = "java(resolveCustomerInfo(order))")
     @Mapping(target = "email", expression = "java(resolveCustomerEmail(order))")
-    @Mapping(source = "userVoucher.template.name", target = "voucherName")
+    @Mapping(target = "voucherName", expression = "java(resolveVoucherName(order))")
     @Mapping(target = "totalPrice", expression = "java(resolveTotalPrice(order))")
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
     OrderDTO toDto(Order order);
@@ -104,5 +104,18 @@ public interface OrderMapper {
         }
         double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
         return Math.max(0.0, order.getTotalPrice() - discountAmount);
+    }
+
+    default String resolveVoucherName(Order order) {
+        if (order == null) {
+            return null;
+        }
+        if (order.getUserVoucher() != null && order.getUserVoucher().getTemplate() != null) {
+            return order.getUserVoucher().getTemplate().getName();
+        }
+        if (order.getGuestVoucherTemplate() != null) {
+            return order.getGuestVoucherTemplate().getName();
+        }
+        return null;
     }
 }

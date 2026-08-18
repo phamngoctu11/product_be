@@ -20,5 +20,6 @@ public class VoucherTemplateDTO {
     private double maxDiscountAmount;
     private int quantity;
     private boolean isActive;
+    private boolean guestVoucher;
     private LocalDateTime expiryDate;
 }

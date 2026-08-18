@@ -39,6 +39,7 @@ public class PendingPaymentReservationTimeoutService {
     private final OrderStatusHistoryRepository historyRepository;
     private final DomainEventPublisher eventPublisher;
     private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
+    private final VoucherService voucherService;
 
     @Value("${checkout.reservation-timeout.minutes:15}")
     private long timeoutMinutes;
@@ -79,6 +80,7 @@ public class PendingPaymentReservationTimeoutService {
         deleteOrderProcessIfExists(orderId, "Online payment timeout");
         inventoryReservationService.releaseReservedStock(order, PAYMENT_TIMEOUT_RETURN);
         restoreVoucher(order.getUserVoucher());
+        restoreGuestVoucher(order);
 
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
@@ -114,6 +116,13 @@ public class PendingPaymentReservationTimeoutService {
         userVoucherRepository.save(appliedVoucher);
     }
 
+    private void restoreGuestVoucher(Order order) {
+        if (order == null || order.getUser() != null) {
+            return;
+        }
+        voucherService.restoreGuestVoucher(order.getGuestVoucherTemplate());
+    }
+
     private void saveAuditLog(Order order, OrderStatus oldStatus) {
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(order);
@@ -134,7 +143,8 @@ public class PendingPaymentReservationTimeoutService {
                 CacheEvictionEntry.allEntries("products"),
                 CacheEvictionEntry.allEntries("product"),
                 CacheEvictionEntry.allEntries("wishlistProducts"),
-                CacheEvictionEntry.allEntries("userVoucherWallet")
+                CacheEvictionEntry.allEntries("userVoucherWallet"),
+                CacheEvictionEntry.allEntries("guestVoucherTemplates")
         ));
     }
 }
