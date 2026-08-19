@@ -4,8 +4,7 @@ import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.dto.GuestCheckoutRequest;
-import com.example.workflow.cache.DeferredCacheEvict;
-import com.example.workflow.cache.DeferredCacheEvicts;
+import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
@@ -18,11 +17,10 @@ import com.example.workflow.repository.*;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
 import com.example.workflow.service.redis.CheckoutIdempotencyService;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -86,49 +84,37 @@ public class CartService {
     private final CheckoutIdempotencyService checkoutIdempotencyService;
     private final AuthService authService;
     private final VoucherService voucherService;
+    private final ApplicationCacheService applicationCacheService;
 
     public CartOwner resolveOwner(String guestSessionId) {
         Optional<String> currentCustomerId = getAuthenticatedCustomerId();
-        if (currentCustomerId.isPresent()) {
-            return CartOwner.user(currentCustomerId.get());
-        }
-        return CartOwner.guest(normalizeGuestSessionId(guestSessionId));
+        return currentCustomerId.map(CartOwner::user).orElseGet(() -> CartOwner.guest(normalizeGuestSessionId(guestSessionId)));
     }
 
-    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
     public void addToCart(CartOwner owner, Long variantId, int quantity) {
         Cart cart = getOrCreateCart(owner);
         addVariantToCart(cart, variantId, quantity);
+        applicationCacheService.evictCartChanged(requireCartOwner(owner).cacheKey());
     }
 
-    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
     public void updateQuantity(CartOwner owner, Long variantId, int newQuantity) {
         Cart cart = getExistingCart(owner, ConstantErrorCode.CART_EMPTY);
         updateCartQuantity(cart, variantId, newQuantity);
+        applicationCacheService.evictCartChanged(requireCartOwner(owner).cacheKey());
     }
 
-    @CacheEvict(value = "carts", key = "#owner.cacheKey()")
     public void removeFromCart(CartOwner owner, Long variantId) {
         Cart cart = getExistingCart(owner, ConstantErrorCode.CART_NOT_FOUND);
         removeVariantFromCart(cart, variantId);
+        applicationCacheService.evictCartChanged(requireCartOwner(owner).cacheKey());
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "carts", key = "#owner.cacheKey()", unless = "#result == null")
+    @Cacheable(value = CacheNames.CARTS, key = "#owner.cacheKey()", unless = "#result == null")
     public CartResDTO getCart(CartOwner owner) {
         return toActiveCartDto(getCartForRead(owner));
     }
 
-    @DeferredCacheEvicts(reason = "guest checkout", value = {
-            @DeferredCacheEvict(cacheName = "orders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "pendingOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "products", allEntries = true),
-            @DeferredCacheEvict(cacheName = "product", allEntries = true)
-    })
-    @CacheEvict(value = "carts", key = "'guest-' + #guestSessionId.trim()")
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CheckoutResponseDTO checkoutGuestCart(
             String guestSessionId,
@@ -152,6 +138,7 @@ public class CartService {
                 response = checkoutGuestCartInternal(normalizedGuestSessionId, request, variantIdsToCheckout);
             }
             checkoutIdempotencyService.complete(idempotencyState, response);
+            applicationCacheService.evictGuestCheckout(normalizedGuestSessionId);
             return CheckoutResponseDTO.fromMap(response);
         } catch (AppException e) {
             checkoutIdempotencyService.fail(idempotencyState);
@@ -162,26 +149,26 @@ public class CartService {
         }
     }
 
-    @CacheEvict(value = "carts", key = "'user-' + #userId")
     public void startAddToCartProcess(String userId, Long variantId, int quantity) {
         assertCurrentUserOwnsCart(userId);
         addVariantToCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId, quantity);
+        applicationCacheService.evictUserCartChanged(userId);
     }
 
-    @CacheEvict(value = "carts", key = "'user-' + #userId")
     public void updateQuantity(String userId, Long variantId, int newQuantity) {
         assertCurrentUserOwnsCart(userId);
         updateCartQuantity(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY), variantId, newQuantity);
+        applicationCacheService.evictUserCartChanged(userId);
     }
 
-    @CacheEvict(value = "carts", key = "'user-' + #userId")
     public void removeFromCart(String userId, Long variantId) {
         assertCurrentUserOwnsCart(userId);
         removeVariantFromCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId);
+        applicationCacheService.evictUserCartChanged(userId);
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "carts", key = "'user-' + #userId", unless = "#result == null")
+    @Cacheable(value = CacheNames.CARTS, key = "'user-' + #userId", unless = "#result == null")
     public CartResDTO getCartByUserId(String userId) {
         assertCurrentUserOwnsCart(userId);
         return toActiveCartDto(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY_VI));
@@ -221,21 +208,6 @@ public class CartService {
     // ==============================================================================
     // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
     // ==============================================================================
-    @DeferredCacheEvicts(reason = "user checkout", value = {
-            @DeferredCacheEvict(cacheName = "users", allEntries = true),
-            @DeferredCacheEvict(cacheName = "pendingOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "products", allEntries = true),
-            @DeferredCacheEvict(cacheName = "product", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "carts", key = "'user-' + #userId"),
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "userVoucherWallet", allEntries = true, condition = "#userVoucherId != null")
-    })
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Map<String, String> approveCart(
             String userId,
@@ -259,6 +231,7 @@ public class CartService {
                 response = approveCartInternal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
             }
             checkoutIdempotencyService.complete(idempotencyState, response);
+            applicationCacheService.evictUserCheckout(userId, userVoucherId);
             return response;
         } catch (AppException e) {
             checkoutIdempotencyService.fail(idempotencyState);
@@ -346,10 +319,7 @@ public class CartService {
             VoucherService.AppliedGuestVoucher appliedGuestVoucher =
                     voucherService.applyGuestVoucherForCheckout(request.getVoucherCode(), totalPrice);
             applyGuestOrderTotals(order, totalPrice, appliedGuestVoucher);
-
-            inventoryReservationService.reserve(order);
             Order savedOrder = orderRepository.saveAndFlush(order);
-            inventoryReservationService.recordReservations(savedOrder);
 
             cartItemRepository.deleteAll(itemsToCheckout);
             cart.getItems().removeAll(itemsToCheckout);
@@ -378,9 +348,7 @@ public class CartService {
         UserVoucher appliedVoucher = voucherService.useVoucherForCheckout(userVoucherId, userId, totalPrice);
         double discountAmount = voucherService.calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
-        inventoryReservationService.reserve(order);
         Order savedOrder = orderRepository.saveAndFlush(order);
-        inventoryReservationService.recordReservations(savedOrder);
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
 
         cartItemRepository.deleteAll(itemsToCheckout);
@@ -683,7 +651,7 @@ public class CartService {
             return Optional.empty();
         }
 
-        if (!hasAuthority(authentication, "USER")) {
+        if (!hasAuthority(authentication)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
         }
 
@@ -696,9 +664,9 @@ public class CartService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND)));
     }
 
-    private boolean hasAuthority(Authentication authentication, String authority) {
+    private boolean hasAuthority(Authentication authentication) {
         return authentication.getAuthorities().stream()
-                .anyMatch(grantedAuthority -> authority.equals(grantedAuthority.getAuthority()));
+                .anyMatch(grantedAuthority -> "USER".equals(grantedAuthority.getAuthority()));
     }
 
     private String normalizeGuestSessionId(String guestSessionId) {

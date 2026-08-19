@@ -5,10 +5,7 @@ import com.example.workflow.entity.User;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.service.ConsultationAttributionService;
-import com.example.workflow.service.EmailService;
-import com.example.workflow.service.NotificationService;
-import com.example.workflow.service.StaffCommissionService;
+import com.example.workflow.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -33,6 +30,7 @@ class RedisStreamEventConsumerTest {
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final RedisEventIdempotencyService eventIdempotencyService = mock(RedisEventIdempotencyService.class);
     private final RedisStreamRetryTemplate retryTemplate = mock(RedisStreamRetryTemplate.class);
+    private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final RedisStreamEventConsumer consumer = new RedisStreamEventConsumer(
             redisTemplate,
             objectMapper,
@@ -43,7 +41,8 @@ class RedisStreamEventConsumerTest {
             staffCommissionService,
             optionalCacheService,
             eventIdempotencyService,
-            retryTemplate
+            retryTemplate,
+            inventoryReservationService
     );
 
     @Test

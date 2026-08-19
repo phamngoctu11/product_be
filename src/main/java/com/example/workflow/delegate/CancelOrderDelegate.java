@@ -2,7 +2,6 @@ package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.UserVoucher;
-import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -11,14 +10,12 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.InventoryReservationService;
 import com.example.workflow.service.VoucherService;
-import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @RequiredArgsConstructor
 @Component("cancelOrderDelegate")
@@ -26,10 +23,10 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderRepository orderRepository;
     private final UserVoucherRepository userVoucherRepository;
-    private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
     private final VoucherService voucherService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Override
     @Transactional
@@ -41,6 +38,7 @@ public class CancelOrderDelegate implements JavaDelegate {
             return;
         }
 
+        OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.CANCELLED);
         boolean reservationReleased = inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");
         if (!reservationReleased) {
@@ -56,18 +54,7 @@ public class CancelOrderDelegate implements JavaDelegate {
                 new OrderCancelledEvent(order.getId(), order.getCancelReason())
         );
 
-        cacheEvictionPublisher.publishEventually("camunda order cancelled", List.of(
-                CacheEvictionEntry.allEntries("orders"),
-                CacheEvictionEntry.allEntries("pendingOrders"),
-                CacheEvictionEntry.allEntries("warehouseOrders"),
-                CacheEvictionEntry.allEntries("staffOrders"),
-                CacheEvictionEntry.allEntries("dashboardStats"),
-                CacheEvictionEntry.allEntries("products"),
-                CacheEvictionEntry.allEntries("product"),
-                CacheEvictionEntry.allEntries("wishlistProducts"),
-                CacheEvictionEntry.allEntries("userVoucherWallet"),
-                CacheEvictionEntry.allEntries("guestVoucherTemplates")
-        ));
+        applicationCacheService.evictCamundaOrderCancelled(order, oldStatus);
         System.out.println(">>> Camunda: Order cancelled and related stock/voucher data restored for order " + orderId);
     }
 

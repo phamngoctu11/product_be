@@ -4,14 +4,13 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderStatusHistory;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.OrderStatusHistoryRepository;
 import com.example.workflow.repository.UserVoucherRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
-import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
@@ -23,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -38,8 +38,8 @@ public class PendingPaymentReservationTimeoutService {
     private final UserVoucherRepository userVoucherRepository;
     private final OrderStatusHistoryRepository historyRepository;
     private final DomainEventPublisher eventPublisher;
-    private final DeferredCacheEvictionPublisher cacheEvictionPublisher;
     private final VoucherService voucherService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Value("${checkout.reservation-timeout.minutes:15}")
     private long timeoutMinutes;
@@ -58,21 +58,24 @@ public class PendingPaymentReservationTimeoutService {
         }
 
         int cancelled = 0;
+        List<Order> expiredOrders = new ArrayList<>();
         for (Long orderId : orderIds) {
-            if (expireOrderIfStillPending(orderId, now)) {
+            Order expiredOrder = expireOrderIfStillPending(orderId, now);
+            if (expiredOrder != null) {
                 cancelled++;
+                expiredOrders.add(expiredOrder);
             }
         }
         if (cancelled > 0) {
-            clearRelatedCaches();
+            applicationCacheService.evictPendingPaymentReservationTimeout(expiredOrders);
             log.info("Released reserved stock for {} expired pending-payment orders.", cancelled);
         }
     }
 
-    private boolean expireOrderIfStillPending(Long orderId, LocalDateTime now) {
+    private Order expireOrderIfStillPending(Long orderId, LocalDateTime now) {
         Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
         if (order == null || order.getStatus() != OrderStatus.PENDING_PAYMENT || !order.isStockReserved()) {
-            return false;
+            return null;
         }
 
         OrderStatus oldStatus = order.getStatus();
@@ -91,7 +94,7 @@ public class PendingPaymentReservationTimeoutService {
                 EventTypes.ORDER_CANCELLED,
                 new OrderCancelledEvent(order.getId(), reason)
         );
-        return true;
+        return order;
     }
 
     private void deleteOrderProcessIfExists(Long orderId, String reason) {
@@ -132,19 +135,4 @@ public class PendingPaymentReservationTimeoutService {
         historyRepository.save(history);
     }
 
-    private void clearRelatedCaches() {
-        cacheEvictionPublisher.publishEventually("pending payment reservation timeout", List.of(
-                CacheEvictionEntry.allEntries("orders"),
-                CacheEvictionEntry.allEntries("pendingOrders"),
-                CacheEvictionEntry.allEntries("warehouseOrders"),
-                CacheEvictionEntry.allEntries("staffOrders"),
-                CacheEvictionEntry.allEntries("users"),
-                CacheEvictionEntry.allEntries("dashboardStats"),
-                CacheEvictionEntry.allEntries("products"),
-                CacheEvictionEntry.allEntries("product"),
-                CacheEvictionEntry.allEntries("wishlistProducts"),
-                CacheEvictionEntry.allEntries("userVoucherWallet"),
-                CacheEvictionEntry.allEntries("guestVoucherTemplates")
-        ));
-    }
 }

@@ -91,9 +91,9 @@ public class InventoryReservationService {
         return true;
     }
 
-    public boolean restoreDeductedStock(Order order, String restoreType) {
+    public void restoreDeductedStock(Order order, String restoreType) {
         if (!order.isStockDeducted()) {
-            return false;
+            return;
         }
         for (OrderItem item : order.getItems()) {
             ProductVariant variant = item.getProductVariant();
@@ -109,7 +109,6 @@ public class InventoryReservationService {
             );
         }
         order.setStockDeducted(false);
-        return true;
     }
 
     private void deductLegacyOrder(Order order) {

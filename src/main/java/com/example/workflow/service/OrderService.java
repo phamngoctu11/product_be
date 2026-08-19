@@ -1,8 +1,8 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.*;
-import com.example.workflow.cache.DeferredCacheEvict;
-import com.example.workflow.cache.DeferredCacheEvicts;
+import com.example.workflow.cache.CacheKeys;
+import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -14,6 +14,7 @@ import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +22,7 @@ import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +58,7 @@ public class OrderService {
     private final ReputationService reputationService;
     private final CartService cartService;
     private final ProductReviewRepository productReviewRepository;
+    private final ApplicationCacheService applicationCacheService;
 
     // Get current authenticated user.
     private User getCurrentAuthenticatedUser() {
@@ -108,7 +108,7 @@ public class OrderService {
     private Pageable normalizePageable(Pageable pageable) {
         int page = pageable == null ? 0 : pageable.getPageNumber();
         int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        return PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 100));
     }
 
     private Order getOrderOrThrow(Long orderId) {
@@ -176,7 +176,7 @@ public class OrderService {
                 .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, variantId));
     }
 
-    private void sendOrderConfirmationEmailAsync(User user, Order order, String paymentMethodLabel) {
+    private void sendOrderConfirmationEmailAsync(User user, Order order) {
         if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
             return;
         }
@@ -185,20 +185,11 @@ public class OrderService {
                 user.getLastname(),
                 order.getId(),
                 resolveFinalPrice(order),
-                paymentMethodLabel
+                "Thanh toan Online qua MoMo"
         );
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "warehouse order claimed", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "orders", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
-    })
     public void claimWarehouseOrder(Long orderId) {
         Order order = getOrderOrThrow(orderId);
         User staff = getCurrentStaff();
@@ -214,18 +205,11 @@ public class OrderService {
         order.setWarehouseStaff(staff);
         order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
         saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
+
+        applicationCacheService.evictWarehouseClaimed(order, staff.getId());
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "staff assigned to order", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true)
-    })
     public void assignStaffToOrder(Long orderId, String staffId) {
         Order order = getOrderOrThrow(orderId);
         User manager = getCurrentManager();
@@ -236,25 +220,19 @@ public class OrderService {
         }
 
         OrderStatus oldStatus = order.getStatus();
+        String previousStaffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
         order.setWarehouseStaff(staff);
         order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
         saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
         saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc manager giao cho ban phu trach xuat kho.", orderId, staff.getId(), "/topic/user-notifications/" + staff.getId());
+
+        applicationCacheService.evictStaffAssigned(order, oldStatus, previousStaffId, staff.getId());
     }
 
     // ==========================================
     // Station 1: manager review
     // ==========================================
     @Transactional
-    @DeferredCacheEvicts(reason = "manager reviewed order", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
-    })
     public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
         Order order = getOrderOrThrow(orderId);
         User manager = getManagerReviewer(changerId);
@@ -291,20 +269,18 @@ public class OrderService {
             saveOrderAndAuditStatusChange(order, oldStatus, null);
         }
         taskService.complete(task.getId(), variables);
+
+        applicationCacheService.evictManagerReviewed(
+                order,
+                request.isApproved(),
+                assignedStaff == null ? null : assignedStaff.getId()
+        );
     }
 
     // ==========================================
     // Station 2: warehouse export
     // ==========================================
     @Transactional
-    @DeferredCacheEvicts(reason = "staff exported order", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
-    })
     public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
         Order order = getOrderOrThrow(orderId);
         User staff = getCurrentStaff();
@@ -329,31 +305,25 @@ public class OrderService {
             if (req.getQuantity() < 0) {
                 throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_QUANTITY_NEGATIVE);
             }
-            findOrderItemByVariant(order, req.getVariantId()).setExportedQuantity(req.getQuantity());
+            OrderItem item = findOrderItemByVariant(order, req.getVariantId());
+            if(item.getQuantity()!=req.getQuantity()){
+                inventoryReservationService.releaseReservedStock(order, "EXPORT_VARIANT");
+            }
+            item.setExportedQuantity(req.getQuantity());
         }
 
         OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.PENDING_KCS);
         saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
         taskService.complete(task.getId());
+
+        applicationCacheService.evictStaffExported(order, staff.getId());
     }
 
     // ==========================================
     // Station 3: manager KCS reconciliation
     // ==========================================
     @Transactional
-    @DeferredCacheEvicts(reason = "manager KCS checked order", value = {
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "products", allEntries = true),
-            @DeferredCacheEvict(cacheName = "product", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "warehouseOrders", allEntries = true),
-            @CacheEvict(value = "staffOrders", allEntries = true)
-    })
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
         Order order = getOrderOrThrow(orderId);
 
@@ -381,22 +351,14 @@ public class OrderService {
 
         saveOrderAndAuditStatusChange(order, oldStatus, null);
         taskService.complete(task.getId(), variables);
+
+        applicationCacheService.evictManagerKcsChecked(order);
     }
 
     // ==========================================
     // Station 4: customer receipt confirmation
     // ==========================================
     @Transactional
-    @DeferredCacheEvicts(reason = "customer confirmed receipt", value = {
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "bestSellingProducts", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "user", allEntries = true)
-    })
     public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
         Order order = getOrderOrThrow(orderId);
         User currentUser = validateReceiptOwner(order);
@@ -437,6 +399,8 @@ public class OrderService {
         );
 
         taskService.complete(task.getId());
+
+        applicationCacheService.evictCustomerReceiptConfirmed(order, currentUser.getId());
 
         boolean matched = mismatches.isEmpty();
         String message = matched
@@ -630,19 +594,6 @@ public class OrderService {
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "order cancelled", value = {
-            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true),
-            @DeferredCacheEvict(cacheName = "products", allEntries = true),
-            @DeferredCacheEvict(cacheName = "product", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "userVoucherWallet", allEntries = true)
-    })
     public void cancelOrder(Long id, String reason) {
         Order order = getOrderForUpdateOrThrow(id);
         User user = getCurrentAuthenticatedUser();
@@ -672,6 +623,8 @@ public class OrderService {
 
         saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
         saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
+
+        applicationCacheService.evictCustomerCancelled(order, oldStatus, user.getId());
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -839,16 +792,6 @@ public class OrderService {
         );
     }
     @Transactional
-    @DeferredCacheEvicts(reason = "momo callback processed", value = {
-            @DeferredCacheEvict(cacheName = "warehouseOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffOrders", allEntries = true),
-            @DeferredCacheEvict(cacheName = "dashboardStats", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "pendingOrders", allEntries = true),
-            @CacheEvict(value = "userVoucherWallet", allEntries = true)
-    })
     public void processMomoCallbackResult(Long orderId, String resultCode) {
         Order order = getOrderForUpdateOrThrow(orderId);
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
@@ -862,6 +805,7 @@ public class OrderService {
             handleFailedMomoPayment(order, resultCode);
         }
 
+        applicationCacheService.evictMomoCallbackProcessed(order);
     }
 
     private void handleSuccessfulMomoPayment(Order order) {
@@ -886,7 +830,7 @@ public class OrderService {
                 order.getUser().getId(),
                 "/topic/user-notifications/" + order.getUser().getId()
         );
-        sendOrderConfirmationEmailAsync(order.getUser(), order, "Thanh toan Online qua MoMo");
+        sendOrderConfirmationEmailAsync(order.getUser(), order);
     }
 
     private void handleFailedMomoPayment(Order order, String resultCode) {
@@ -926,7 +870,10 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    @Cacheable(
+            value = CacheNames.USER_ORDERS,
+            key = "T(com.example.workflow.cache.CacheKeys).userOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #minPrice, #maxPrice, #pageable)"
+    )
     public Page<OrderListDTO> getMyOrders(Double minPrice, Double maxPrice, Pageable pageable) {
         String userId = authService.getCurrentUserId();
         return orderRepository.findListDtoByUserId(
@@ -948,7 +895,10 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "orders", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-cancelled-' + #minPrice + '-' + #maxPrice + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    @Cacheable(
+            value = CacheNames.USER_CANCELLED_ORDERS,
+            key = "T(com.example.workflow.cache.CacheKeys).userCancelledOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #minPrice, #maxPrice, #pageable)"
+    )
     public Page<OrderListDTO> getMyCancelledOrders(Double minPrice, Double maxPrice, Pageable pageable) {
         String userId = authService.getCurrentUserId();
         return orderRepository.findListDtoByUserIdAndStatus(
@@ -962,13 +912,16 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "warehouseOrders", key = "#pageable.pageNumber + '-' + #pageable.pageSize")
+    @Cacheable(value = CacheNames.WAREHOUSE_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).warehousePendingOrders(#pageable)")
     public Page<OrderListDTO> getWarehousePendingOrders(Pageable pageable) {
         return orderRepository.findUnassignedListDtoByStatus(OrderStatus.PENDING_WAREHOUSE, normalizePageable(pageable));
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "staffOrders", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    @Cacheable(
+            value = CacheNames.STAFF_ASSIGNED_ORDERS,
+            key = "T(com.example.workflow.cache.CacheKeys).staffAssignedOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #pageable)"
+    )
     public Page<OrderListDTO> getMyAssignedStaffOrders(Pageable pageable) {
         User staff = getCurrentStaff();
         return orderRepository.findListDtoByWarehouseStaffIdAndStatusIn(
@@ -984,7 +937,7 @@ public class OrderService {
 
     // Get pending order list for manager.
     @Transactional(readOnly = true)
-    @Cacheable(value = "pendingOrders", key = "#status.name() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    @Cacheable(value = CacheNames.MANAGER_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).managerPendingOrders(#status, #pageable)")
     public Page<OrderListDTO> getPendingOrders(OrderStatus status,Pageable pageable) {
         // Read list DTOs directly from DB.
         return orderRepository.findListDtoByStatusOldestFirst(status, normalizePageable(pageable));

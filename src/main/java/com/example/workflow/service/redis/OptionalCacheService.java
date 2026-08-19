@@ -6,9 +6,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 @Service
@@ -16,6 +23,7 @@ import java.util.List;
 @Slf4j
 public class OptionalCacheService {
     private final CacheManager cacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public boolean clear(String cacheName) {
         try {
@@ -43,6 +51,37 @@ public class OptionalCacheService {
         }
     }
 
+    public void evictByPrefix(String cacheName, String keyPrefix) {
+        if (!StringUtils.hasText(cacheName) || keyPrefix == null) {
+            return;
+        }
+
+        String redisKeyPattern = cacheName + "::" + keyPrefix + "*";
+        List<String> keysToDelete = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(
+                ScanOptions.scanOptions().match(redisKeyPattern).count(500).build()
+        )) {
+            cursor.forEachRemaining(keysToDelete::add);
+        } catch (RuntimeException e) {
+            log.warn("Optional cache prefix scan failed for cache '{}' prefix '{}': {}", cacheName, keyPrefix, e.getMessage());
+            return;
+        }
+
+        deleteKeys(cacheName, keyPrefix, keysToDelete);
+    }
+
+    public void clearAfterCommit(String cacheName) {
+        runAfterCommit(() -> clear(cacheName));
+    }
+
+    public void evictAfterCommit(String cacheName, Object key) {
+        runAfterCommit(() -> evict(cacheName, key));
+    }
+
+    public void evictByPrefixAfterCommit(String cacheName, String keyPrefix) {
+        runAfterCommit(() -> evictByPrefix(cacheName, keyPrefix));
+    }
+
     public void apply(CacheEvictionRequestedEvent event) {
         if (event == null || event.entries() == null || event.entries().isEmpty()) {
             return;
@@ -60,7 +99,38 @@ public class OptionalCacheService {
             clear(entry.cacheName());
             return;
         }
+        if (entry.keyPrefix() != null) {
+            evictByPrefix(entry.cacheName(), entry.keyPrefix());
+            return;
+        }
         evict(entry.cacheName(), entry.key());
+    }
+
+    private void deleteKeys(String cacheName, String keyPrefix, Collection<String> keysToDelete) {
+        if (keysToDelete == null || keysToDelete.isEmpty()) {
+            return;
+        }
+        try {
+            redisTemplate.delete(keysToDelete);
+        } catch (RuntimeException e) {
+            log.warn("Optional cache prefix evict failed for cache '{}' prefix '{}': {}", cacheName, keyPrefix, e.getMessage());
+        }
+    }
+
+    private void runAfterCommit(Runnable task) {
+        if (task == null) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+            return;
+        }
+        task.run();
     }
 
     public CacheClearResult clearAllAvailableCaches() {

@@ -26,6 +26,7 @@ import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
 import com.example.workflow.service.redis.CheckoutIdempotencyService;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -112,6 +113,9 @@ class CartServiceTest {
 
     @Mock
     private VoucherService voucherService;
+
+    @Mock
+    private ApplicationCacheService applicationCacheService;
 
     @InjectMocks
     private CartService cartService;

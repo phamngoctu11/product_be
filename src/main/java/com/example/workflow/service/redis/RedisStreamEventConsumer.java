@@ -14,10 +14,7 @@ import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.service.ConsultationAttributionService;
-import com.example.workflow.service.EmailService;
-import com.example.workflow.service.NotificationService;
-import com.example.workflow.service.StaffCommissionService;
+import com.example.workflow.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +53,7 @@ public class RedisStreamEventConsumer {
     private final OptionalCacheService optionalCacheService;
     private final RedisEventIdempotencyService eventIdempotencyService;
     private final RedisStreamRetryTemplate retryTemplate;
+    private final InventoryReservationService inventoryReservationService;
 
     @Value("${workflow.events.redis-stream.group:" + DEFAULT_GROUP + "}")
     private String groupName;
@@ -247,6 +245,9 @@ public class RedisStreamEventConsumer {
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(() -> new IllegalStateException("Order not found for ORDER_CREATED event: " + event.orderId()));
         consultationAttributionService.recordOrderAttributions(order);
+        inventoryReservationService.reserve(order);
+        inventoryReservationService.recordReservations(order);
+
     }
 
     private void handleGuestOrderCreated(String payload) {
@@ -269,7 +270,8 @@ public class RedisStreamEventConsumer {
             log.debug("Skipping duplicate GUEST_ORDER_CREATED email for order {}", event.orderId());
             return;
         }
-
+        inventoryReservationService.reserve(order);
+        inventoryReservationService.recordReservations(order);
         emailService.sendOrderConfirmationEmailNowOrThrow(
                 order.getEmail(),
                 order.getRecipientName(),

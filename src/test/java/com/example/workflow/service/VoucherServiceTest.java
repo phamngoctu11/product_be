@@ -7,6 +7,7 @@ import com.example.workflow.mapper.VoucherMapper;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.repository.VoucherTemplateRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,13 +31,15 @@ class VoucherServiceTest {
     private final VoucherMapper voucherMapper = mock(VoucherMapper.class);
     private final AuthService authService = mock(AuthService.class);
     private final ReputationService reputationService = mock(ReputationService.class);
+    private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final VoucherService voucherService = new VoucherService(
             templateRepository,
             userVoucherRepository,
             userRepository,
             voucherMapper,
             authService,
-            reputationService
+            reputationService,
+            applicationCacheService
     );
 
     @Test

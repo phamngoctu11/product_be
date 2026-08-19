@@ -1,7 +1,5 @@
 package com.example.workflow.service;
 
-import com.example.workflow.cache.DeferredCacheEvict;
-import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
@@ -16,10 +14,9 @@ import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +43,7 @@ public class ProductService {
     private final UserRepository userRepository;
     private final ProductVariantRepository variantRepository;
     private final InventoryTransactionService inventoryTransactionService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable)")
@@ -72,15 +70,6 @@ public class ProductService {
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "product created", value = {
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true)
-    })
     public ProductDTO createProduct(ProductDTO dto, String userId) {
         User actor = getActor(userId);
         Product entity = mapper.toEntity(dto);
@@ -88,21 +77,11 @@ public class ProductService {
         Product savedProduct = repository.saveAndFlush(entity);
         recordInitialStock(savedProduct.getVariants(), actor);
 
+        applicationCacheService.evictProductCreated();
         return mapper.toDto(savedProduct);
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "product updated", value = {
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
-    })
     public void updateProduct(Long id, ProductDTO dto, String userId) {
         User actor = getActor(userId);
         Product existingProduct = getActiveProduct(id);
@@ -155,38 +134,20 @@ public class ProductService {
         for (InventoryLogEntry log : inventoryLogs) {
             saveInventoryTransaction(log.variant(), log.changeAmount(), log.type(), actor);
         }
+        applicationCacheService.evictProductUpdated(id);
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "product basic info updated", value = {
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
-    })
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);
 
         applyProductBasicInfo(product, dto);
 
         repository.save(product);
+        applicationCacheService.evictProductBasicInfoUpdated(id);
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "product variant added", value = {
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#productId")
-    })
     public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
         User actor = getActor(userId);
         Product product = getActiveProduct(productId);
@@ -200,20 +161,12 @@ public class ProductService {
 
         recordInitialStock(List.of(savedVariant), actor);
 
-        return mapper.toDto(repository.saveAndFlush(product));
+        ProductDTO result = mapper.toDto(repository.saveAndFlush(product));
+        applicationCacheService.evictProductVariantAdded(productId);
+        return result;
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "stock imported", value = {
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
-    })
     public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
         User actor = getActor(userId);
         ProductVariant variant = getActiveVariant(variantId);
@@ -222,20 +175,11 @@ public class ProductService {
         ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
         saveInventoryTransaction(savedVariant, request.getQuantity(), "RESTOCK", actor);
 
+        applicationCacheService.evictStockImported();
         return mapper.variantToDto(savedVariant);
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "product deleted", value = {
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatus", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistStatusBatch", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "bestSellingProducts", allEntries = true),
-            @CacheEvict(value = "product", key = "#id")
-    })
     public void deleteProduct(Long id, String userId) {
         getActor(userId);
         Product product = getActiveProduct(id);
@@ -244,6 +188,7 @@ public class ProductService {
             product.getVariants().forEach(variant -> variant.setDelete(true));
         }
         repository.save(product);
+        applicationCacheService.evictProductDeleted(id);
     }
 
     private void applyProductBasicInfo(Product product, ProductDTO dto) {

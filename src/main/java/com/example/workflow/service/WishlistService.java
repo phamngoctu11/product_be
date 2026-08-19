@@ -9,10 +9,9 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.WishlistItemRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,6 +33,7 @@ public class WishlistService {
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
     private final AuthService authService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -49,30 +49,23 @@ public class WishlistService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #productId"),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
-    })
     public ProductDTO addToWishlist(Long productId) {
         String userId = authService.getCurrentUserId();
         Product product = getActiveProduct(productId);
 
-        return wishlistItemRepository.findByUser_IdAndProduct_Id(userId, productId)
+        ProductDTO response = wishlistItemRepository.findByUser_IdAndProduct_Id(userId, productId)
                 .map(WishlistItem::getProduct)
                 .map(productMapper::toDto)
                 .orElseGet(() -> createWishlistItem(product));
+        applicationCacheService.evictWishlistChanged(userId, productId);
+        return response;
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "wishlistProducts", allEntries = true),
-            @CacheEvict(value = "wishlistStatus", key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #productId"),
-            @CacheEvict(value = "wishlistStatusBatch", allEntries = true)
-    })
     public void removeFromWishlist(Long productId) {
         String userId = authService.getCurrentUserId();
         wishlistItemRepository.deleteByUser_IdAndProduct_Id(userId, productId);
+        applicationCacheService.evictWishlistChanged(userId, productId);
     }
 
     @Transactional(readOnly = true)

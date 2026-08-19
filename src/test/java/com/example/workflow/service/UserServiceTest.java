@@ -9,6 +9,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,9 @@ class UserServiceTest {
 
     @Mock
     private KeycloakIdentityService keycloakIdentityService;
+
+    @Mock
+    private ApplicationCacheService applicationCacheService;
 
     @InjectMocks
     private UserService userService;

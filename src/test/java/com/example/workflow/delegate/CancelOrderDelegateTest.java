@@ -4,7 +4,6 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.entity.VoucherTemplate;
-import com.example.workflow.event.payload.CacheEvictionEntry;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -13,7 +12,7 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.service.InventoryReservationService;
 import com.example.workflow.service.VoucherService;
-import com.example.workflow.service.redis.DeferredCacheEvictionPublisher;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,18 +32,18 @@ import static org.mockito.Mockito.when;
 class CancelOrderDelegateTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
-    private final DeferredCacheEvictionPublisher cacheEvictionPublisher = mock(DeferredCacheEvictionPublisher.class);
     private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
     private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final VoucherService voucherService = mock(VoucherService.class);
+    private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderRepository,
             userVoucherRepository,
-            cacheEvictionPublisher,
             eventPublisher,
             inventoryReservationService,
-            voucherService
+            voucherService,
+            applicationCacheService
     );
 
     @Test
@@ -92,11 +91,7 @@ class CancelOrderDelegateTest {
         ArgumentCaptor<OrderCancelledEvent> eventCaptor = ArgumentCaptor.forClass(OrderCancelledEvent.class);
         verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CANCELLED), eventCaptor.capture());
         assertThat(eventCaptor.getValue().orderId()).isEqualTo(10L);
-        ArgumentCaptor<List<CacheEvictionEntry>> cacheEntriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(cacheEvictionPublisher).publishEventually(eq("camunda order cancelled"), cacheEntriesCaptor.capture());
-        assertThat(cacheEntriesCaptor.getValue())
-                .extracting(CacheEvictionEntry::cacheName)
-                .contains("orders", "pendingOrders", "products", "product", "userVoucherWallet", "guestVoucherTemplates");
+        verify(applicationCacheService).evictCamundaOrderCancelled(order, null);
     }
 
     @Test

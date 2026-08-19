@@ -1,16 +1,17 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.ReputationHistoryDTO;
+import com.example.workflow.cache.CacheKeys;
+import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.ReputationHistory;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.ReputationHistoryRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,13 +25,9 @@ public class ReputationService {
     private final ReputationHistoryRepository reputationHistoryRepository;
     private final UserRepository userRepository;
     private final AuthService authService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "reputationHistories", allEntries = true),
-            @CacheEvict(value = "user", key = "#user.id"),
-            @CacheEvict(value = "users", allEntries = true)
-    })
     public User changeReputation(User user, int delta, String reason, String referenceType, String referenceId) {
         int balanceAfter = user.getReputation() + delta;
         if (balanceAfter < 0) {
@@ -53,13 +50,14 @@ public class ReputationService {
         history.setReferenceId(referenceId);
         reputationHistoryRepository.save(history);
 
+        applicationCacheService.evictReputationChanged(savedUser.getId());
         return savedUser;
     }
 
     @Transactional(readOnly = true)
     @Cacheable(
-            value = "reputationHistories",
-            key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize",
+            value = CacheNames.REPUTATION_HISTORIES,
+            key = "T(com.example.workflow.cache.CacheKeys).reputationHistories(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #pageable)",
             unless = "#result == null"
     )
     public Page<ReputationHistoryDTO> getMyHistory(Pageable pageable) {

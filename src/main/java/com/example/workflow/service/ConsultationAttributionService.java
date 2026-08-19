@@ -1,7 +1,5 @@
 package com.example.workflow.service;
 
-import com.example.workflow.cache.DeferredCacheEvict;
-import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.ConsultationReviewDTO;
 import com.example.workflow.dto.ConsultationReviewRequest;
 import com.example.workflow.dto.ConsultationSaleAttributionDTO;
@@ -25,12 +23,11 @@ import com.example.workflow.repository.ConsultationRequestRepository;
 import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -66,16 +63,12 @@ public class ConsultationAttributionService {
     private final ConsultationRequestRepository consultationRepository;
     private final UserRepository userRepository;
     private final DomainEventPublisher eventPublisher;
+    private final ApplicationCacheService applicationCacheService;
 
     @Value("${consultation.bonus.percent:5}")
     private double consultationBonusPercent;
 
     @Transactional
-    @DeferredCacheEvicts(reason = "consultation order attributions recorded", value = {
-            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
-    })
     public void recordOrderAttributions(Order order) {
         if (order == null || order.getUser() == null || order.getItems() == null || order.getStartOrderTime() == null) {
             return;
@@ -120,14 +113,12 @@ public class ConsultationAttributionService {
             }
         }
         requestCommissionRefresh(savedAttributions);
+        if (!savedAttributions.isEmpty()) {
+            applicationCacheService.evictConsultationAttributionsRecorded();
+        }
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "consultation order attributions confirmed", value = {
-            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
-    })
     public void confirmOrderAttributions(Long orderId) {
         LocalDateTime now = LocalDateTime.now();
         Double confirmedOrderGrossAmount = null;
@@ -145,14 +136,12 @@ public class ConsultationAttributionService {
             }
         }
         requestCommissionRefresh(updatedAttributions);
+        if (!updatedAttributions.isEmpty()) {
+            applicationCacheService.evictConsultationAttributionsConfirmed();
+        }
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "consultation order attributions cancelled", value = {
-            @DeferredCacheEvict(cacheName = "consultationAttributions", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
-    })
     public void cancelOrderAttributions(Long orderId) {
         LocalDateTime now = LocalDateTime.now();
         List<ConsultationSaleAttribution> updatedAttributions = new ArrayList<>();
@@ -166,6 +155,9 @@ public class ConsultationAttributionService {
             }
         }
         requestCommissionRefresh(updatedAttributions);
+        if (!updatedAttributions.isEmpty()) {
+            applicationCacheService.evictConsultationAttributionsCancelled();
+        }
     }
 
     @Transactional(readOnly = true)
@@ -196,16 +188,6 @@ public class ConsultationAttributionService {
     }
 
     @Transactional
-    @DeferredCacheEvicts(reason = "consultation review created", value = {
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true),
-            @DeferredCacheEvict(cacheName = "wishlistProducts", allEntries = true)
-    })
-    @Caching(evict = {
-            @CacheEvict(value = "consultationAttributions", allEntries = true),
-            @CacheEvict(value = "consultationReviews", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true)
-    })
     public ConsultationReviewDTO createReview(Long attributionId, ConsultationReviewRequest request) {
         User user = getCurrentUser();
         if (user.getRole() != Role.USER) {
@@ -222,7 +204,9 @@ public class ConsultationAttributionService {
         }
 
         ConsultationReview review = toReview(attribution, request);
-        return toReviewDto(reviewRepository.save(review));
+        ConsultationReviewDTO response = toReviewDto(reviewRepository.save(review));
+        applicationCacheService.evictConsultationReviewCreated();
+        return response;
     }
 
     @Transactional(readOnly = true)

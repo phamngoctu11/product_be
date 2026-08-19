@@ -13,6 +13,7 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.ProductReviewStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductReviewRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,9 @@ class ProductReviewServiceTest {
 
     @Mock
     private AuthService authService;
+
+    @Mock
+    private ApplicationCacheService applicationCacheService;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();

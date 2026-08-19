@@ -15,13 +15,12 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.ProductReviewStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductReviewRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -43,15 +42,9 @@ public class ProductReviewService {
     private final OrderItemRepository orderItemRepository;
     private final AuthService authService;
     private final ObjectMapper objectMapper;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "productReviews", allEntries = true),
-            @CacheEvict(value = "productReviewSummaries", allEntries = true),
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
-    })
     public ProductReviewDTO createForOrderItem(Long orderItemId, ProductReviewRequest request) {
         User currentUser = authService.getCurrentUser();
         OrderItem orderItem = orderItemRepository.findReviewTargetById(orderItemId)
@@ -74,53 +67,43 @@ public class ProductReviewService {
         review.setProductVariant(variant);
         applyRequest(review, request);
 
-        return toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        applicationCacheService.evictProductReviewChangedByUser(currentUser.getId());
+        return dto;
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "productReviews", allEntries = true),
-            @CacheEvict(value = "productReviewSummaries", allEntries = true),
-            @CacheEvict(value = "orders", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
-    })
     public ProductReviewDTO updateMyReview(Long reviewId, ProductReviewRequest request) {
+        String currentUserId = authService.getCurrentUserId();
         validateReviewContent(request);
-        ProductReview review = productReviewRepository.findByIdAndUser_Id(reviewId, authService.getCurrentUserId())
+        ProductReview review = productReviewRepository.findByIdAndUser_Id(reviewId, currentUserId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         applyRequest(review, request);
-        return toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        applicationCacheService.evictProductReviewChangedByUser(currentUserId);
+        return dto;
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "productReviews", allEntries = true),
-            @CacheEvict(value = "productReviewSummaries", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
-    })
     public ProductReviewDTO hideReview(Long reviewId, String reason) {
         ProductReview review = productReviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         review.setStatus(ProductReviewStatus.HIDDEN);
         review.setHiddenReason(StringUtils.hasText(reason) ? reason.trim() : null);
-        return toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        applicationCacheService.evictProductReviewChanged();
+        return dto;
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "productReviews", allEntries = true),
-            @CacheEvict(value = "productReviewSummaries", allEntries = true),
-            @CacheEvict(value = "products", allEntries = true),
-            @CacheEvict(value = "product", allEntries = true)
-    })
     public ProductReviewDTO restoreReview(Long reviewId) {
         ProductReview review = productReviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         review.setStatus(ProductReviewStatus.VISIBLE);
         review.setHiddenReason(null);
-        return toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        applicationCacheService.evictProductReviewChanged();
+        return dto;
     }
 
     @Transactional(readOnly = true)

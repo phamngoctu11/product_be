@@ -1,7 +1,5 @@
 package com.example.workflow.service;
 
-import com.example.workflow.cache.DeferredCacheEvict;
-import com.example.workflow.cache.DeferredCacheEvicts;
 import com.example.workflow.dto.StaffCommissionDetailDTO;
 import com.example.workflow.dto.StaffCommissionSummaryDTO;
 import com.example.workflow.entity.ConsultationRequest;
@@ -21,10 +19,9 @@ import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
 import com.example.workflow.repository.StaffCommissionDailySummaryRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -56,6 +53,7 @@ public class StaffCommissionService {
     private final ConsultationReviewRepository reviewRepository;
     private final StaffCommissionDailySummaryRepository summaryRepository;
     private final UserRepository userRepository;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -133,10 +131,6 @@ public class StaffCommissionService {
         return toDetailPage(findDetailPage(staffId, status, range, pageable));
     }
 
-    @Caching(evict = {
-            @CacheEvict(value = "staffCommissionSummaries", allEntries = true),
-            @CacheEvict(value = "staffCommissionDetails", allEntries = true)
-    })
     public int rebuildSummaries(CommissionPeriod period, LocalDate from, LocalDate to) {
         requireManagerOrAdmin(getCurrentUser());
         DateRange range = resolveDateRange(period, from, to);
@@ -148,6 +142,7 @@ public class StaffCommissionService {
                 refreshedDays++;
             }
         }
+        applicationCacheService.evictStaffCommissionRebuilt();
         return refreshedDays;
     }
 
@@ -175,10 +170,6 @@ public class StaffCommissionService {
         refreshKeys(refreshKeys);
     }
 
-    @DeferredCacheEvicts(reason = "staff commission summaries refreshed", value = {
-            @DeferredCacheEvict(cacheName = "staffCommissionSummaries", allEntries = true),
-            @DeferredCacheEvict(cacheName = "staffCommissionDetails", allEntries = true)
-    })
     public void refreshSummaries(Collection<CommissionRefreshKey> commissionRefreshKeys) {
         if (commissionRefreshKeys == null || commissionRefreshKeys.isEmpty()) {
             return;
@@ -209,10 +200,12 @@ public class StaffCommissionService {
                     refreshKeys(keysAfterCommit);
                 }
             });
+            applicationCacheService.evictStaffCommissionSummariesRefreshed();
             return;
         }
 
         refreshKeys(refreshKeys);
+        applicationCacheService.evictStaffCommissionSummariesRefreshed();
     }
 
     private Page<ConsultationSaleAttribution> findDetailPage(

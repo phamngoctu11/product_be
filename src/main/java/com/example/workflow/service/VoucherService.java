@@ -4,6 +4,7 @@ import com.example.workflow.dto.CartVoucherOptionsDTO;
 import com.example.workflow.dto.UserVoucherDTO;
 import com.example.workflow.dto.VoucherCartOptionDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
+import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.entity.VoucherTemplate;
@@ -13,11 +14,10 @@ import com.example.workflow.mapper.VoucherMapper;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.repository.VoucherTemplateRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,9 +37,10 @@ public class VoucherService {
     private final VoucherMapper voucherMapper;
     private final AuthService authService;
     private final ReputationService reputationService;
+    private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "voucherTemplates", key = "'active'", unless = "#result == null")
+    @Cacheable(value = CacheNames.VOUCHER_TEMPLATES, key = "'active'", unless = "#result == null")
     public List<VoucherTemplateDTO> getActiveTemplates() {
         return templateRepository.findAvailableTemplates(LocalDateTime.now())
                 .stream()
@@ -48,7 +49,7 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "voucherTemplates", key = "'management-active'", unless = "#result == null")
+    @Cacheable(value = CacheNames.VOUCHER_TEMPLATES, key = "'management-active'", unless = "#result == null")
     public List<VoucherTemplateDTO> getActiveTemplatesForManagement() {
         return templateRepository.findAvailableTemplatesForManagement(LocalDateTime.now())
                 .stream()
@@ -57,7 +58,7 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "guestVoucherTemplates", key = "'active-' + #subtotal", unless = "#result == null")
+    @Cacheable(value = CacheNames.GUEST_VOUCHER_TEMPLATES, key = "'active-' + #subtotal", unless = "#result == null")
     public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal) {
         double safeSubtotal = Math.max(0, subtotal);
         return templateRepository.findAvailableGuestTemplates(LocalDateTime.now())
@@ -69,7 +70,7 @@ public class VoucherService {
 
     @Transactional(readOnly = true)
     @Cacheable(
-            value = "userVoucherWallet",
+            value = CacheNames.USER_VOUCHER_WALLET,
             key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName()",
             unless = "#result == null"
     )
@@ -127,12 +128,6 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "user", allEntries = true),
-            @CacheEvict(value = "users", allEntries = true),
-            @CacheEvict(value = "voucherTemplates", allEntries = true),
-            @CacheEvict(value = "userVoucherWallet", allEntries = true)
-    })
     public UserVoucherDTO redeemVoucher(Long templateId) {
         String userId = authService.getCurrentUserId();
         LocalDateTime now = LocalDateTime.now();
@@ -162,11 +157,13 @@ public class VoucherService {
         );
 
         UserVoucher userVoucher = createUserVoucher(user, template, now);
-        return voucherMapper.toUserVoucherDto(userVoucherRepository.save(userVoucher));
+        UserVoucherDTO dto = voucherMapper.toUserVoucherDto(userVoucherRepository.save(userVoucher));
+
+        applicationCacheService.evictVoucherRedeemed(userId);
+        return dto;
     }
 
     @Transactional
-    @CacheEvict(value = "userVoucherWallet", allEntries = true, condition = "#userVoucherId != null")
     public UserVoucher useVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
         if (userVoucherId == null) {
             return null;
@@ -181,10 +178,6 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "guestVoucherTemplates", allEntries = true, condition = "T(org.springframework.util.StringUtils).hasText(#voucherCode)"),
-            @CacheEvict(value = "voucherTemplates", allEntries = true, condition = "T(org.springframework.util.StringUtils).hasText(#voucherCode)")
-    })
     public AppliedGuestVoucher applyGuestVoucherForCheckout(String voucherCode, double totalPrice) {
         if (!org.springframework.util.StringUtils.hasText(voucherCode)) {
             return AppliedGuestVoucher.none();
@@ -209,10 +202,6 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "guestVoucherTemplates", allEntries = true, condition = "#template != null"),
-            @CacheEvict(value = "voucherTemplates", allEntries = true, condition = "#template != null")
-    })
     public void restoreGuestVoucher(VoucherTemplate template) {
         if (template == null || template.getId() == null || !template.isGuestVoucher()) {
             return;
@@ -228,14 +217,12 @@ public class VoucherService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = "voucherTemplates", allEntries = true),
-            @CacheEvict(value = "guestVoucherTemplates", allEntries = true)
-    })
     public VoucherTemplate createNewVoucherCampaign(VoucherTemplate request) {
         request.setId(null);
         request.setActive(true);
-        return templateRepository.save(request);
+        VoucherTemplate savedTemplate = templateRepository.save(request);
+        applicationCacheService.evictVoucherCampaignChanged();
+        return savedTemplate;
     }
 
     private User getUserOrThrow(String userId) {
