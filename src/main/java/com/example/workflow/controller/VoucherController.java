@@ -42,9 +42,10 @@ public class VoucherController {
 
     @GetMapping("/guest")
     public ResponseEntity<ApiResponse<List<VoucherCartOptionDTO>>> getGuestVouchers(
-            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal
+            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal,
+            @RequestHeader(value = "X-Guest-Session-Id", required = false) String guestSessionId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(voucherService.getGuestVoucherOptions(subtotal)));
+        return ResponseEntity.ok(ApiResponse.success(voucherService.getGuestVoucherOptions(subtotal, guestSessionId)));
     }
 
     @GetMapping("/me/wallet")

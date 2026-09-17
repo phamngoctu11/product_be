@@ -12,8 +12,8 @@ import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
+import com.example.workflow.nume.GuestWorkflowStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -117,6 +117,12 @@ class CartServiceTest {
     @Mock
     private ApplicationCacheService applicationCacheService;
 
+    @Mock
+    private OrderLookupTokenService orderLookupTokenService;
+
+    @Mock
+    private GuestPurchaseWorkflowService guestPurchaseWorkflowService;
+
     @InjectMocks
     private CartService cartService;
 
@@ -131,6 +137,9 @@ class CartServiceTest {
         lenient().when(checkoutIdempotencyService.begin(anyString(), nullable(String.class)))
                 .thenReturn(CheckoutIdempotencyService.CheckoutIdempotencyState.disabled());
         lenient().when(authService.isCurrentUserOwner(anyString())).thenReturn(true);
+        lenient().when(guestPurchaseWorkflowService.startAfterOrderCreated(
+                        anyLong(), anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(GuestPurchaseWorkflowService.StartResult.started("guest-process-default"));
     }
 
     @Test
@@ -333,8 +342,7 @@ class CartServiceTest {
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
-        verify(inventoryReservationService).reserve(savedOrder.get());
-        verify(inventoryReservationService).recordReservations(savedOrder.get());
+        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
         ArgumentCaptor<OrderCreatedEvent> eventCaptor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
         verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CREATED), eventCaptor.capture());
         assertThat(eventCaptor.getValue().orderId()).isEqualTo(100L);
@@ -414,8 +422,7 @@ class CartServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
-        verify(inventoryReservationService).reserve(any(Order.class));
-        verify(inventoryReservationService).recordReservations(any(Order.class));
+        verify(inventoryReservationService).reserveAndRecord(any(Order.class));
         verify(orderRepository, never()).findById(100L);
         verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
         verify(momoService, never()).createPaymentData(anyString(), anyLong());
@@ -469,7 +476,7 @@ class CartServiceTest {
     }
 
     @Test
-    void checkoutGuestCartPublishesGuestOrderCreatedEventWithoutSendingEmailInline() {
+    void checkoutGuestCartStartsPostOrderWorkflowWithoutSendingEmailInline() {
         String guestSessionId = "guest-session-0001";
         ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
         CartItem item = cartItem(variant, 2);
@@ -477,6 +484,13 @@ class CartServiceTest {
         GuestCheckoutRequest request = guestCheckoutRequest(11L);
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         when(cartRepository.findByGuestSessionId(guestSessionId)).thenReturn(Optional.of(cart));
+        when(orderLookupTokenService.issueFor(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setOrderLookupTokenHash("a".repeat(64));
+            order.setOrderLookupTokenCreatedAt(java.time.LocalDateTime.now());
+            return "public-lookup-token";
+        });
+        when(orderLookupTokenService.maskEmail("guest@example.com")).thenReturn("g***@example.com");
         when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(200L);
@@ -489,33 +503,68 @@ class CartServiceTest {
 
         assertThat(response.getOrderId()).isEqualTo(200L);
         assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL.name());
+        assertThat(response.getLookupToken()).isEqualTo("public-lookup-token");
+        assertThat(response.getMaskedEmail()).isEqualTo("g***@example.com");
+        assertThat(response.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.STARTED.name());
         assertThat(cart.getItems()).isEmpty();
         assertThat(savedOrder.get()).satisfies(order -> {
             assertThat(order.getUser()).isNull();
             assertThat(order.getGuestSessionId()).isEqualTo(guestSessionId);
+            assertThat(order.getContactSnapshot()).isNotNull();
+            assertThat(order.getContactSnapshot().getFullName()).isEqualTo("Guest Customer");
             assertThat(order.getEmail()).isEqualTo("guest@example.com");
+            assertThat(order.getRecipientPhone()).isEqualTo("0900000000");
+            assertThat(order.getShippingAddress()).isEqualTo("Guest address");
+            assertThat(order.getNote()).isEqualTo("Guest note");
+            assertThat(order.getOrderLookupTokenHash()).hasSize(64);
+            assertThat(order.getOrderLookupTokenCreatedAt()).isNotNull();
             assertThat(order.getPaymentMethod()).isEqualTo("COD");
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL);
+            assertThat(order.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.PENDING_START);
             assertThat(order.getFinalPrice()).isEqualTo(50.0);
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
-        verify(inventoryReservationService).reserve(savedOrder.get());
-        verify(inventoryReservationService).recordReservations(savedOrder.get());
-        ArgumentCaptor<GuestOrderCreatedEvent> eventCaptor = ArgumentCaptor.forClass(GuestOrderCreatedEvent.class);
-        verify(eventPublisher).publishAfterCommit(eq(EventTypes.GUEST_ORDER_CREATED), eventCaptor.capture());
-        assertThat(eventCaptor.getValue().orderId()).isEqualTo(200L);
+        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
+        verify(guestPurchaseWorkflowService).startAfterOrderCreated(200L, guestSessionId, true);
+        verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.GUEST_ORDER_CREATED), any());
         verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.ORDER_CREATED), any());
         verify(emailService, never()).sendOrderConfirmationEmail(any(), any(), any(), any(), any());
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(eq("ApproveCartProcess"), eq("guest-" + guestSessionId), variablesCaptor.capture());
-        assertThat(variablesCaptor.getValue())
-                .containsEntry("orderId", 200L)
-                .containsEntry("guestSessionId", guestSessionId)
-                .containsEntry("paymentMethod", "COD")
-                .containsEntry("stockReserved", true)
-                .containsEntry("stockDeducted", false)
-                .containsEntry("guestOrder", true);
+        verify(runtimeService, never()).startProcessInstanceByKey(
+                eq("ApproveCartProcess"),
+                eq("guest-" + guestSessionId),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+        );
+    }
+
+    @Test
+    void checkoutGuestCartKeepsCreatedOrderWhenWorkflowStartFallsBack() {
+        String guestSessionId = "guest-session-0003";
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        CartItem item = cartItem(variant, 2);
+        Cart cart = guestCartWithItems(1L, guestSessionId, item);
+        GuestCheckoutRequest request = guestCheckoutRequest(11L);
+        AtomicReference<Order> savedOrder = new AtomicReference<>();
+        when(cartRepository.findByGuestSessionId(guestSessionId)).thenReturn(Optional.of(cart));
+        when(orderLookupTokenService.issueFor(any(Order.class))).thenReturn("fallback-lookup-token");
+        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(203L);
+            savedOrder.set(order);
+            return order;
+        });
+        when(orderRepository.findById(203L)).thenAnswer(invocation -> Optional.of(savedOrder.get()));
+        when(guestPurchaseWorkflowService.startAfterOrderCreated(203L, guestSessionId, true))
+                .thenReturn(GuestPurchaseWorkflowService.StartResult.failed("engine unavailable"));
+
+        CheckoutResponseDTO response = cartService.checkoutGuestCart(guestSessionId, request, null);
+
+        assertThat(response.getOrderId()).isEqualTo(203L);
+        assertThat(response.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.START_FAILED.name());
+        assertThat(savedOrder.get()).isNotNull();
+        assertThat(cart.getItems()).isEmpty();
+        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
+        verify(guestPurchaseWorkflowService).startAfterOrderCreated(203L, guestSessionId, true);
     }
 
     @Test
@@ -533,8 +582,12 @@ class CartServiceTest {
         guestVoucher.setGuestVoucher(true);
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         when(cartRepository.findByGuestSessionId(guestSessionId)).thenReturn(Optional.of(cart));
-        when(voucherService.applyGuestVoucherForCheckout("WELCOME10", 50.0))
-                .thenReturn(new VoucherService.AppliedGuestVoucher(guestVoucher, 10.0));
+        when(orderLookupTokenService.issueFor(any(Order.class))).thenReturn("public-lookup-token-2");
+        VoucherService.AppliedGuestVoucher appliedGuestVoucher = new VoucherService.AppliedGuestVoucher(
+                guestVoucher, 10.0, guestSessionId, "a".repeat(64), "b".repeat(64));
+        when(voucherService.applyGuestVoucherForCheckout(
+                "WELCOME10", 50.0, guestSessionId, "guest@example.com", "0900000000"))
+                .thenReturn(appliedGuestVoucher);
         when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(201L);
@@ -556,6 +609,7 @@ class CartServiceTest {
             assertThat(order.getFinalPrice()).isEqualTo(40.0);
             assertThat(order.getGuestVoucherTemplate()).isSameAs(guestVoucher);
         });
+        verify(voucherService).recordGuestVoucherUsage(appliedGuestVoucher, savedOrder.get());
     }
 
     private User user(Long id) {

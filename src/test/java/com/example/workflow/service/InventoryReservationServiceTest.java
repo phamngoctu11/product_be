@@ -100,6 +100,56 @@ class InventoryReservationServiceTest {
     }
 
     @Test
+    void repeatedReservationIsIdempotent() {
+        Order order = order(item(variant(11L), 1));
+        order.setStockReserved(true);
+
+        boolean reserved = service.reserve(order);
+
+        assertThat(reserved).isFalse();
+        verifyNoInteractions(variantRepository, transactionService);
+    }
+
+    @Test
+    void adjustedExportQuantityReleasesReservationAndDeductsActualExportOnce() {
+        ProductVariant variant = variant(11L);
+        OrderItem item = item(variant, 2);
+        item.setExportedQuantity(3);
+        Order order = order(item);
+        order.setStockReserved(true);
+        when(variantRepository.findStockById(11L)).thenReturn(Optional.of(69), Optional.of(66));
+        when(variantRepository.decreaseStockIfAvailable(11L, 3)).thenReturn(1);
+
+        service.confirmReservation(order);
+
+        assertThat(order.isStockReserved()).isFalse();
+        assertThat(order.isStockDeducted()).isTrue();
+        verify(transactionService).updateOrderTransactionType(
+                order,
+                "RESERVATION",
+                "RESERVATION_CANCELLED"
+        );
+        verify(variantRepository).increaseStock(11L, 2);
+        verify(variantRepository).decreaseStockIfAvailable(11L, 3);
+        verify(transactionService).record(
+                order,
+                variant,
+                order.getUser(),
+                2,
+                69,
+                "EXPORT_VARIANT"
+        );
+        verify(transactionService).record(
+                order,
+                variant,
+                order.getUser(),
+                -3,
+                66,
+                "SALE"
+        );
+    }
+
+    @Test
     void cancellationReturnsReservedStockOnlyOnce() {
         ProductVariant variant = variant(11L);
         Order order = order(item(variant, 1));

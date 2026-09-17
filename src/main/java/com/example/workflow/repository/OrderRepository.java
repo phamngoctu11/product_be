@@ -146,7 +146,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findFullOrdersByIds(@Param("orderIds") List<Long> orderIds);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.recipientName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
+            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
             "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
             "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
             "FROM Order o LEFT JOIN o.user u " +
@@ -157,7 +157,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<OrderListDTO> findListDtoByStatusOldestFirst(@Param("status") OrderStatus status, Pageable pageable);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.recipientName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
+            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
             "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
             "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
             "FROM Order o LEFT JOIN o.user u " +
@@ -168,7 +168,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<OrderListDTO> findUnassignedListDtoByStatus(@Param("status") OrderStatus status, Pageable pageable);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.recipientName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
+            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
             "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, CONCAT(CONCAT(staff.lastname, ' '), staff.firstname)) " +
             "FROM Order o LEFT JOIN o.user u JOIN o.warehouseStaff staff " +
             "WHERE staff.id = :staffId AND o.status IN :statuses " +

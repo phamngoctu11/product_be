@@ -306,9 +306,6 @@ public class OrderService {
                 throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_QUANTITY_NEGATIVE);
             }
             OrderItem item = findOrderItemByVariant(order, req.getVariantId());
-            if(item.getQuantity()!=req.getQuantity()){
-                inventoryReservationService.releaseReservedStock(order, "EXPORT_VARIANT");
-            }
             item.setExportedQuantity(req.getQuantity());
         }
 

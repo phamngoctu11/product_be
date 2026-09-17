@@ -4,6 +4,7 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
+import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,7 +31,6 @@ class RedisStreamEventConsumerTest {
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final RedisEventIdempotencyService eventIdempotencyService = mock(RedisEventIdempotencyService.class);
     private final RedisStreamRetryTemplate retryTemplate = mock(RedisStreamRetryTemplate.class);
-    private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
     private final RedisStreamEventConsumer consumer = new RedisStreamEventConsumer(
             redisTemplate,
             objectMapper,
@@ -41,8 +41,7 @@ class RedisStreamEventConsumerTest {
             staffCommissionService,
             optionalCacheService,
             eventIdempotencyService,
-            retryTemplate,
-            inventoryReservationService
+            retryTemplate
     );
 
     @Test
@@ -94,6 +93,50 @@ class RedisStreamEventConsumerTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void workflowEmailEventSendsEmailThroughConsumer() throws JsonProcessingException {
+        WorkflowEmailRequestedEvent event = new WorkflowEmailRequestedEvent(
+                "GUEST_CHECKPOINT",
+                "guest@example.com",
+                "Checkpoint ready",
+                "<p>Ready</p>",
+                200L
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleWorkflowEmailRequested",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(emailService).sendWorkflowEmailNowOrThrow(
+                "guest@example.com",
+                "Checkpoint ready",
+                "<p>Ready</p>"
+        );
+    }
+
+    @Test
+    void workflowEmailEventResolvesGuestContactFromOrder() throws JsonProcessingException {
+        when(orderRepository.findById(200L)).thenReturn(Optional.of(guestOrder()));
+        WorkflowEmailRequestedEvent event = new WorkflowEmailRequestedEvent(
+                "GUEST_READY_TO_SHIP", null, null, null, 200L
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleWorkflowEmailRequested",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(emailService).sendGuestWorkflowEmailNowOrThrow(
+                "GUEST_READY_TO_SHIP",
+                "guest@example.com",
+                "Guest Customer",
+                200L
         );
     }
 

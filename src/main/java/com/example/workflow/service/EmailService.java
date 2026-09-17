@@ -161,6 +161,41 @@ public class EmailService {
         log.info("Sent password reset email to {}", toEmail);
     }
 
+    public void sendWorkflowEmailNowOrThrow(String toEmail, String subject, String htmlContent) {
+        sendHtmlEmailOrThrow(toEmail, subject, htmlContent);
+        log.info("Sent workflow email to {}", toEmail);
+    }
+
+    public void sendGuestWorkflowEmailNowOrThrow(
+            String emailType,
+            String toEmail,
+            String customerName,
+            Long orderId
+    ) {
+        String subject;
+        String message;
+        switch (emailType) {
+            case "GUEST_READY_TO_SHIP" -> {
+                subject = "Order #" + orderId + " is ready to ship";
+                message = "Your handmade order is ready for delivery.";
+            }
+            case "GUEST_CHECKPOINT_INITIAL_SHAPE" -> {
+                subject = "Initial shape checkpoint for order #" + orderId;
+                message = "The initial shape checkpoint for your handmade item is ready.";
+            }
+            case "GUEST_CHECKPOINT_FINAL_PRODUCT" -> {
+                subject = "Final product checkpoint for order #" + orderId;
+                message = "The final product checkpoint for your handmade item is ready.";
+            }
+            default -> throw new IllegalArgumentException("Unsupported workflow emailType '" + emailType + "'");
+        }
+
+        String htmlContent = "<html><body><p>Xin chao " + escapeHtml(customerName) + ",</p><p>"
+                + escapeHtml(message) + "</p></body></html>";
+        sendHtmlEmailOrThrow(toEmail, subject, htmlContent);
+        log.info("Sent {} workflow email for order {} to {}", emailType, orderId, toEmail);
+    }
+
     private void sendHtmlEmailOrThrow(String toEmail, String subject, String htmlContent) {
         sendHtmlEmailOrThrow(new String[]{toEmail}, subject, htmlContent);
     }

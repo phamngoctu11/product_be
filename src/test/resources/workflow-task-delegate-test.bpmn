@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_WorkflowTaskDelegateTest"
+                  targetNamespace="http://handmade-shop/test">
+  <bpmn:process id="WorkflowTaskDelegateTestProcess" isExecutable="true" camunda:historyTimeToLive="1">
+    <bpmn:startEvent id="StartEvent">
+      <bpmn:outgoing>Flow_Start_Resolve</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ResolveGuestSession" camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">RESOLVE_GUEST_SESSION</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_Resolve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Resolve_Wait</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="VerifyResult" name="Verify delegate result">
+      <bpmn:incoming>Flow_Resolve_Wait</bpmn:incoming>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_Start_Resolve" sourceRef="StartEvent" targetRef="ResolveGuestSession" />
+    <bpmn:sequenceFlow id="Flow_Resolve_Wait" sourceRef="ResolveGuestSession" targetRef="VerifyResult" />
+  </bpmn:process>
+</bpmn:definitions>

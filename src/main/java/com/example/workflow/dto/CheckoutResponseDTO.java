@@ -25,6 +25,9 @@ public class CheckoutResponseDTO implements Serializable {
     private String payUrl;
     private String deeplink;
     private String qrCodeUrl;
+    private String lookupToken;
+    private String maskedEmail;
+    private String guestWorkflowStatus;
 
     public static CheckoutResponseDTO fromMap(Map<String, String> response) {
         CheckoutResponseDTO dto = new CheckoutResponseDTO();
@@ -45,6 +48,9 @@ public class CheckoutResponseDTO implements Serializable {
         dto.setPayUrl(response.get("payUrl"));
         dto.setDeeplink(response.get("deeplink"));
         dto.setQrCodeUrl(response.get("qrCodeUrl"));
+        dto.setLookupToken(response.get("lookupToken"));
+        dto.setMaskedEmail(response.get("maskedEmail"));
+        dto.setGuestWorkflowStatus(response.get("guestWorkflowStatus"));
         return dto;
     }
 

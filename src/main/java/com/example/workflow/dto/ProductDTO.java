@@ -32,4 +32,6 @@ public class ProductDTO implements Serializable {
 
     @JsonProperty("image_url")
     private String image_url;
+
+    private boolean handmade = true;
 }

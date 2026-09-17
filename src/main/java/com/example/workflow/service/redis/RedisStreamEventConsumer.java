@@ -13,6 +13,7 @@ import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
+import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,7 +54,6 @@ public class RedisStreamEventConsumer {
     private final OptionalCacheService optionalCacheService;
     private final RedisEventIdempotencyService eventIdempotencyService;
     private final RedisStreamRetryTemplate retryTemplate;
-    private final InventoryReservationService inventoryReservationService;
 
     @Value("${workflow.events.redis-stream.group:" + DEFAULT_GROUP + "}")
     private String groupName;
@@ -175,6 +175,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_CANCELLATION_EMAIL_REQUESTED -> handleOrderCancellationEmailRequested(payload);
             case EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED -> handleReceiptComplaintEmailRequested(payload);
             case EventTypes.PASSWORD_RESET_EMAIL_REQUESTED -> handlePasswordResetEmailRequested(payload);
+            case EventTypes.WORKFLOW_EMAIL_REQUESTED -> handleWorkflowEmailRequested(payload);
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
@@ -245,9 +246,33 @@ public class RedisStreamEventConsumer {
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(() -> new IllegalStateException("Order not found for ORDER_CREATED event: " + event.orderId()));
         consultationAttributionService.recordOrderAttributions(order);
-        inventoryReservationService.reserve(order);
-        inventoryReservationService.recordReservations(order);
+    }
 
+    private void handleWorkflowEmailRequested(String payload) {
+        WorkflowEmailRequestedEvent event = readPayload(payload, WorkflowEmailRequestedEvent.class);
+        if (StringUtils.hasText(event.toEmail())
+                && StringUtils.hasText(event.subject())
+                && StringUtils.hasText(event.htmlContent())) {
+            emailService.sendWorkflowEmailNowOrThrow(event.toEmail(), event.subject(), event.htmlContent());
+            return;
+        }
+        if (event.orderId() == null) {
+            throw new IllegalArgumentException("Workflow email request must contain explicit content or orderId");
+        }
+
+        Order order = orderRepository.findById(event.orderId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Order not found for WORKFLOW_EMAIL_REQUESTED event: " + event.orderId()
+                ));
+        if (!StringUtils.hasText(order.getEmail())) {
+            throw new IllegalStateException("Guest email is empty for order " + event.orderId());
+        }
+        emailService.sendGuestWorkflowEmailNowOrThrow(
+                event.emailType(),
+                order.getEmail(),
+                order.getRecipientName(),
+                order.getId()
+        );
     }
 
     private void handleGuestOrderCreated(String payload) {
@@ -270,8 +295,6 @@ public class RedisStreamEventConsumer {
             log.debug("Skipping duplicate GUEST_ORDER_CREATED email for order {}", event.orderId());
             return;
         }
-        inventoryReservationService.reserve(order);
-        inventoryReservationService.recordReservations(order);
         emailService.sendOrderConfirmationEmailNowOrThrow(
                 order.getEmail(),
                 order.getRecipientName(),

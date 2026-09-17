@@ -8,22 +8,31 @@ import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.entity.VoucherTemplate;
+import com.example.workflow.entity.GuestVoucherUsage;
+import com.example.workflow.entity.Order;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.VoucherMapper;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.repository.VoucherTemplateRepository;
+import com.example.workflow.repository.GuestVoucherUsageRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -38,6 +47,7 @@ public class VoucherService {
     private final AuthService authService;
     private final ReputationService reputationService;
     private final ApplicationCacheService applicationCacheService;
+    private final GuestVoucherUsageRepository guestVoucherUsageRepository;
 
     @Transactional(readOnly = true)
     @Cacheable(value = CacheNames.VOUCHER_TEMPLATES, key = "'active'", unless = "#result == null")
@@ -58,12 +68,16 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = CacheNames.GUEST_VOUCHER_TEMPLATES, key = "'active-' + #subtotal", unless = "#result == null")
     public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal) {
+        return getGuestVoucherOptions(subtotal, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal, String guestSessionId) {
         double safeSubtotal = Math.max(0, subtotal);
         return templateRepository.findAvailableGuestTemplates(LocalDateTime.now())
                 .stream()
-                .map(template -> buildCartOption(null, template, "GUEST", safeSubtotal))
+                .map(template -> buildGuestCartOption(template, safeSubtotal, guestSessionId))
                 .sorted(cartOptionComparator())
                 .toList();
     }
@@ -178,7 +192,13 @@ public class VoucherService {
     }
 
     @Transactional
-    public AppliedGuestVoucher applyGuestVoucherForCheckout(String voucherCode, double totalPrice) {
+    public AppliedGuestVoucher applyGuestVoucherForCheckout(
+            String voucherCode,
+            double totalPrice,
+            String guestSessionId,
+            String email,
+            String phone
+    ) {
         if (!org.springframework.util.StringUtils.hasText(voucherCode)) {
             return AppliedGuestVoucher.none();
         }
@@ -189,6 +209,10 @@ public class VoucherService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
         validateGuestVoucherForCheckout(template, totalPrice, now);
 
+        String emailHash = sha256(normalizeEmail(email));
+        String phoneHash = sha256(normalizePhone(phone));
+        validateGuestVoucherNotAlreadyUsed(template.getId(), guestSessionId, emailHash, phoneHash);
+
         double discountAmount = calculateDiscountAmount(template, totalPrice);
         int updatedRows = templateRepository.decrementGuestQuantity(template.getId(), now);
         if (updatedRows == 0) {
@@ -198,7 +222,28 @@ public class VoucherService {
                     "Voucher is out of stock or expired."
             );
         }
-        return new AppliedGuestVoucher(template, discountAmount);
+        return new AppliedGuestVoucher(template, discountAmount, guestSessionId, emailHash, phoneHash);
+    }
+
+    @Transactional
+    public void recordGuestVoucherUsage(AppliedGuestVoucher appliedVoucher, Order order) {
+        if (appliedVoucher == null || !appliedVoucher.applied()) {
+            return;
+        }
+
+        GuestVoucherUsage usage = new GuestVoucherUsage();
+        usage.setVoucherTemplate(appliedVoucher.template());
+        usage.setOrder(order);
+        usage.setGuestSessionId(appliedVoucher.guestSessionId());
+        usage.setEmailHash(appliedVoucher.emailHash());
+        usage.setPhoneHash(appliedVoucher.phoneHash());
+        usage.setUsedAt(LocalDateTime.now());
+
+        try {
+            guestVoucherUsageRepository.saveAndFlush(usage);
+        } catch (DataIntegrityViolationException ex) {
+            throw guestVoucherAlreadyUsed();
+        }
     }
 
     @Transactional
@@ -333,6 +378,18 @@ public class VoucherService {
         }
     }
 
+    private VoucherCartOptionDTO buildGuestCartOption(VoucherTemplate template, double subtotal, String guestSessionId) {
+        VoucherCartOptionDTO option = buildCartOption(null, template, "GUEST", subtotal);
+        if (org.springframework.util.StringUtils.hasText(guestSessionId)
+                && guestVoucherUsageRepository.existsByVoucherTemplateIdAndGuestSessionId(template.getId(), guestSessionId.trim())) {
+            option.setApplicable(false);
+            option.setDiscountAmount(0);
+            option.setFinalPrice(subtotal);
+            option.setUnavailableReason("Voucher này đã được sử dụng trong phiên khách hiện tại.");
+        }
+        return option;
+    }
+
     private void validateGuestVoucherForCheckout(VoucherTemplate template, double totalPrice, LocalDateTime now) {
         if (!template.isGuestVoucher()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
@@ -348,6 +405,60 @@ public class VoucherService {
         }
     }
 
+    private void validateGuestVoucherNotAlreadyUsed(
+            Long voucherTemplateId,
+            String guestSessionId,
+            String emailHash,
+            String phoneHash
+    ) {
+        boolean alreadyUsed = guestVoucherUsageRepository
+                .existsByVoucherTemplateIdAndGuestSessionId(voucherTemplateId, guestSessionId)
+                || guestVoucherUsageRepository.existsByVoucherTemplateIdAndEmailHash(voucherTemplateId, emailHash)
+                || guestVoucherUsageRepository.existsByVoucherTemplateIdAndPhoneHash(voucherTemplateId, phoneHash);
+        if (alreadyUsed) {
+            throw guestVoucherAlreadyUsed();
+        }
+    }
+
+    private AppException guestVoucherAlreadyUsed() {
+        return new AppException(
+                HttpStatus.CONFLICT,
+                ConstantErrorCode.BAD_REQUEST_DETAIL,
+                "This public voucher has already been used by this guest."
+        );
+    }
+
+    private String normalizeEmail(String email) {
+        return requireGuestIdentity(email, "Guest email").toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizePhone(String phone) {
+        String digits = requireGuestIdentity(phone, "Guest phone").replaceAll("\\D", "");
+        if (digits.startsWith("0084") && digits.length() > 4) {
+            return "0" + digits.substring(4);
+        }
+        if (digits.startsWith("84") && digits.length() > 2) {
+            return "0" + digits.substring(2);
+        }
+        return digits;
+    }
+
+    private String requireGuestIdentity(String value, String fieldName) {
+        if (!org.springframework.util.StringUtils.hasText(value)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, fieldName + " is required.");
+        }
+        return value.trim();
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
+    }
+
     private double calculateDiscountAmount(VoucherTemplate template, double totalPrice) {
         if (template.getDiscountPercent() <= 0) {
             return Math.min(totalPrice, template.getMaxDiscountAmount());
@@ -360,9 +471,15 @@ public class VoucherService {
         return Math.min(totalPrice, discountAmount);
     }
 
-    public record AppliedGuestVoucher(VoucherTemplate template, double discountAmount) {
+    public record AppliedGuestVoucher(
+            VoucherTemplate template,
+            double discountAmount,
+            String guestSessionId,
+            String emailHash,
+            String phoneHash
+    ) {
         public static AppliedGuestVoucher none() {
-            return new AppliedGuestVoucher(null, 0.0);
+            return new AppliedGuestVoucher(null, 0.0, null, null, null);
         }
 
         public boolean applied() {

@@ -87,7 +87,7 @@ public class ProductService {
         Product existingProduct = getActiveProduct(id);
         List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
 
-        applyProductBasicInfo(existingProduct, dto);
+        applyProductBasicInfo(existingProduct, dto, true);
 
         if (dto.getVariants() != null) {
             List<Long> incomingVariantIds = dto.getVariants().stream()
@@ -141,7 +141,7 @@ public class ProductService {
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = getActiveProduct(id);
 
-        applyProductBasicInfo(product, dto);
+        applyProductBasicInfo(product, dto, false);
 
         repository.save(product);
         applicationCacheService.evictProductBasicInfoUpdated(id);
@@ -191,11 +191,14 @@ public class ProductService {
         applicationCacheService.evictProductDeleted(id);
     }
 
-    private void applyProductBasicInfo(Product product, ProductDTO dto) {
+    private void applyProductBasicInfo(Product product, ProductDTO dto, boolean updateHandmade) {
         product.setProductName(dto.getProduct_name());
         product.setPrice(dto.getPrice());
         product.setTags(dto.getTags());
         product.setImageUrl(dto.getImage_url());
+        if (updateHandmade) {
+            product.setHandmade(dto.isHandmade());
+        }
     }
 
     private void prepareProductForCreate(Product product) {

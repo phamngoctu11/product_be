@@ -1,6 +1,7 @@
 package com.example.workflow.entity;
 
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.GuestWorkflowStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,23 +54,34 @@ public class Order {
     @Column(name = "payment_method")
     private String paymentMethod;
 
-    @Column(name = "note", columnDefinition = "TEXT")
-    private String note;
-
-    @Column(name = "email")
-    private String email;
-
     @Column(name = "guest_session_id", length = 128)
     private String guestSessionId;
 
-    @Column(name = "recipient_name", length = 120)
-    private String recipientName;
+    @Embedded
+    private OrderContactSnapshot contactSnapshot;
 
-    @Column(name = "recipient_phone", length = 30)
-    private String recipientPhone;
+    /**
+     * SHA-256 hash of the public lookup token. The raw token is returned once at
+     * checkout time and must never be persisted.
+     */
+    @Column(name = "order_lookup_token_hash", length = 64, unique = true)
+    private String orderLookupTokenHash;
 
-    @Column(name = "shipping_address", columnDefinition = "TEXT")
-    private String shippingAddress;
+    @Column(name = "order_lookup_token_created_at")
+    private LocalDateTime orderLookupTokenCreatedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "guest_workflow_status", length = 32)
+    private GuestWorkflowStatus guestWorkflowStatus;
+
+    @Column(name = "guest_workflow_process_instance_id", length = 64)
+    private String guestWorkflowProcessInstanceId;
+
+    @Column(name = "guest_workflow_started_at")
+    private LocalDateTime guestWorkflowStartedAt;
+
+    @Column(name = "guest_workflow_error", length = 1000)
+    private String guestWorkflowError;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
@@ -96,4 +108,51 @@ public class Order {
 
     @Column(name = "stock_deducted", nullable = false, columnDefinition = "boolean default false")
     private boolean stockDeducted = false;
+
+    public String getNote() {
+        return contactSnapshot == null ? null : contactSnapshot.getNote();
+    }
+
+    public void setNote(String note) {
+        ensureContactSnapshot().setNote(note);
+    }
+
+    public String getEmail() {
+        return contactSnapshot == null ? null : contactSnapshot.getEmail();
+    }
+
+    public void setEmail(String email) {
+        ensureContactSnapshot().setEmail(email);
+    }
+
+    public String getRecipientName() {
+        return contactSnapshot == null ? null : contactSnapshot.getFullName();
+    }
+
+    public void setRecipientName(String recipientName) {
+        ensureContactSnapshot().setFullName(recipientName);
+    }
+
+    public String getRecipientPhone() {
+        return contactSnapshot == null ? null : contactSnapshot.getPhone();
+    }
+
+    public void setRecipientPhone(String recipientPhone) {
+        ensureContactSnapshot().setPhone(recipientPhone);
+    }
+
+    public String getShippingAddress() {
+        return contactSnapshot == null ? null : contactSnapshot.getAddress();
+    }
+
+    public void setShippingAddress(String shippingAddress) {
+        ensureContactSnapshot().setAddress(shippingAddress);
+    }
+
+    private OrderContactSnapshot ensureContactSnapshot() {
+        if (contactSnapshot == null) {
+            contactSnapshot = new OrderContactSnapshot();
+        }
+        return contactSnapshot;
+    }
 }

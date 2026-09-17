@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_GuestPurchaseRuntime"
+                  targetNamespace="http://handmade-shop/process/guest-purchase-runtime">
+  <bpmn:process id="GuestPurchaseFlow" name="Guest Purchase Post-order Flow" isExecutable="true" camunda:historyTimeToLive="180">
+    <bpmn:documentation>
+      Phase 7 runtime starts only after the guest order transaction commits. Checkout, stock reservation,
+      voucher usage, contact snapshot and lookup token remain synchronous outside Camunda.
+    </bpmn:documentation>
+    <bpmn:startEvent id="Start_GuestOrderCreated">
+      <bpmn:outgoing>Flow_Start_To_Publish</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_PublishGuestOrderCreated"
+                      name="Publish guest order confirmation event"
+                      camunda:delegateExpression="${workflowTaskDelegate}"
+                      camunda:asyncBefore="true"
+                      camunda:exclusive="true">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="taskType">PUBLISH_WORKFLOW_EVENT</camunda:inputParameter>
+          <camunda:inputParameter name="eventType">GUEST_ORDER_CREATED</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_To_Publish</bpmn:incoming>
+      <bpmn:outgoing>Flow_Publish_To_HandmadeGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_ContainsHandmadeItems" name="Contains handmade items?">
+      <bpmn:incoming>Flow_Publish_To_HandmadeGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReadyMade_To_End</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Handmade_To_Assignment</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_ManagerAssignHandmadeItems"
+                   name="Manager assigns handmade items"
+                   camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_Handmade_To_Assignment</bpmn:incoming>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_GuestPostOrderProcessing">
+      <bpmn:incoming>Flow_ReadyMade_To_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_To_Publish" sourceRef="Start_GuestOrderCreated" targetRef="Task_PublishGuestOrderCreated" />
+    <bpmn:sequenceFlow id="Flow_Publish_To_HandmadeGateway" sourceRef="Task_PublishGuestOrderCreated" targetRef="Gateway_ContainsHandmadeItems" />
+    <bpmn:sequenceFlow id="Flow_ReadyMade_To_End" name="No" sourceRef="Gateway_ContainsHandmadeItems" targetRef="End_GuestPostOrderProcessing">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${hasHandmadeItems == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Handmade_To_Assignment" name="Yes" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_ManagerAssignHandmadeItems">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${hasHandmadeItems == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+</bpmn:definitions>

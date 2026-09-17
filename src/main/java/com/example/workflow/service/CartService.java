@@ -7,11 +7,11 @@ import com.example.workflow.dto.GuestCheckoutRequest;
 import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
+import com.example.workflow.nume.GuestWorkflowStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
@@ -38,6 +38,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -85,6 +87,8 @@ public class CartService {
     private final AuthService authService;
     private final VoucherService voucherService;
     private final ApplicationCacheService applicationCacheService;
+    private final OrderLookupTokenService orderLookupTokenService;
+    private final GuestPurchaseWorkflowService guestPurchaseWorkflowService;
 
     public CartOwner resolveOwner(String guestSessionId) {
         Optional<String> currentCustomerId = getAuthenticatedCustomerId();
@@ -310,6 +314,8 @@ public class CartService {
             GuestCheckoutRequest request,
             List<Long> variantIdsToCheckout
     ) {
+        AtomicReference<String> rawLookupToken = new AtomicReference<>();
+        AtomicBoolean hasHandmadeItems = new AtomicBoolean();
         Long orderId = transactionTemplate.execute(status -> {
             Cart cart = getExistingCart(CartOwner.guest(guestSessionId), ConstantErrorCode.CART_EMPTY);
             List<CartItem> itemsToCheckout = resolveCheckoutItems(cart, variantIdsToCheckout);
@@ -317,21 +323,34 @@ public class CartService {
             Order order = createGuestOrder(guestSessionId, request);
             double totalPrice = addCheckoutItems(order, itemsToCheckout);
             VoucherService.AppliedGuestVoucher appliedGuestVoucher =
-                    voucherService.applyGuestVoucherForCheckout(request.getVoucherCode(), totalPrice);
+                    voucherService.applyGuestVoucherForCheckout(
+                            request.getVoucherCode(), totalPrice, guestSessionId, request.getEmail(), request.getPhone());
             applyGuestOrderTotals(order, totalPrice, appliedGuestVoucher);
+            rawLookupToken.set(orderLookupTokenService.issueFor(order));
             Order savedOrder = orderRepository.saveAndFlush(order);
+            hasHandmadeItems.set(savedOrder.getItems().stream()
+                    .map(OrderItem::getProductVariant)
+                    .filter(java.util.Objects::nonNull)
+                    .map(ProductVariant::getProduct)
+                    .filter(java.util.Objects::nonNull)
+                    .anyMatch(Product::isHandmade));
+            voucherService.recordGuestVoucherUsage(appliedGuestVoucher, savedOrder);
+            inventoryReservationService.reserveAndRecord(savedOrder);
 
             cartItemRepository.deleteAll(itemsToCheckout);
             cart.getItems().removeAll(itemsToCheckout);
             cartRepository.save(cart);
 
-            startGuestApproveCartProcess(savedOrder.getId(), guestSessionId);
-            eventPublisher.publishAfterCommit(EventTypes.GUEST_ORDER_CREATED, new GuestOrderCreatedEvent(savedOrder.getId()));
             return savedOrder.getId();
         });
 
+        GuestPurchaseWorkflowService.StartResult workflowResult = guestPurchaseWorkflowService.startAfterOrderCreated(
+                orderId,
+                guestSessionId,
+                hasHandmadeItems.get()
+        );
         Order savedOrder = getOrderOrThrow(orderId);
-        return buildGuestCheckoutResponseMap(savedOrder);
+        return buildGuestCheckoutResponseMap(savedOrder, rawLookupToken.get(), workflowResult);
     }
 
     private Long createOrderFromCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
@@ -349,6 +368,7 @@ public class CartService {
         double discountAmount = voucherService.calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
         Order savedOrder = orderRepository.saveAndFlush(order);
+        inventoryReservationService.reserveAndRecord(savedOrder);
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
 
         cartItemRepository.deleteAll(itemsToCheckout);
@@ -413,14 +433,17 @@ public class CartService {
     private Order createGuestOrder(String guestSessionId, GuestCheckoutRequest request) {
         Order order = new Order();
         order.setGuestSessionId(guestSessionId);
-        order.setRecipientName(normalizeText(request.getCustomerName()));
-        order.setRecipientPhone(normalizeText(request.getPhone()));
-        order.setEmail(normalizeText(request.getEmail()));
-        order.setShippingAddress(normalizeText(request.getShippingAddress()));
-        order.setNote(normalizeText(request.getNote()));
+        order.setContactSnapshot(new OrderContactSnapshot(
+                normalizeText(request.getCustomerName()),
+                normalizeText(request.getEmail()),
+                normalizeText(request.getPhone()),
+                normalizeText(request.getShippingAddress()),
+                normalizeText(request.getNote())
+        ));
         order.setStartOrderTime(LocalDateTime.now());
         order.setPaymentMethod("COD");
         order.setStatus(OrderStatus.PENDING_APPROVAL);
+        order.setGuestWorkflowStatus(GuestWorkflowStatus.PENDING_START);
         order.setItems(new ArrayList<>());
         return order;
     }
@@ -466,23 +489,28 @@ public class CartService {
         runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
     }
 
-    private void startGuestApproveCartProcess(Long orderId, String guestSessionId) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("orderId", orderId);
-        variables.put("guestSessionId", guestSessionId);
-        variables.put("paymentMethod", "COD");
-        variables.put("stockReserved", true);
-        variables.put("stockDeducted", false);
-        variables.put("guestOrder", true);
-        runtimeService.startProcessInstanceByKey("ApproveCartProcess", "guest-" + guestSessionId, variables);
-    }
-
-    private Map<String, String> buildGuestCheckoutResponseMap(Order order) {
-        return buildCheckoutResponseMap(
+    private Map<String, String> buildGuestCheckoutResponseMap(
+            Order order,
+            String lookupToken,
+            GuestPurchaseWorkflowService.StartResult workflowResult
+    ) {
+        Map<String, String> response = buildCheckoutResponseMap(
                 order,
                 order.getStatus().name(),
                 "Tao don guest COD thanh cong. Don hang dang cho quan ly duyet."
         );
+        response.put("lookupToken", lookupToken);
+        String maskedEmail = orderLookupTokenService.maskEmail(order.getEmail());
+        if (maskedEmail != null) {
+            response.put("maskedEmail", maskedEmail);
+        }
+        response.put(
+                "guestWorkflowStatus",
+                workflowResult.started()
+                        ? GuestWorkflowStatus.STARTED.name()
+                        : GuestWorkflowStatus.START_FAILED.name()
+        );
+        return response;
     }
 
     private Map<String, String> buildOnlinePaymentResponse(Order savedOrder) throws Exception {

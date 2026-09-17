@@ -33,5 +33,8 @@ public class Product {
     @Column(name = "image_url")
     private String imageUrl;
 
+    @Column(name = "is_handmade", nullable = false, columnDefinition = "boolean default true")
+    private boolean handmade = true;
+
     private boolean isDelete;
 }

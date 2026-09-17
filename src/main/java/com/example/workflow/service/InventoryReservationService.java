@@ -23,7 +23,18 @@ public class InventoryReservationService {
     private final ProductVariantRepository variantRepository;
     private final InventoryTransactionService transactionService;
 
-    public void reserve(Order order) {
+    public boolean reserveAndRecord(Order order) {
+        boolean reserved = reserve(order);
+        if (reserved) {
+            recordReservations(order);
+        }
+        return reserved;
+    }
+
+    public boolean reserve(Order order) {
+        if (order.isStockReserved() || order.isStockDeducted()) {
+            return false;
+        }
         for (OrderItem item : order.getItems()) {
             int quantity = item.getQuantity();
             ProductVariant variant = item.getProductVariant();
@@ -37,6 +48,7 @@ public class InventoryReservationService {
             }
         }
         order.setStockReserved(true);
+        return true;
     }
 
     public void recordReservations(Order order) {
@@ -59,6 +71,11 @@ public class InventoryReservationService {
             return;
         }
         if (!order.isStockReserved()) {
+            deductLegacyOrder(order);
+            return;
+        }
+        if (hasExportedQuantityMismatch(order)) {
+            releaseReservedStock(order, "EXPORT_VARIANT");
             deductLegacyOrder(order);
             return;
         }
@@ -150,5 +167,14 @@ public class InventoryReservationService {
     private int exportedQuantity(OrderItem item) {
         Integer exported = item.getExportedQuantity();
         return exported == null ? item.getQuantity() : Math.max(exported, 0);
+    }
+
+    private boolean hasExportedQuantityMismatch(Order order) {
+        for (OrderItem item : order.getItems()) {
+            if (item.getExportedQuantity() != null && item.getExportedQuantity() != item.getQuantity()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
