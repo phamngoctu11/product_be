@@ -2,6 +2,7 @@ package com.example.workflow.entity;
 
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.GuestWorkflowStatus;
+import com.example.workflow.nume.OrderProductionStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,6 +35,15 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50)
     private OrderStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "production_status",
+            nullable = false,
+            length = 32,
+            columnDefinition = "varchar(32) default 'NOT_REQUIRED'"
+    )
+    private OrderProductionStatus productionStatus = OrderProductionStatus.NOT_REQUIRED;
 
     private String cancelReason;
 

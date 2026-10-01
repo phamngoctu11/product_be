@@ -1,4 +1,5 @@
 package com.example.workflow.dto;
+import com.example.workflow.nume.OrderItemProductionStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -16,6 +17,8 @@ public class OrderItemDTO implements Serializable {
     private Integer exportedQuantity;
     private Integer receivedQuantity;
     private double price;
+    private boolean handmade;
+    private OrderItemProductionStatus productionStatus;
     private boolean reviewed;
     private Long reviewId;
     @JsonProperty("image_url")

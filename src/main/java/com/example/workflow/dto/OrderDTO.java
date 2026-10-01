@@ -1,5 +1,6 @@
 package com.example.workflow.dto;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.OrderProductionStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,7 @@ public class OrderDTO implements Serializable {
     private LocalDateTime startOrderTime;
     private LocalDateTime endOrderTime;
     private OrderStatus status;
+    private OrderProductionStatus productionStatus;
     private String cancelReason;
     private String paymentMethod;
     private String note;

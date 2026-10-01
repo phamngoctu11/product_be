@@ -12,6 +12,8 @@ import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
 import com.example.workflow.nume.GuestWorkflowStatus;
+import com.example.workflow.nume.OrderItemProductionStatus;
+import com.example.workflow.nume.OrderProductionStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
@@ -328,12 +330,7 @@ public class CartService {
             applyGuestOrderTotals(order, totalPrice, appliedGuestVoucher);
             rawLookupToken.set(orderLookupTokenService.issueFor(order));
             Order savedOrder = orderRepository.saveAndFlush(order);
-            hasHandmadeItems.set(savedOrder.getItems().stream()
-                    .map(OrderItem::getProductVariant)
-                    .filter(java.util.Objects::nonNull)
-                    .map(ProductVariant::getProduct)
-                    .filter(java.util.Objects::nonNull)
-                    .anyMatch(Product::isHandmade));
+            hasHandmadeItems.set(savedOrder.getItems().stream().anyMatch(OrderItem::isHandmade));
             voucherService.recordGuestVoucherUsage(appliedGuestVoucher, savedOrder);
             inventoryReservationService.reserveAndRecord(savedOrder);
 
@@ -450,12 +447,17 @@ public class CartService {
 
     private double addCheckoutItems(Order order, List<CartItem> itemsToCheckout) {
         double totalPrice = 0;
+        boolean hasHandmadeItems = false;
         for (CartItem cartItem : itemsToCheckout) {
             validateCheckoutItem(cartItem);
             OrderItem orderItem = createOrderItem(order, cartItem);
             totalPrice += calculateCartItemAmount(cartItem);
             order.getItems().add(orderItem);
+            hasHandmadeItems = hasHandmadeItems || orderItem.isHandmade();
         }
+        order.setProductionStatus(hasHandmadeItems
+                ? OrderProductionStatus.WAITING_PRODUCTION
+                : OrderProductionStatus.NOT_REQUIRED);
         return totalPrice;
     }
 
@@ -756,11 +758,16 @@ public class CartService {
 
     private OrderItem createOrderItem(Order order, CartItem cartItem) {
         ProductVariant variant = cartItem.getProductVariant();
+        boolean handmade = variant.getProduct() != null && variant.getProduct().isHandmade();
         OrderItem orderItem = new OrderItem();
         orderItem.setOrder(order);
         orderItem.setProductVariant(variant);
         orderItem.setQuantity(cartItem.getQuantity());
         orderItem.setPrice(variant.getPrice());
+        orderItem.setHandmade(handmade);
+        orderItem.setProductionStatus(handmade
+                ? OrderItemProductionStatus.WAITING_ASSIGNMENT
+                : OrderItemProductionStatus.NOT_REQUIRED);
         return orderItem;
     }
 

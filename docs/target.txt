@@ -1,17 +1,17 @@
-Chúng ta sẽ phát triển hệ thống hiện tại thành một shop bán đồ handmade đa danh mục, có 2 nhóm khách chính: user hệ thống và non-user/guest. User hệ thống có tài khoản, được dùng voucher cá nhân, tích điểm/reputation, tạo custom request, chat realtime với staff và theo dõi checkpoint trong hệ thống. Non-user/guest vẫn được xem sản phẩm, lọc/search, thêm giỏ hàng bằng guestSessionId, checkout bằng form thông tin cá nhân, dùng public voucher nếu hợp lệ, nhận email xác nhận đơn/checkpoint và có orderLookupToken để tra cứu đơn. Custom request chỉ dành cho user hệ thống để đảm bảo có lịch sử trao đổi, báo giá, duyệt yêu cầu và quản lý thay đổi rõ ràng.
+Chúng ta sẽ phát triển hệ thống hiện tại thành một shop bán đồ handmade đa danh mục theo mô hình made-to-order, có 2 nhóm khách chính: user hệ thống và non-user/guest. Sản phẩm treo trên shop mặc định là mẫu thiết kế/catalog do shop xây dựng, không phải thành phẩm có sẵn trong kho; ảnh sản phẩm là ảnh mẫu và giao diện phải thông báo rõ sản phẩm chỉ được làm sau khi đặt hàng. Khách có thể đặt làm theo mẫu của shop hoặc gửi yêu cầu custom. User hệ thống có tài khoản, được dùng voucher cá nhân, tích điểm/reputation, tạo custom request, chat realtime với staff phụ trách order và theo dõi checkpoint trong hệ thống. Non-user/guest vẫn được xem sản phẩm, lọc/search, thêm giỏ hàng bằng guestSessionId, checkout bằng form thông tin cá nhân, dùng public voucher nếu hợp lệ, nhận email xác nhận đơn/thời hạn/checkpoint và có orderLookupToken để tra cứu đơn. Custom request chỉ dành cho user hệ thống để đảm bảo có lịch sử trao đổi, báo giá, duyệt yêu cầu và quản lý thay đổi rõ ràng.
 Về công nghệ áp dụng:
 •
 Redis Cache dùng cho category tree, product listing/filter/search, product detail, best-selling, public voucher template, guest session TTL, rate limit, idempotency checkout, cart summary phụ và chat presence.
 •
-Redis Stream dùng cho event bất đồng bộ như ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, STAFF_ASSIGNED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED, audit và thống kê.
+Redis Stream dùng cho event bất đồng bộ như ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, ORDER_STAFF_ASSIGNED, STAFF_ASSIGNED, ORDER_DEADLINE_PROPOSED, ORDER_DEADLINE_CONFIRMED, PRODUCTION_STARTED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED, audit và thống kê.
 •
-Camunda dùng cho workflow dài ngày có con người tham gia: custom request approval, quote/acceptance, change request từ chat, phân staff theo OrderItem, production checkpoint, rework và final QC.
+Camunda dùng cho workflow dài ngày có con người tham gia: custom request approval, quote/acceptance, phân staff chính phụ trách Order, thỏa thuận/xác nhận thời hạn, change request từ chat, phân staff theo OrderItem, production checkpoint, rework và final QC.
 •
-Database vẫn là nguồn dữ liệu chính cho cart, order, order item, custom request, payment, voucher usage, assignment, checkpoint, image/attachment. Redis không được dùng thay database.
+Database vẫn là nguồn dữ liệu chính cho product production configuration, cart, order, order item, custom request, payment, voucher usage, assignment, deadline proposal/agreement, checkpoint, image/attachment. Redis không được dùng thay database.
 •
-WebSocket/chat dùng cho user hệ thống để trao đổi với staff và nhận checkpoint realtime.
+WebSocket/chat dùng cho user hệ thống để trao đổi trong phòng chat riêng của Order với staff chính phụ trách Order, xác nhận các thay đổi nghiệp vụ bằng thao tác có cấu trúc và nhận checkpoint realtime.
 •
-Email dùng cho guest/non-user để xác nhận đơn, gửi checkpoint và link tra cứu đơn.
+Email dùng cho guest/non-user để xác nhận đơn, đề xuất/xác nhận thời hạn bằng link bảo mật, gửi checkpoint và link tra cứu đơn.
 Các entity/khái niệm chính cần triển khai hoặc mở rộng:
 GuestSession
 Cart
@@ -19,6 +19,7 @@ Order
 OrderContactSnapshot
 OrderLookupToken
 OrderItem
+OrderDeadlineProposal
 OrderItemAssignment
 ProductionCheckpoint
 ProductionCheckpointImage
@@ -37,6 +38,18 @@ Các rule nghiệp vụ đã chốt:
 •
 Product listing/detail public cho cả user và guest.
 •
+Sản phẩm trên catalog mặc định là mẫu MADE_TO_ORDER, không phải thành phẩm có sẵn trong kho.
+•
+Khách có thể đặt theo mẫu của shop; custom request là luồng riêng dành cho user hệ thống.
+•
+Không quản lý tồn kho thành phẩm bằng ProductVariant.quantity và không giữ/trừ/hoàn stock khi cart, checkout hoặc reorder.
+•
+Vẫn giữ quantity của CartItem, OrderItem, exportedQuantity, receivedQuantity và quota phát hành voucher vì đây không phải tồn kho thành phẩm.
+•
+Mẫu sản phẩm dùng trạng thái ACCEPTING_ORDERS, PAUSED, DISCONTINUED để kiểm soát khả năng nhận đơn.
+•
+Quản lý nguyên vật liệu và công suất sản xuất chi tiết chưa thuộc phạm vi hiện tại, có thể phát triển thành module riêng sau.
+•
 Cart của user gắn với userId; cart của guest gắn với guestSessionId.
 •
 Guest checkout bắt buộc nhập họ tên, email, số điện thoại, địa chỉ, ghi chú nếu có.
@@ -53,7 +66,19 @@ Guest chỉ dùng public voucher hoặc voucher campaign giới hạn; không c�
 •
 Production workflow nên chạy theo từng OrderItem, không chỉ theo Order.
 •
+Mỗi Order trước mắt có một staff chính do manager phân công; staff này là đầu mối trao đổi với khách và chịu trách nhiệm theo dõi thời hạn toàn Order.
+•
 Staff được manager phân từng item.
+•
+Order.assignedStaff và OrderItemAssignment là hai vai trò khác nhau; giai đoạn đầu có thể là cùng một người, hỗ trợ nhiều staff phụ trách một Order sẽ mở rộng sau.
+•
+Mỗi mẫu sản phẩm có thời gian tham khảo cho sản phẩm đầu tiên, mỗi sản phẩm bổ sung và thời gian dự phòng; không giảm 10% lũy tiến theo số lượng.
+•
+Thời gian do hệ thống tính chỉ là gợi ý. Staff phải gửi deadline proposal có cấu trúc và khách phải bấm xác nhận trước khi thời hạn trở thành cam kết.
+•
+Nếu staff thay đổi deadline đã đề xuất/xác nhận thì xác nhận cũ mất hiệu lực và khách phải xác nhận lại.
+•
+Chỉ bắt đầu production khi trạng thái thanh toán/checkout hợp lệ và khách đã xác nhận thời hạn.
 •
 Staff submit 2 mốc checkpoint chính: INITIAL_SHAPE và FINAL_PRODUCT.
 •
@@ -69,6 +94,8 @@ Với guest, nên auto gửi checkpoint 1 nếu rủi ro thấp, nhưng checkpoi
 •
 Mọi thay đổi lớn từ chat phải tạo OrderItemChangeRequest, không chỉ lưu trong chat.
 •
+Nội dung chat không phải nguồn dữ liệu chính thức cho deadline; deadline proposal, người xác nhận, thời điểm xác nhận và phiên bản cam kết phải lưu trong database.
+•
 Không gọi thao tác staff là checkout; nên gọi là checkpoint hoặc production submission.
 Các sơ đồ luồng hoạt động đã thiết kế:
 1.
@@ -76,11 +103,16 @@ Luồng tổng thể shop handmade
 Khách vào shop
   → Xem danh sách sản phẩm
   → Filter theo danh mục / giá / chất liệu / màu / keyword
-  → Nếu mua sản phẩm có sẵn: thêm cart
+  → Nếu đặt theo mẫu thiết kế của shop: chọn biến thể/số lượng và thêm cart
   → Nếu muốn custom: tạo Custom Request, chỉ dành cho user
   → Checkout
   → Tạo Order
+  → Manager phân một staff chính phụ trách Order
+  → Staff và khách trao đổi trong phòng chat của Order
+  → Staff gửi thời hạn dự kiến cho từng item và deadline proposal cho toàn Order
+  → Khách xác nhận thời hạn bằng thao tác có cấu trúc
   → Manager phân staff theo từng item
+  → Khi thanh toán/checkout hợp lệ và deadline đã được xác nhận: bắt đầu production
   → Staff làm sản phẩm
   → Checkpoint 1: hình dáng ban đầu + ảnh
   → Checkpoint 2: sản phẩm hoàn thiện + ảnh
@@ -99,6 +131,7 @@ FE tạo hoặc đọc guestSessionId
   → Lưu contact snapshot
   → Tạo orderLookupToken
   → Gửi email xác nhận đơn
+  → Nhận deadline proposal và xác nhận bằng link bảo mật trong email
 3.
 Luồng checkout user vs guest
 Checkout
@@ -116,6 +149,8 @@ Checkout
       tạo orderLookupToken
       gửi email xác nhận
   → Clear cart
+  → Không reserve/deduct tồn kho thành phẩm
+  → Chuyển Order sang bước phân staff và thỏa thuận thời hạn
 4.
 Luồng custom request cho user
 User login
@@ -129,10 +164,13 @@ User login
   → User xác nhận báo giá
       → Không đồng ý: request đóng/hủy
       → Đồng ý: tạo Order
-  → Bắt đầu production workflow theo OrderItem
+  → Manager phân staff chính phụ trách Order
+  → Staff và user trao đổi, gửi deadline proposal
+  → User xác nhận thời hạn
+  → Khi thanh toán hợp lệ: bắt đầu production workflow theo OrderItem
 5.
 Luồng sản xuất theo từng item
-Order đã được tạo/duyệt
+Order đã được tạo/duyệt, thanh toán/checkout hợp lệ và deadline đã được khách xác nhận
   → Tách từng OrderItem
   → Manager gán staff cho từng item
   → Staff nhận item
@@ -161,12 +199,24 @@ Staff submit checkpoint
   → Nếu guest:
       gửi email
   → Lưu lịch sử notification
+
+Staff gửi deadline proposal
+  → Hệ thống lưu proposal/version vào database
+  → Nếu order có userId:
+      gửi realtime event vào phòng chat của Order
+      user bấm xác nhận thời hạn
+  → Nếu guest:
+      gửi email chứa link xác nhận bảo mật
+  → Khi khách xác nhận:
+      lưu committedCompletionAt/deadlineConfirmedAt/deadlineConfirmedBy
+      gửi email xác nhận cam kết
+      nếu thanh toán/checkout hợp lệ thì cho phép bắt đầu production
 7.
 Luồng user hệ thống
 User đăng nhập
   → Xem/filter/search sản phẩm
-  → Chọn mua thường hoặc tạo custom request
-  → Nếu mua thường:
+  → Chọn đặt theo mẫu của shop hoặc tạo custom request
+  → Nếu đặt theo mẫu của shop:
       thêm cart theo userId
       áp dụng voucher user/reputation
       checkout bằng thông tin tài khoản
@@ -176,8 +226,13 @@ User đăng nhập
       manager duyệt/báo giá
       user xác nhận
       tạo order
+  → Manager phân staff chính phụ trách order
+  → Staff và user trao đổi trong phòng chat riêng của order
+  → Staff gửi deadline proposal
+  → User bấm xác nhận thời hạn
+  → Khi thanh toán/checkout hợp lệ: bắt đầu production
   → Nếu item handmade:
-      manager phân staff
+      manager phân staff theo item
       staff submit checkpoint 1
       gửi qua chat socket
       user phản hồi
@@ -201,8 +256,12 @@ Guest vào shop
   → Lưu contact snapshot
   → Tạo orderLookupToken
   → Gửi email xác nhận
+  → Manager phân staff chính phụ trách order
+  → Staff gửi deadline proposal
+  → Guest xác nhận thời hạn bằng link bảo mật trong email
+  → Khi thanh toán/checkout hợp lệ: bắt đầu production
   → Nếu item handmade:
-      manager phân staff
+      manager phân staff theo item
       staff submit checkpoint 1
       auto email hoặc manager duyệt theo policy
       staff submit checkpoint 2
@@ -219,12 +278,15 @@ Redis Cache:
 
 Redis Stream:
   order created, guest order created, custom request submitted,
-  staff assigned, checkpoint submitted/approved/rework,
+  order staff assigned, item staff assigned, deadline proposed/confirmed,
+  production started, checkpoint submitted/approved/rework,
   email requested, notification requested, audit, statistics
 
 Camunda:
   custom request approval,
   quote acceptance,
+  order staff assignment,
+  deadline proposal/confirmation,
   order item production,
   staff assignment,
   checkpoint review/rework,
@@ -281,7 +343,8 @@ validate guestSessionId
 validate cart
 validate contact
 validate voucher public nếu có
-reserve/deduct tùy chính sách hiện tại
+validate mẫu sản phẩm vẫn ở trạng thái ACCEPTING_ORDERS
+không reserve/deduct tồn kho thành phẩm
 create guest order
 save contact snapshot
 generate lookup token
@@ -419,6 +482,132 @@ Staff submit final.
 Manager final QC approve → item ready.
 •
 Khi tất cả item ready → order ready to ship.
+Phase 9 — Chuyển catalog sang made-to-order và loại bỏ tồn kho thành phẩm
+Mục tiêu:
+•
+Sản phẩm trên shop là mẫu thiết kế nhận làm theo đơn, không phải thành phẩm đang có trong kho.
+•
+Loại bỏ phụ thuộc vào tồn kho thành phẩm nhưng giữ nguyên số lượng trong cart/order và quota voucher.
+Thay đổi:
+Product/ProductVariant:
+  bổ sung availabilityStatus: ACCEPTING_ORDERS, PAUSED, DISCONTINUED
+  loại bỏ ProductVariant.quantity dùng như tồn kho thành phẩm
+Cart/checkout/reorder:
+  loại bỏ kiểm tra đủ stock
+  loại bỏ giữ/trừ/hoàn stock
+Inventory:
+  loại bỏ InventoryReservationService, InventoryTransaction, DeductInventoryDelegate,
+  API nhập kho/lịch sử tồn kho và stockReserved/stockDeducted nếu không còn mục đích khác
+Giữ lại:
+  CartItem.quantity
+  OrderItem.quantity
+  exportedQuantity
+  receivedQuantity
+  quantity/quota của voucher campaign
+Test:
+•
+Khách đặt được nhiều sản phẩm theo cùng một mẫu khi mẫu đang ACCEPTING_ORDERS.
+•
+Mẫu PAUSED hoặc DISCONTINUED không thể được thêm mới/checkout.
+•
+Checkout không còn thất bại vì ProductVariant.quantity.
+•
+Quantity của cart/order và quota voucher không bị ảnh hưởng.
+•
+Không còn luồng reserve/deduct/restore tồn kho thành phẩm.
+Phase 10 — Staff chính phụ trách Order và phòng chat theo Order
+Mục tiêu:
+•
+Mỗi Order có một staff chính làm đầu mối trao đổi với khách và theo dõi tiến độ toàn Order.
+•
+Tái sử dụng WebSocket/chat hiện có, mở rộng từ consultation thread sang order thread.
+Thêm/sửa:
+Order.assignedStaff
+Order.assignedByManager
+Order.assignedAt
+ChatThread/ChatMessage.orderId hoặc context tương đương để phân biệt CONSULTATION và ORDER
+Phân quyền:
+  customer tạo Order, staff chính được phân công và manager mới được truy cập phòng chat Order
+  OrderItemAssignment tiếp tục quản lý người trực tiếp sản xuất từng item
+  giai đoạn đầu staff chính và staff sản xuất có thể là cùng một người
+Luồng:
+  Order PENDING_ASSIGNMENT
+    → Manager gán staff chính
+    → Order DISCUSSING
+    → Tạo/mở phòng chat Order
+    → Staff và khách trao đổi yêu cầu, thời gian và thay đổi
+Test:
+•
+Manager gán/đổi staff chính đúng quyền.
+•
+Customer và staff được phân công gửi/nhận tin nhắn realtime.
+•
+Staff không được phân công không đọc hoặc gửi tin nhắn trong Order.
+•
+Manager có thể theo dõi/can thiệp theo policy.
+•
+Lịch sử consultation chat cũ không bị ảnh hưởng.
+Phase 11 — Thời gian sản xuất và xác nhận deadline
+Mục tiêu:
+•
+Có thời gian tham khảo theo mẫu/số lượng nhưng deadline cuối cùng phải do staff đề xuất và khách xác nhận.
+•
+Không tự động cam kết ngày hoàn thành chỉ dựa trên công thức.
+Thêm/sửa Product:
+productionTimeFirstUnit
+productionTimeAdditionalUnit
+productionBufferDays
+Công thức tham khảo:
+itemEstimatedTime = productionTimeFirstUnit
+                  + (quantity - 1) * productionTimeAdditionalUnit
+                  + productionBufferDays
+Thời gian chuẩn bị cho mẫu đầu tiên được tính trong productionTimeFirstUnit.
+Không dùng công thức giảm 10% lũy tiến cho từng sản phẩm tiếp theo.
+Thêm/sửa Order/OrderItem:
+  thời gian dự kiến từng item
+  proposedCompletionAt
+  committedCompletionAt
+  deadlineConfirmedAt
+  deadlineConfirmedBy
+  productionStartedAt
+  deadline proposal version/history
+Trạng thái dự kiến:
+PENDING_ASSIGNMENT
+  → DISCUSSING
+  → WAITING_CUSTOMER_CONFIRMATION
+  → CONFIRMED
+  → IN_PRODUCTION
+  → READY_TO_SHIP
+  → COMPLETED
+Rule:
+•
+Staff gửi deadline proposal có cấu trúc; một tin nhắn văn bản “đồng ý” không được tính là xác nhận.
+•
+User xác nhận bằng nút chức năng; guest xác nhận bằng link bảo mật trong email.
+•
+Thay đổi proposal đã xác nhận sẽ làm xác nhận cũ mất hiệu lực và yêu cầu khách xác nhận lại.
+•
+Chỉ chuyển sang IN_PRODUCTION khi payment/checkout hợp lệ và deadline đã được xác nhận.
+•
+Sau khi xác nhận, gửi email gồm mã Order, staff phụ trách, thời hạn từng item và thời hạn toàn Order.
+•
+Chat chỉ dùng để trao đổi và hiển thị system message; deadline agreement chính thức phải lưu trong database.
+API đề xuất:
+POST /api/orders/{orderId}/deadline-proposals
+POST /api/orders/{orderId}/deadline-proposals/{proposalId}/confirm
+Test:
+•
+Staff chính tạo proposal và hệ thống lưu đúng version.
+•
+Customer khác không thể xác nhận proposal.
+•
+User/guest xác nhận thành công theo đúng cơ chế.
+•
+Thay đổi proposal yêu cầu xác nhận lại.
+•
+Order không bắt đầu production nếu chưa xác nhận deadline hoặc payment/checkout chưa hợp lệ.
+•
+Xác nhận thành công tạo event/email đúng một lần.
 Thứ tự triển khai thực tế nên bắt đầu
 Mình khuyên bắt đầu bằng 3 phase đầu:
 1. Guest session + cart foundation
@@ -431,3 +620,6 @@ Sau đó mới thêm:
 6. Workflow delegate framework
 7. Camunda runtime
 8. Production checkpoint
+9. Made-to-order catalog + loại bỏ tồn kho thành phẩm
+10. Staff chính + order chat
+11. Production time + deadline agreement

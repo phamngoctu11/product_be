@@ -14,6 +14,8 @@ import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.nume.GuestWorkflowStatus;
+import com.example.workflow.nume.OrderItemProductionStatus;
+import com.example.workflow.nume.OrderProductionStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -315,7 +317,9 @@ class CartServiceTest {
     void approveCartCreatesCodOrderStartsProcessAndClearsCheckedOutItems() {
         User user = user(1L);
         user.setLastname("Customer");
-        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        Product readyMadeProduct = product(false, null);
+        readyMadeProduct.setHandmade(false);
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, readyMadeProduct);
         CartItem item = cartItem(variant, 2);
         Cart cart = cartWithItems(1L, user, item);
         AtomicReference<Order> savedOrder = new AtomicReference<>();
@@ -339,6 +343,10 @@ class CartServiceTest {
             assertThat(order.getTotalPrice()).isEqualTo(50.0);
             assertThat(order.getFinalPrice()).isEqualTo(50.0);
             assertThat(order.getItems()).hasSize(1);
+            assertThat(order.getProductionStatus()).isEqualTo(OrderProductionStatus.NOT_REQUIRED);
+            assertThat(order.getItems().getFirst().isHandmade()).isFalse();
+            assertThat(order.getItems().getFirst().getProductionStatus())
+                    .isEqualTo(OrderItemProductionStatus.NOT_REQUIRED);
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
@@ -522,6 +530,12 @@ class CartServiceTest {
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL);
             assertThat(order.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.PENDING_START);
             assertThat(order.getFinalPrice()).isEqualTo(50.0);
+            assertThat(order.getProductionStatus()).isEqualTo(OrderProductionStatus.WAITING_PRODUCTION);
+            assertThat(order.getItems()).singleElement().satisfies(orderItem -> {
+                assertThat(orderItem.isHandmade()).isTrue();
+                assertThat(orderItem.getProductionStatus())
+                        .isEqualTo(OrderItemProductionStatus.WAITING_ASSIGNMENT);
+            });
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);

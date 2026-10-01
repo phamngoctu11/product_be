@@ -1,6 +1,13 @@
 package com.example.workflow.exception;
 
 public enum ConstantErrorCode {
+    ORDER_ITEM_NOT_HANDMADE("Sản phẩm trong đơn không thuộc quy trình handmade"),
+    ORDER_ITEM_ASSIGNMENT_NOT_FOUND("Không tìm thấy phân công sản xuất cho sản phẩm trong đơn"),
+    ORDER_ITEM_PRODUCTION_STATE_INVALID("Trạng thái sản xuất của sản phẩm không hợp lệ: %s"),
+    PRODUCTION_CHECKPOINT_NOT_FOUND("Không tìm thấy checkpoint sản xuất"),
+    PRODUCTION_CHECKPOINT_DUPLICATE("Checkpoint đã tồn tại cho công đoạn và lần thực hiện này"),
+    PRODUCTION_CHECKPOINT_INVALID_ATTEMPT("Số lần thực hiện checkpoint phải lớn hơn hoặc bằng 1"),
+    PRODUCTION_DECISION_ALREADY_EXISTS("Checkpoint đã có quyết định duyệt"),
     INVALID_CREDENTIALS("Thông tin đăng nhập không hợp lệ"),
     LOGIN_RATE_LIMIT_EXCEEDED("Too many login attempts. Please retry later."),
     USER_NOT_FOUND("Không tìm thấy người dùng"),
