@@ -9,6 +9,8 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
+import java.util.List;
+
 @Mapper(componentModel = "spring")
 public interface ProductMapper {
 
@@ -28,6 +30,7 @@ public interface ProductMapper {
 
     // ĐÃ FIX: Chỉ định MapStruct ánh xạ đúng tên biến ảnh cho Biến thể
     @Mapping(source = "imageUrl", target = "imageUrl")
+    @Mapping(target = "quantity", ignore = true)
     ProductVariant variantToEntity(ProductVariantDTO dto);
 
     // 3. Cập nhật Entity có sẵn từ DTO (Dùng cho updateProduct)
@@ -35,9 +38,9 @@ public interface ProductMapper {
     @Mapping(source = "image_url", target = "imageUrl") // Bổ sung luôn cho an toàn tuyệt đối
     void updateProductFromDto(ProductDTO dto, @MappingTarget Product entity);
 
-    // TRICK 1: MapStruct tự động tính tổng số lượng các biến thể gán cho sản phẩm
+    // Chỉ trả về các biến thể chưa bị xóa. Tồn kho không còn là một phần của catalog made-to-order.
     @AfterMapping
-    default void calculateTotalQuantity(Product entity, @MappingTarget ProductDTO dto) {
+    default void filterDeletedVariants(Product entity, @MappingTarget ProductDTO dto) {
         if (entity.getVariants() != null && !entity.getVariants().isEmpty()) {
             var activeVariants = entity.getVariants().stream()
                     .filter(variant -> !variant.isDelete())
@@ -45,13 +48,8 @@ public interface ProductMapper {
             dto.setVariants(activeVariants.stream()
                     .map(this::variantToDto)
                     .toList());
-
-            int totalQty = activeVariants.stream()
-                    .mapToInt(ProductVariant::getQuantity)
-                    .sum();
-            dto.setQuantity(totalQty);
         } else {
-            dto.setQuantity(0);
+            dto.setVariants(List.of());
         }
     }
 

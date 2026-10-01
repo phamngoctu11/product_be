@@ -3,6 +3,7 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
+import com.example.workflow.dto.ProductAvailabilityUpdateRequest;
 import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.dto.StockImportRequest;
 import com.example.workflow.service.ProductService;
@@ -79,6 +80,16 @@ public class ProductController {
     ) {
         service.updateProductBasicInfo(id, dto);
         return ResponseEntity.ok(ApiResponse.success("Product information updated successfully"));
+    }
+
+    @PatchMapping("/{id}/availability")
+    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> updateProductAvailability(
+            @Positive(message = "Product id must be positive") @PathVariable Long id,
+            @Valid @RequestBody ProductAvailabilityUpdateRequest request
+    ) {
+        service.updateAvailabilityStatus(id, request.availabilityStatus());
+        return ResponseEntity.ok(ApiResponse.success("Product availability updated successfully"));
     }
 
     @PostMapping("/{id}/variants")

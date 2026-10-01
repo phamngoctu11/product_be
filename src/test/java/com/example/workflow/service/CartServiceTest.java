@@ -17,6 +17,7 @@ import com.example.workflow.nume.GuestWorkflowStatus;
 import com.example.workflow.nume.OrderItemProductionStatus;
 import com.example.workflow.nume.OrderProductionStatus;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
@@ -102,9 +103,6 @@ class CartServiceTest {
     private TransactionTemplate transactionTemplate;
 
     @Mock
-    private InventoryReservationService inventoryReservationService;
-
-    @Mock
     private CheckoutConcurrencyService checkoutConcurrencyService;
 
     @Mock
@@ -176,6 +174,40 @@ class CartServiceTest {
         assertThat(cart.getItems()).containsExactly(item);
         assertThat(item.getQuantity()).isEqualTo(7);
         verify(cartRepository).save(cart);
+    }
+
+    @Test
+    void addToCartDoesNotUseLegacyVariantStockForMadeToOrderProduct() {
+        User user = user(1L);
+        ProductVariant variant = variant(2L, "Variant 2", 30.0, 0, false, product(false, null));
+        Cart cart = cartWithItems(1L, user);
+        when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+
+        cartService.startAddToCartProcess("1", 2L, 4);
+
+        assertThat(cart.getItems()).singleElement().satisfies(item ->
+                assertThat(item.getQuantity()).isEqualTo(4));
+        verify(cartRepository).save(cart);
+    }
+
+    @Test
+    void addToCartRejectsProductThatIsNotAcceptingOrders() {
+        User user = user(1L);
+        Product product = product(false, null);
+        product.setId(99L);
+        product.setAvailabilityStatus(ProductAvailabilityStatus.PAUSED);
+        ProductVariant variant = variant(2L, "Variant 2", 30.0, 10, false, product);
+        Cart cart = cartWithItems(1L, user);
+        when(productVariantRepository.findActiveById(2L)).thenReturn(Optional.of(variant));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+
+        assertThatThrownBy(() -> cartService.startAddToCartProcess("1", 2L, 1))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Sản phẩm có mã 99 hiện không nhận đơn mới.")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
+
+        verify(cartRepository, never()).save(cart);
     }
 
     @Test
@@ -350,7 +382,6 @@ class CartServiceTest {
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
-        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
         ArgumentCaptor<OrderCreatedEvent> eventCaptor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
         verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CREATED), eventCaptor.capture());
         assertThat(eventCaptor.getValue().orderId()).isEqualTo(100L);
@@ -361,9 +392,32 @@ class CartServiceTest {
                 .containsEntry("userId", "1")
                 .containsEntry("paymentMethod", "COD")
                 .containsEntry("note", "note")
-                .containsEntry("stockReserved", true)
-                .containsEntry("stockDeducted", false);
+                .doesNotContainKeys("stockReserved", "stockDeducted");
         verify(notificationService, times(2)).sendNotification(any(), any(), eq(100L), any(), any(), any());
+    }
+
+    @Test
+    void approveCartRejectsProductPausedAfterItWasAdded() {
+        User user = user(1L);
+        Product product = product(false, null);
+        product.setId(99L);
+        product.setAvailabilityStatus(ProductAvailabilityStatus.PAUSED);
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 100, false, product);
+        Cart cart = cartWithItems(1L, user, cartItem(variant, 2));
+        when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
+
+        assertThatThrownBy(() -> cartService.approveCart("1", List.of(11L), null, "COD", "note", null))
+                .isInstanceOf(AppException.class)
+                .hasMessage("Sản phẩm có mã 99 hiện không nhận đơn mới.")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
+
+        verify(orderRepository, never()).saveAndFlush(any());
+        verify(runtimeService, never()).startProcessInstanceByKey(
+                anyString(),
+                anyString(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+        );
     }
 
     @Test
@@ -377,7 +431,6 @@ class CartServiceTest {
 
         verify(transactionTemplate, never()).execute(any());
         verify(orderRepository, never()).saveAndFlush(any());
-        verify(inventoryReservationService, never()).reserve(any());
         verify(runtimeService, never()).startProcessInstanceByKey(
                 eq("ApproveCartProcess"),
                 anyString(),
@@ -402,7 +455,6 @@ class CartServiceTest {
         verify(checkoutConcurrencyService, never()).acquireCheckoutLocks(anyString(), any());
         verify(transactionTemplate, never()).execute(any());
         verify(orderRepository, never()).saveAndFlush(any());
-        verify(inventoryReservationService, never()).reserve(any());
         verify(checkoutIdempotencyService, never()).complete(any(), any());
     }
 
@@ -430,7 +482,6 @@ class CartServiceTest {
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST);
 
-        verify(inventoryReservationService).reserveAndRecord(any(Order.class));
         verify(orderRepository, never()).findById(100L);
         verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
         verify(momoService, never()).createPaymentData(anyString(), anyLong());
@@ -484,9 +535,9 @@ class CartServiceTest {
     }
 
     @Test
-    void checkoutGuestCartStartsPostOrderWorkflowWithoutSendingEmailInline() {
+    void checkoutGuestCartIgnoresLegacyZeroStockAndStartsPostOrderWorkflow() {
         String guestSessionId = "guest-session-0001";
-        ProductVariant variant = variant(11L, "Variant 1", 25.0, 10, false, product(false, null));
+        ProductVariant variant = variant(11L, "Variant 1", 25.0, 0, false, product(false, null));
         CartItem item = cartItem(variant, 2);
         Cart cart = guestCartWithItems(1L, guestSessionId, item);
         GuestCheckoutRequest request = guestCheckoutRequest(11L);
@@ -539,7 +590,6 @@ class CartServiceTest {
         });
         verify(cartItemRepository).deleteAll(List.of(item));
         verify(cartRepository).save(cart);
-        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
         verify(guestPurchaseWorkflowService).startAfterOrderCreated(200L, guestSessionId, true);
         verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.GUEST_ORDER_CREATED), any());
         verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.ORDER_CREATED), any());
@@ -577,7 +627,6 @@ class CartServiceTest {
         assertThat(response.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.START_FAILED.name());
         assertThat(savedOrder.get()).isNotNull();
         assertThat(cart.getItems()).isEmpty();
-        verify(inventoryReservationService).reserveAndRecord(savedOrder.get());
         verify(guestPurchaseWorkflowService).startAfterOrderCreated(203L, guestSessionId, true);
     }
 

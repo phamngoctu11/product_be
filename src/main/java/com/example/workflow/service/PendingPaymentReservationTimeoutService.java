@@ -49,7 +49,7 @@ public class PendingPaymentReservationTimeoutService {
     public void releaseExpiredReservations() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime cutoff = now.minusMinutes(Math.max(timeoutMinutes, 1));
-        List<Long> orderIds = orderRepository.findReservedOrderIdsByStatusBefore(
+        List<Long> orderIds = orderRepository.findOrderIdsByStatusBefore(
                 OrderStatus.PENDING_PAYMENT,
                 cutoff
         );
@@ -68,13 +68,13 @@ public class PendingPaymentReservationTimeoutService {
         }
         if (cancelled > 0) {
             applicationCacheService.evictPendingPaymentReservationTimeout(expiredOrders);
-            log.info("Released reserved stock for {} expired pending-payment orders.", cancelled);
+            log.info("Cancelled {} expired pending-payment orders.", cancelled);
         }
     }
 
     private Order expireOrderIfStillPending(Long orderId, LocalDateTime now) {
         Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
-        if (order == null || order.getStatus() != OrderStatus.PENDING_PAYMENT || !order.isStockReserved()) {
+        if (order == null || order.getStatus() != OrderStatus.PENDING_PAYMENT) {
             return null;
         }
 

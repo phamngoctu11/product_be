@@ -25,7 +25,13 @@ public class ProductVariant {
     @Column(name = "price", nullable = false)
     private double price;
 
-    @Column(name = "quantity", nullable = false)
+    /**
+     * Transitional legacy stock column. Made-to-order business logic must not
+     * read or write this value. The column will be removed with the inventory
+     * schema cleanup after all legacy inventory consumers are migrated.
+     */
+    @Deprecated(forRemoval = true)
+    @Column(name = "quantity", nullable = false, columnDefinition = "integer default 0")
     private int quantity;
 
     @Column(name = "attributes", columnDefinition = "JSON")

@@ -15,6 +15,7 @@ import com.example.workflow.nume.GuestWorkflowStatus;
 import com.example.workflow.nume.OrderItemProductionStatus;
 import com.example.workflow.nume.OrderProductionStatus;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.redis.CheckoutConcurrencyService;
 import com.example.workflow.service.redis.CheckoutIdempotencyService;
@@ -83,7 +84,6 @@ public class CartService {
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;
-    private final InventoryReservationService inventoryReservationService;
     private final CheckoutConcurrencyService checkoutConcurrencyService;
     private final CheckoutIdempotencyService checkoutIdempotencyService;
     private final AuthService authService;
@@ -260,6 +260,7 @@ public class CartService {
         }
 
         ProductVariant variant = getActiveVariantOrThrow(variantId);
+        validateProductAcceptingOrders(variant);
         CartItem existingItem = findCartItem(cart, variantId);
 
         if (existingItem == null) {
@@ -332,7 +333,6 @@ public class CartService {
             Order savedOrder = orderRepository.saveAndFlush(order);
             hasHandmadeItems.set(savedOrder.getItems().stream().anyMatch(OrderItem::isHandmade));
             voucherService.recordGuestVoucherUsage(appliedGuestVoucher, savedOrder);
-            inventoryReservationService.reserveAndRecord(savedOrder);
 
             cartItemRepository.deleteAll(itemsToCheckout);
             cart.getItems().removeAll(itemsToCheckout);
@@ -365,7 +365,6 @@ public class CartService {
         double discountAmount = voucherService.calculateDiscountAmount(appliedVoucher, totalPrice);
         applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
         Order savedOrder = orderRepository.saveAndFlush(order);
-        inventoryReservationService.reserveAndRecord(savedOrder);
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
 
         cartItemRepository.deleteAll(itemsToCheckout);
@@ -486,8 +485,6 @@ public class CartService {
         variables.put("userId", userId);
         variables.put("paymentMethod", paymentMethod);
         variables.put("note", note);
-        variables.put("stockReserved", true);
-        variables.put("stockDeducted", false);
         runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
     }
 
@@ -751,8 +748,14 @@ public class CartService {
         if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_DELETED, variant.getId());
         }
-        if (variant.getQuantity() < cartItem.getQuantity()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variant.getId());
+        validateProductAcceptingOrders(variant);
+    }
+
+    private void validateProductAcceptingOrders(ProductVariant variant) {
+        Product product = variant == null ? null : variant.getProduct();
+        if (product == null || product.getAvailabilityStatus() != ProductAvailabilityStatus.ACCEPTING_ORDERS) {
+            Long productId = product == null ? null : product.getId();
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_NOT_ACCEPTING_ORDERS, productId);
         }
     }
 

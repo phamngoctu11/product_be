@@ -1,7 +1,7 @@
 package com.example.workflow.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.Min;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
@@ -9,6 +9,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductVariantDTO implements Serializable {
     private Long id;
 
@@ -17,9 +18,6 @@ public class ProductVariantDTO implements Serializable {
 
     @PositiveOrZero(message = "Variant price must be zero or positive")
     private double price;
-
-    @Min(value = 0, message = "Variant quantity must be zero or positive")
-    private int quantity;
 
     private String attributes;
 

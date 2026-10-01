@@ -12,6 +12,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.cache.ApplicationCacheService;
@@ -660,7 +661,7 @@ public class OrderService {
                             "Order item does not have a valid product variant."
                     );
                 }
-                validateReorderItemAvailable(item, variantId, quantity);
+                validateReorderItemAvailable(item, variantId);
                 cartService.startAddToCartProcess(ownerId, variantId, quantity);
                 addedItems.add(new ReorderItemDTO(variantId, variantName, quantity, null));
             } catch (AppException e) {
@@ -674,13 +675,17 @@ public class OrderService {
         return new ReorderResponseDTO(addedItems.size(), skippedItems.size(), addedItems, skippedItems);
     }
 
-    private void validateReorderItemAvailable(OrderItem item, Long variantId, int quantity) {
+    private void validateReorderItemAvailable(OrderItem item, Long variantId) {
         ProductVariant variant = item == null ? null : item.getProductVariant();
         if (variant == null || variant.isDelete() || variant.getProduct() == null || variant.getProduct().isDelete()) {
             throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND);
         }
-        if (variant.getQuantity() < quantity) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_OUT_OF_STOCK, variantId);
+        if (variant.getProduct().getAvailabilityStatus() != ProductAvailabilityStatus.ACCEPTING_ORDERS) {
+            throw new AppException(
+                    HttpStatus.BAD_REQUEST,
+                    ConstantErrorCode.PRODUCT_NOT_ACCEPTING_ORDERS,
+                    variant.getProduct().getId()
+            );
         }
     }
 

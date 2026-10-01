@@ -47,9 +47,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT o.id FROM Order o " +
             "WHERE o.status = :status " +
-            "AND o.stockReserved = true " +
             "AND o.startOrderTime < :cutoff")
-    List<Long> findReservedOrderIdsByStatusBefore(
+    List<Long> findOrderIdsByStatusBefore(
             @Param("status") OrderStatus status,
             @Param("cutoff") LocalDateTime cutoff
     );

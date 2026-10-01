@@ -10,6 +10,7 @@ import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
@@ -48,10 +49,11 @@ public class ProductService {
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable)")
     public Page<ProductDTO> getAllProducts(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {
-        return repository.searchByStockPriority(
+        return repository.searchByAvailabilityPriority(
                 normalizeSearchKeyword(keyword),
                 normalizePrice(minPrice),
                 normalizePrice(maxPrice),
+                ProductAvailabilityStatus.ACCEPTING_ORDERS,
                 normalizePageable(pageable)
         ).map(mapper::toDto);
     }
@@ -71,11 +73,10 @@ public class ProductService {
 
     @Transactional
     public ProductDTO createProduct(ProductDTO dto, String userId) {
-        User actor = getActor(userId);
+        getActor(userId);
         Product entity = mapper.toEntity(dto);
         prepareProductForCreate(entity);
         Product savedProduct = repository.saveAndFlush(entity);
-        recordInitialStock(savedProduct.getVariants(), actor);
 
         applicationCacheService.evictProductCreated();
         return mapper.toDto(savedProduct);
@@ -83,10 +84,8 @@ public class ProductService {
 
     @Transactional
     public void updateProduct(Long id, ProductDTO dto, String userId) {
-        User actor = getActor(userId);
+        getActor(userId);
         Product existingProduct = getActiveProduct(id);
-        List<InventoryLogEntry> inventoryLogs = new ArrayList<>();
-
         applyProductBasicInfo(existingProduct, dto, true);
 
         if (dto.getVariants() != null) {
@@ -106,23 +105,11 @@ public class ProductService {
                             .findFirst()
                             .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_PRODUCT, variantDto.getId()));
 
-                    int oldQuantity = existingVariant.getQuantity();
-                    int newQuantity = variantDto.getQuantity();
-                    int difference = newQuantity - oldQuantity;
-
                     applyVariantInfo(existingVariant, variantDto, existingProduct);
-
-                    if (difference != 0) {
-                        inventoryLogs.add(new InventoryLogEntry(existingVariant, difference, "MANUAL_ADJUSTMENT"));
-                    }
                 } else {
                     ProductVariant newVariant = createVariant(existingProduct, variantDto);
                     ProductVariant savedVariant = variantRepository.saveAndFlush(newVariant);
                     existingProduct.getVariants().add(savedVariant);
-
-                    if (savedVariant.getQuantity() > 0) {
-                        inventoryLogs.add(new InventoryLogEntry(savedVariant, savedVariant.getQuantity(), "INITIAL_STOCK"));
-                    }
                 }
             }
         } else {
@@ -130,10 +117,6 @@ public class ProductService {
         }
 
         repository.saveAndFlush(existingProduct);
-
-        for (InventoryLogEntry log : inventoryLogs) {
-            saveInventoryTransaction(log.variant(), log.changeAmount(), log.type(), actor);
-        }
         applicationCacheService.evictProductUpdated(id);
     }
 
@@ -148,8 +131,16 @@ public class ProductService {
     }
 
     @Transactional
+    public void updateAvailabilityStatus(Long id, ProductAvailabilityStatus availabilityStatus) {
+        Product product = getActiveProduct(id);
+        product.setAvailabilityStatus(Objects.requireNonNull(availabilityStatus, "Availability status is required"));
+        repository.save(product);
+        applicationCacheService.evictProductBasicInfoUpdated(id);
+    }
+
+    @Transactional
     public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
-        User actor = getActor(userId);
+        getActor(userId);
         Product product = getActiveProduct(productId);
 
         ProductVariant variant = createVariant(product, dto);
@@ -158,8 +149,6 @@ public class ProductService {
             product.setVariants(new ArrayList<>());
         }
         product.getVariants().add(savedVariant);
-
-        recordInitialStock(List.of(savedVariant), actor);
 
         ProductDTO result = mapper.toDto(repository.saveAndFlush(product));
         applicationCacheService.evictProductVariantAdded(productId);
@@ -198,11 +187,17 @@ public class ProductService {
         product.setImageUrl(dto.getImage_url());
         if (updateHandmade) {
             product.setHandmade(dto.isHandmade());
+            if (dto.getAvailabilityStatus() != null) {
+                product.setAvailabilityStatus(dto.getAvailabilityStatus());
+            }
         }
     }
 
     private void prepareProductForCreate(Product product) {
         product.setDelete(false);
+        if (product.getAvailabilityStatus() == null) {
+            product.setAvailabilityStatus(ProductAvailabilityStatus.ACCEPTING_ORDERS);
+        }
         if (product.getVariants() == null) {
             return;
         }
@@ -212,17 +207,6 @@ public class ProductService {
     private void applyVariantOwnership(Product product, ProductVariant variant) {
         variant.setProduct(product);
         variant.setDelete(false);
-    }
-
-    private void recordInitialStock(List<ProductVariant> variants, User actor) {
-        if (variants == null) {
-            return;
-        }
-        for (ProductVariant variant : variants) {
-            if (variant.getQuantity() > 0) {
-                saveInventoryTransaction(variant, variant.getQuantity(), "INITIAL_STOCK", actor);
-            }
-        }
     }
 
     private ProductVariant createVariant(Product product, ProductVariantDTO dto) {
@@ -235,7 +219,6 @@ public class ProductService {
         variant.setProduct(product);
         variant.setVariantName(dto.getVariantName());
         variant.setPrice(dto.getPrice());
-        variant.setQuantity(dto.getQuantity());
         variant.setAttributes(dto.getAttributes());
         variant.setImageUrl(dto.getImageUrl());
         variant.setDelete(false);
@@ -325,8 +308,5 @@ public class ProductService {
     }
 
     private record BestSellerRange(LocalDateTime fromTime, LocalDateTime toTime) {
-    }
-
-    private record InventoryLogEntry(ProductVariant variant, int changeAmount, String type) {
     }
 }

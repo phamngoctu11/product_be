@@ -1,5 +1,6 @@
 package com.example.workflow.entity;
 
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,6 +36,15 @@ public class Product {
 
     @Column(name = "is_handmade", nullable = false, columnDefinition = "boolean default true")
     private boolean handmade = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "availability_status",
+            nullable = false,
+            length = 32,
+            columnDefinition = "varchar(32) default 'ACCEPTING_ORDERS'"
+    )
+    private ProductAvailabilityStatus availabilityStatus = ProductAvailabilityStatus.ACCEPTING_ORDERS;
 
     private boolean isDelete;
 }

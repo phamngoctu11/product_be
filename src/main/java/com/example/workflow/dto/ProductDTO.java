@@ -1,9 +1,9 @@
 package com.example.workflow.dto;
 
+import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
@@ -24,9 +24,6 @@ public class ProductDTO implements Serializable {
 
     private String tags;
 
-    @Min(value = 0, message = "Quantity must be zero or positive")
-    private int quantity;
-
     @Valid
     private List<ProductVariantDTO> variants;
 
@@ -34,4 +31,6 @@ public class ProductDTO implements Serializable {
     private String image_url;
 
     private boolean handmade = true;
+
+    private ProductAvailabilityStatus availabilityStatus;
 }

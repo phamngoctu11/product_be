@@ -39,6 +39,7 @@ public enum ConstantErrorCode {
     IDEMPOTENCY_KEY_TOO_LONG("Idempotency-Key must be at most %s characters."),
     SELECTED_PRODUCTS_NOT_IN_CART("Các sản phẩm được chọn không tồn tại trong giỏ hàng."),
     PRODUCT_VARIANT_DELETED("Biến thể sản phẩm có mã %s đã bị xóa hoặc không còn được bán."),
+    PRODUCT_NOT_ACCEPTING_ORDERS("Sản phẩm có mã %s hiện không nhận đơn mới."),
     PRODUCT_VARIANT_OUT_OF_STOCK("Biến thể sản phẩm có mã %s đã hết hàng hoặc không đủ số lượng!"),
     VOUCHER_NOT_FOUND("Mã giảm giá không tồn tại."),
     VOUCHER_ALREADY_USED("Mã giảm giá này đã được sử dụng."),
