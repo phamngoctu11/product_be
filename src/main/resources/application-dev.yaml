@@ -5,10 +5,7 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/my-workflow-dev}
-  datasource:
-    url: ${DB_URL:jdbc:mysql://mysql-3046e449-tup20658-b458.d.aivencloud.com:20481/defaultdb?sslMode=REQUIRED}
-    username: ${DB_USERNAME:avnadmin}
-    password: ${DB_PASSWORD:AVNS_Kd7H_JPu_49mrZzF5Al}
+
   jpa:
     show-sql: true
     hibernate:
