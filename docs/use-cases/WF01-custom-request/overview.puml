@@ -1,0 +1,27 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF01 Custom Request
+actor "Khách hàng có tài khoản\nUSER" as User
+actor "Dịch vụ email" as Email
+rectangle "Hệ thống shop handmade — WF01" {
+  usecase "UC01.1\nXem danh sách và chi tiết\nbản nháp custom" as View
+  usecase "UC01.2\nTạo / cập nhật\nbản nháp custom" as Draft
+  usecase "UC01.3\nGửi yêu cầu tạo\nđơn custom" as Submit
+}
+User -- View
+User -- Draft
+User -- Submit
+Submit -- Email
+note bottom of Submit
+  Order CUSTOM / PENDING_APPROVAL.
+  Email và notification bất đồng bộ sau commit.
+  Manager duyệt thuộc WF02.
+end note
+legend bottom
+  Tiền điều kiện: đăng nhập USER, chỉ truy cập dữ liệu thuộc mình.
+  Đường nối là quan hệ tham gia, không phải thứ tự xử lý.
+endlegend
+@enduml

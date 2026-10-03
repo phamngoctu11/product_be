@@ -239,7 +239,7 @@ public class OrderService {
         User manager = getManagerReviewer(changerId);
         User assignedStaff = request.isApproved() && staffId != null ? getStaffById(staffId) : null;
 
-        Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
+        //Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
 
         OrderStatus oldStatus = order.getStatus();
         order.setManager(manager);
@@ -269,7 +269,7 @@ public class OrderService {
         } else {
             saveOrderAndAuditStatusChange(order, oldStatus, null);
         }
-        taskService.complete(task.getId(), variables);
+        //taskService.complete(task.getId(), variables);
 
         applicationCacheService.evictManagerReviewed(
                 order,

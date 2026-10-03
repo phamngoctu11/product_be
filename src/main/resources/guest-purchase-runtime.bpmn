@@ -1,50 +1,191 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
-                  id="Definitions_GuestPurchaseRuntime"
-                  targetNamespace="http://handmade-shop/process/guest-purchase-runtime">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_GuestPurchaseRuntime" targetNamespace="http://handmade-shop/process/guest-purchase-runtime" exporter="Camunda Modeler" exporterVersion="5.49.0">
   <bpmn:process id="GuestPurchaseFlow" name="Guest Purchase Post-order Flow" isExecutable="true" camunda:historyTimeToLive="180">
     <bpmn:documentation>
       Phase 7 runtime starts only after the guest order transaction commits. Checkout, stock reservation,
       voucher usage, contact snapshot and lookup token remain synchronous outside Camunda.
     </bpmn:documentation>
     <bpmn:startEvent id="Start_GuestOrderCreated">
-      <bpmn:outgoing>Flow_Start_To_Publish</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Start_To_Parallel</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="Task_PublishGuestOrderCreated"
-                      name="Publish guest order confirmation event"
-                      camunda:delegateExpression="${workflowTaskDelegate}"
-                      camunda:asyncBefore="true"
-                      camunda:exclusive="true">
+    <bpmn:parallelGateway id="Gateway_GuestPostOrderSplit" name="Start confirmation and review">
+      <bpmn:incoming>Flow_Start_To_Parallel</bpmn:incoming>
+      <bpmn:outgoing>Flow_Split_To_Publish</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Split_To_ManagerApproval</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Publish guest order confirmation event" camunda:asyncBefore="true" camunda:delegateExpression="${workflowTaskDelegate}">
       <bpmn:extensionElements>
         <camunda:inputOutput>
           <camunda:inputParameter name="taskType">PUBLISH_WORKFLOW_EVENT</camunda:inputParameter>
           <camunda:inputParameter name="eventType">GUEST_ORDER_CREATED</camunda:inputParameter>
         </camunda:inputOutput>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_Start_To_Publish</bpmn:incoming>
-      <bpmn:outgoing>Flow_Publish_To_HandmadeGateway</bpmn:outgoing>
+      <bpmn:incoming>Flow_Split_To_Publish</bpmn:incoming>
+      <bpmn:outgoing>Flow_Publish_To_ApprovalJoin</bpmn:outgoing>
     </bpmn:serviceTask>
+    <bpmn:userTask id="manager_approve_order" name="Manager reviews guest order" camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_Split_To_ManagerApproval</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManagerApproval_To_Decision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_GuestOrderApproved" name="Guest order approved?">
+      <bpmn:incoming>Flow_ManagerApproval_To_Decision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved_To_ApprovalJoin</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Rejected_To_Cancel</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_CancelRejectedGuestOrder" name="Cancel rejected guest order" camunda:delegateExpression="${cancelOrderDelegate}">
+      <bpmn:incoming>Flow_Rejected_To_Cancel</bpmn:incoming>
+      <bpmn:outgoing>Flow_Cancel_To_RejectedEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_GuestOrderRejected" name="Guest order rejected">
+      <bpmn:incoming>Flow_Cancel_To_RejectedEnd</bpmn:incoming>
+      <bpmn:terminateEventDefinition />
+    </bpmn:endEvent>
+    <bpmn:parallelGateway id="Gateway_GuestApprovalJoin" name="Confirmation published and order approved">
+      <bpmn:incoming>Flow_Publish_To_ApprovalJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_Approved_To_ApprovalJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApprovalJoin_To_HandmadeGateway</bpmn:outgoing>
+    </bpmn:parallelGateway>
     <bpmn:exclusiveGateway id="Gateway_ContainsHandmadeItems" name="Contains handmade items?">
-      <bpmn:incoming>Flow_Publish_To_HandmadeGateway</bpmn:incoming>
+      <bpmn:incoming>Flow_ApprovalJoin_To_HandmadeGateway</bpmn:incoming>
       <bpmn:outgoing>Flow_ReadyMade_To_End</bpmn:outgoing>
       <bpmn:outgoing>Flow_Handmade_To_Assignment</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask id="Task_ManagerAssignHandmadeItems"
-                   name="Manager assigns handmade items"
-                   camunda:candidateGroups="MANAGER">
+    <bpmn:userTask id="Task_ManagerAssignHandmadeItems" name="Manager assigns handmade items" camunda:candidateGroups="MANAGER">
       <bpmn:incoming>Flow_Handmade_To_Assignment</bpmn:incoming>
     </bpmn:userTask>
     <bpmn:endEvent id="End_GuestPostOrderProcessing">
       <bpmn:incoming>Flow_ReadyMade_To_End</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:sequenceFlow id="Flow_Start_To_Publish" sourceRef="Start_GuestOrderCreated" targetRef="Task_PublishGuestOrderCreated" />
-    <bpmn:sequenceFlow id="Flow_Publish_To_HandmadeGateway" sourceRef="Task_PublishGuestOrderCreated" targetRef="Gateway_ContainsHandmadeItems" />
+    <bpmn:sequenceFlow id="Flow_Start_To_Parallel" sourceRef="Start_GuestOrderCreated" targetRef="Gateway_GuestPostOrderSplit" />
+    <bpmn:sequenceFlow id="Flow_Split_To_Publish" sourceRef="Gateway_GuestPostOrderSplit" targetRef="Task_PublishGuestOrderCreated" />
+    <bpmn:sequenceFlow id="Flow_Split_To_ManagerApproval" sourceRef="Gateway_GuestPostOrderSplit" targetRef="manager_approve_order" />
+    <bpmn:sequenceFlow id="Flow_Publish_To_ApprovalJoin" sourceRef="Task_PublishGuestOrderCreated" targetRef="Gateway_GuestApprovalJoin" />
+    <bpmn:sequenceFlow id="Flow_ManagerApproval_To_Decision" sourceRef="manager_approve_order" targetRef="Gateway_GuestOrderApproved" />
+    <bpmn:sequenceFlow id="Flow_Approved_To_ApprovalJoin" name="Approved" sourceRef="Gateway_GuestOrderApproved" targetRef="Gateway_GuestApprovalJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rejected_To_Cancel" name="Rejected" sourceRef="Gateway_GuestOrderApproved" targetRef="Task_CancelRejectedGuestOrder">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Cancel_To_RejectedEnd" sourceRef="Task_CancelRejectedGuestOrder" targetRef="End_GuestOrderRejected" />
+    <bpmn:sequenceFlow id="Flow_ApprovalJoin_To_HandmadeGateway" sourceRef="Gateway_GuestApprovalJoin" targetRef="Gateway_ContainsHandmadeItems" />
     <bpmn:sequenceFlow id="Flow_ReadyMade_To_End" name="No" sourceRef="Gateway_ContainsHandmadeItems" targetRef="End_GuestPostOrderProcessing">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${hasHandmadeItems == false}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_Handmade_To_Assignment" name="Yes" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_ManagerAssignHandmadeItems">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${hasHandmadeItems == true}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_GuestPurchaseRuntime">
+    <bpmndi:BPMNPlane id="BPMNPlane_GuestPurchaseRuntime" bpmnElement="GuestPurchaseFlow">
+      <bpmndi:BPMNShape id="Start_GuestOrderCreated_di" bpmnElement="Start_GuestOrderCreated">
+        <dc:Bounds x="160" y="200" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_GuestPostOrderSplit_di" bpmnElement="Gateway_GuestPostOrderSplit" isMarkerVisible="true">
+        <dc:Bounds x="250" y="193" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="231" y="276" width="87" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_PublishGuestOrderCreated_di" bpmnElement="Task_PublishGuestOrderCreated">
+        <dc:Bounds x="380" y="80" width="180" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manager_approve_order_di" bpmnElement="manager_approve_order">
+        <dc:Bounds x="380" y="230" width="180" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_GuestOrderApproved_di" bpmnElement="Gateway_GuestOrderApproved" isMarkerVisible="true">
+        <dc:Bounds x="620" y="245" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="615" y="207.5" width="59" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CancelRejectedGuestOrder_di" bpmnElement="Task_CancelRejectedGuestOrder">
+        <dc:Bounds x="730" y="370" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestOrderRejected_di" bpmnElement="End_GuestOrderRejected">
+        <dc:Bounds x="960" y="392" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="949" y="435" width="59" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_GuestApprovalJoin_di" bpmnElement="Gateway_GuestApprovalJoin" isMarkerVisible="true">
+        <dc:Bounds x="750" y="245" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="726" y="305" width="98" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ContainsHandmadeItems_di" bpmnElement="Gateway_ContainsHandmadeItems" isMarkerVisible="true">
+        <dc:Bounds x="895" y="245" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="876" y="304.5" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerAssignHandmadeItems_di" bpmnElement="Task_ManagerAssignHandmadeItems">
+        <dc:Bounds x="1025" y="230" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_GuestPostOrderProcessing_di" bpmnElement="End_GuestPostOrderProcessing">
+        <dc:Bounds x="902" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_To_Parallel_di" bpmnElement="Flow_Start_To_Parallel">
+        <di:waypoint x="196" y="218" />
+        <di:waypoint x="250" y="218" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_To_Publish_di" bpmnElement="Flow_Split_To_Publish">
+        <di:waypoint x="275" y="193" />
+        <di:waypoint x="275" y="120" />
+        <di:waypoint x="380" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_To_ManagerApproval_di" bpmnElement="Flow_Split_To_ManagerApproval">
+        <di:waypoint x="275" y="243" />
+        <di:waypoint x="275" y="270" />
+        <di:waypoint x="380" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Publish_To_ApprovalJoin_di" bpmnElement="Flow_Publish_To_ApprovalJoin">
+        <di:waypoint x="560" y="120" />
+        <di:waypoint x="775" y="120" />
+        <di:waypoint x="775" y="245" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManagerApproval_To_Decision_di" bpmnElement="Flow_ManagerApproval_To_Decision">
+        <di:waypoint x="560" y="270" />
+        <di:waypoint x="620" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_To_ApprovalJoin_di" bpmnElement="Flow_Approved_To_ApprovalJoin">
+        <di:waypoint x="670" y="270" />
+        <di:waypoint x="750" y="270" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="671" y="257" width="48" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Rejected_To_Cancel_di" bpmnElement="Flow_Rejected_To_Cancel">
+        <di:waypoint x="645" y="295" />
+        <di:waypoint x="645" y="410" />
+        <di:waypoint x="730" y="410" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="658" y="387" width="44" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cancel_To_RejectedEnd_di" bpmnElement="Flow_Cancel_To_RejectedEnd">
+        <di:waypoint x="900" y="410" />
+        <di:waypoint x="960" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ApprovalJoin_To_HandmadeGateway_di" bpmnElement="Flow_ApprovalJoin_To_HandmadeGateway">
+        <di:waypoint x="800" y="270" />
+        <di:waypoint x="895" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReadyMade_To_End_di" bpmnElement="Flow_ReadyMade_To_End">
+        <di:waypoint x="920" y="245" />
+        <di:waypoint x="920" y="138" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="896" y="204" width="15" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Handmade_To_Assignment_di" bpmnElement="Flow_Handmade_To_Assignment">
+        <di:waypoint x="945" y="270" />
+        <di:waypoint x="1025" y="270" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="976" y="253" width="18" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

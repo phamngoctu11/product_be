@@ -51,7 +51,7 @@ checkout:
     scan-delay-ms: ${CHECKOUT_RESERVATION_TIMEOUT_SCAN_DELAY_MS:60000}
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
-  realm: ${KEYCLOAK_REALM:my-workflow}
+  realm: ${KEYCLOAK_REALM:my-workflow-dev}
   client-id: ${KEYCLOAK_CLIENT_ID:workflow-frontend}
   admin:
     realm: ${KEYCLOAK_ADMIN_REALM:master}
@@ -65,7 +65,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/my-workflow}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/my-workflow-dev}
   mail:
     host: smtp.gmail.com
     port: 587
@@ -78,9 +78,9 @@ spring:
           starttls:
             enable: true
   datasource:
-    url: ${DB_URL:jdbc:mysql://103.149.170.20:3306/A45488}
-    username: ${DB_USERNAME:A45488}
-    password: ${DB_PASSWORD:A45488@thanglong}
+    url: ${DB_URL:jdbc:mysql://mysql-3046e449-tup20658-b458.d.aivencloud.com:20481/defaultdb?sslMode=REQUIRED}
+    username: ${DB_USERNAME:avnadmin}
+    password: ${DB_PASSWORD:AVNS_Kd7H_JPu_49mrZzF5Al}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     mongodb:

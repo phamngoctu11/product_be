@@ -1,625 +1,861 @@
-Chúng ta sẽ phát triển hệ thống hiện tại thành một shop bán đồ handmade đa danh mục theo mô hình made-to-order, có 2 nhóm khách chính: user hệ thống và non-user/guest. Sản phẩm treo trên shop mặc định là mẫu thiết kế/catalog do shop xây dựng, không phải thành phẩm có sẵn trong kho; ảnh sản phẩm là ảnh mẫu và giao diện phải thông báo rõ sản phẩm chỉ được làm sau khi đặt hàng. Khách có thể đặt làm theo mẫu của shop hoặc gửi yêu cầu custom. User hệ thống có tài khoản, được dùng voucher cá nhân, tích điểm/reputation, tạo custom request, chat realtime với staff phụ trách order và theo dõi checkpoint trong hệ thống. Non-user/guest vẫn được xem sản phẩm, lọc/search, thêm giỏ hàng bằng guestSessionId, checkout bằng form thông tin cá nhân, dùng public voucher nếu hợp lệ, nhận email xác nhận đơn/thời hạn/checkpoint và có orderLookupToken để tra cứu đơn. Custom request chỉ dành cho user hệ thống để đảm bảo có lịch sử trao đổi, báo giá, duyệt yêu cầu và quản lý thay đổi rõ ràng.
-Về công nghệ áp dụng:
-•
-Redis Cache dùng cho category tree, product listing/filter/search, product detail, best-selling, public voucher template, guest session TTL, rate limit, idempotency checkout, cart summary phụ và chat presence.
-•
-Redis Stream dùng cho event bất đồng bộ như ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, ORDER_STAFF_ASSIGNED, STAFF_ASSIGNED, ORDER_DEADLINE_PROPOSED, ORDER_DEADLINE_CONFIRMED, PRODUCTION_STARTED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED, audit và thống kê.
-•
-Camunda dùng cho workflow dài ngày có con người tham gia: custom request approval, quote/acceptance, phân staff chính phụ trách Order, thỏa thuận/xác nhận thời hạn, change request từ chat, phân staff theo OrderItem, production checkpoint, rework và final QC.
-•
-Database vẫn là nguồn dữ liệu chính cho product production configuration, cart, order, order item, custom request, payment, voucher usage, assignment, deadline proposal/agreement, checkpoint, image/attachment. Redis không được dùng thay database.
-•
-WebSocket/chat dùng cho user hệ thống để trao đổi trong phòng chat riêng của Order với staff chính phụ trách Order, xác nhận các thay đổi nghiệp vụ bằng thao tác có cấu trúc và nhận checkpoint realtime.
-•
-Email dùng cho guest/non-user để xác nhận đơn, đề xuất/xác nhận thời hạn bằng link bảo mật, gửi checkpoint và link tra cứu đơn.
-Các entity/khái niệm chính cần triển khai hoặc mở rộng:
-GuestSession
-Cart
-Order
-OrderContactSnapshot
-OrderLookupToken
-OrderItem
-OrderDeadlineProposal
-OrderItemAssignment
-ProductionCheckpoint
-ProductionCheckpointImage
-CustomRequest
-CustomRequestSpec
-CustomRequestAttachment
-CustomRequestQuote
-OrderItemChangeRequest
-VoucherTemplate
-UserVoucher
-Guest/PublicVoucherUsage
-Notification
-ChatThread
-ChatMessage
-Các rule nghiệp vụ đã chốt:
-•
-Product listing/detail public cho cả user và guest.
-•
-Sản phẩm trên catalog mặc định là mẫu MADE_TO_ORDER, không phải thành phẩm có sẵn trong kho.
-•
-Khách có thể đặt theo mẫu của shop; custom request là luồng riêng dành cho user hệ thống.
-•
-Không quản lý tồn kho thành phẩm bằng ProductVariant.quantity và không giữ/trừ/hoàn stock khi cart, checkout hoặc reorder.
-•
-Vẫn giữ quantity của CartItem, OrderItem, exportedQuantity, receivedQuantity và quota phát hành voucher vì đây không phải tồn kho thành phẩm.
-•
-Mẫu sản phẩm dùng trạng thái ACCEPTING_ORDERS, PAUSED, DISCONTINUED để kiểm soát khả năng nhận đơn.
-•
-Quản lý nguyên vật liệu và công suất sản xuất chi tiết chưa thuộc phạm vi hiện tại, có thể phát triển thành module riêng sau.
-•
-Cart của user gắn với userId; cart của guest gắn với guestSessionId.
-•
-Guest checkout bắt buộc nhập họ tên, email, số điện thoại, địa chỉ, ghi chú nếu có.
-•
-Sau guest checkout, tạo Order với userId = null, lưu contact snapshot và tạo orderLookupToken.
-•
-Custom request chỉ dành cho user hệ thống.
-•
-Guest muốn custom request thì được yêu cầu đăng nhập/tạo tài khoản.
-•
-User dùng voucher cá nhân, ví voucher, reputation.
-•
-Guest chỉ dùng public voucher hoặc voucher campaign giới hạn; không có voucher wallet/reputation.
-•
-Production workflow nên chạy theo từng OrderItem, không chỉ theo Order.
-•
-Mỗi Order trước mắt có một staff chính do manager phân công; staff này là đầu mối trao đổi với khách và chịu trách nhiệm theo dõi thời hạn toàn Order.
-•
-Staff được manager phân từng item.
-•
-Order.assignedStaff và OrderItemAssignment là hai vai trò khác nhau; giai đoạn đầu có thể là cùng một người, hỗ trợ nhiều staff phụ trách một Order sẽ mở rộng sau.
-•
-Mỗi mẫu sản phẩm có thời gian tham khảo cho sản phẩm đầu tiên, mỗi sản phẩm bổ sung và thời gian dự phòng; không giảm 10% lũy tiến theo số lượng.
-•
-Thời gian do hệ thống tính chỉ là gợi ý. Staff phải gửi deadline proposal có cấu trúc và khách phải bấm xác nhận trước khi thời hạn trở thành cam kết.
-•
-Nếu staff thay đổi deadline đã đề xuất/xác nhận thì xác nhận cũ mất hiệu lực và khách phải xác nhận lại.
-•
-Chỉ bắt đầu production khi trạng thái thanh toán/checkout hợp lệ và khách đã xác nhận thời hạn.
-•
-Staff submit 2 mốc checkpoint chính: INITIAL_SHAPE và FINAL_PRODUCT.
-•
-Mỗi checkpoint stage có thể có nhiều attempt nếu bị yêu cầu sửa.
-•
-User nhận checkpoint qua chat socket.
-•
-Guest nhận checkpoint qua email.
-•
-Manager không nhất thiết duyệt mọi checkpoint của user, nhưng cần duyệt khi có thay đổi lớn/spec/giá/deadline hoặc final QC theo policy.
-•
-Với guest, nên auto gửi checkpoint 1 nếu rủi ro thấp, nhưng checkpoint final nên có manager QC trước khi gửi/giao.
-•
-Mọi thay đổi lớn từ chat phải tạo OrderItemChangeRequest, không chỉ lưu trong chat.
-•
-Nội dung chat không phải nguồn dữ liệu chính thức cho deadline; deadline proposal, người xác nhận, thời điểm xác nhận và phiên bản cam kết phải lưu trong database.
-•
-Không gọi thao tác staff là checkout; nên gọi là checkpoint hoặc production submission.
-Các sơ đồ luồng hoạt động đã thiết kế:
-1.
-Luồng tổng thể shop handmade
-Khách vào shop
-  → Xem danh sách sản phẩm
-  → Filter theo danh mục / giá / chất liệu / màu / keyword
-  → Nếu đặt theo mẫu thiết kế của shop: chọn biến thể/số lượng và thêm cart
-  → Nếu muốn custom: tạo Custom Request, chỉ dành cho user
-  → Checkout
-  → Tạo Order
-  → Manager phân một staff chính phụ trách Order
-  → Staff và khách trao đổi trong phòng chat của Order
-  → Staff gửi thời hạn dự kiến cho từng item và deadline proposal cho toàn Order
-  → Khách xác nhận thời hạn bằng thao tác có cấu trúc
-  → Manager phân staff theo từng item
-  → Khi thanh toán/checkout hợp lệ và deadline đã được xác nhận: bắt đầu production
-  → Staff làm sản phẩm
-  → Checkpoint 1: hình dáng ban đầu + ảnh
-  → Checkpoint 2: sản phẩm hoàn thiện + ảnh
-  → Thông báo khách
-  → Giao hàng / hoàn tất
-2.
-Luồng guestSessionId
-FE tạo hoặc đọc guestSessionId
-  → Gửi X-Guest-Session-Id khi thao tác cart
-  → Backend tìm/tạo GuestSession
-  → Backend tìm/tạo Cart theo guestSessionId
-  → Guest thêm/sửa/xóa item
-  → Guest checkout
-  → Nhập thông tin cá nhân
-  → Tạo Order userId = null
-  → Lưu contact snapshot
-  → Tạo orderLookupToken
-  → Gửi email xác nhận đơn
-  → Nhận deadline proposal và xác nhận bằng link bảo mật trong email
-3.
-Luồng checkout user vs guest
-Checkout
-  → Nếu đã login:
-      lấy userId từ JWT
-      xác nhận thông tin giao hàng
-      áp dụng voucher user/reputation
-      tạo Order userId != null
-  → Nếu guest:
-      đọc guestSessionId
-      hiển thị form thông tin cá nhân
-      validate email/phone/address
-      áp dụng public voucher nếu có
-      tạo Order userId = null
-      tạo orderLookupToken
-      gửi email xác nhận
-  → Clear cart
-  → Không reserve/deduct tồn kho thành phẩm
-  → Chuyển Order sang bước phân staff và thỏa thuận thời hạn
-4.
-Luồng custom request cho user
-User login
-  → Tạo Custom Request
-  → Nhập chất liệu / màu / hình dáng / kích thước / ghi chú
-  → Upload ảnh tham khảo
-  → Manager review
-      → Reject
-      → Need more info
-      → Approve + quote
-  → User xác nhận báo giá
-      → Không đồng ý: request đóng/hủy
-      → Đồng ý: tạo Order
-  → Manager phân staff chính phụ trách Order
-  → Staff và user trao đổi, gửi deadline proposal
-  → User xác nhận thời hạn
-  → Khi thanh toán hợp lệ: bắt đầu production workflow theo OrderItem
-5.
-Luồng sản xuất theo từng item
-Order đã được tạo/duyệt, thanh toán/checkout hợp lệ và deadline đã được khách xác nhận
-  → Tách từng OrderItem
-  → Manager gán staff cho từng item
-  → Staff nhận item
-  → Staff làm sản phẩm
-  → Submit checkpoint INITIAL_SHAPE + ảnh
-  → User/Manager phản hồi theo policy
-      → Đồng ý: tiếp tục
-      → Yêu cầu sửa: staff làm lại
-      → Đổi spec/giá/deadline: tạo ChangeRequest
-  → Submit checkpoint FINAL_PRODUCT + ảnh
-  → Final QC theo policy
-  → Item READY_TO_SHIP
-  → Khi tất cả item ready: Order READY_TO_SHIP
-6.
-Luồng thông báo cho khách
-Staff submit checkpoint
-  → Hệ thống tạo event CHECKPOINT_SUBMITTED
-  → Nếu cần manager review:
-      Manager duyệt
-      Nếu reject/rework: báo staff
-      Nếu approve: gửi khách
-  → Nếu không cần manager review:
-      gửi khách ngay
-  → Nếu order có userId:
-      gửi notification/chat realtime
-  → Nếu guest:
-      gửi email
-  → Lưu lịch sử notification
+ĐẶC TẢ NGHIỆP VỤ VÀ TRIỂN KHAI SHOP HANDMADE MADE-TO-ORDER
+Phiên bản bàn giao phân tích: 03/10/2026
 
-Staff gửi deadline proposal
-  → Hệ thống lưu proposal/version vào database
-  → Nếu order có userId:
-      gửi realtime event vào phòng chat của Order
-      user bấm xác nhận thời hạn
-  → Nếu guest:
-      gửi email chứa link xác nhận bảo mật
-  → Khi khách xác nhận:
-      lưu committedCompletionAt/deadlineConfirmedAt/deadlineConfirmedBy
-      gửi email xác nhận cam kết
-      nếu thanh toán/checkout hợp lệ thì cho phép bắt đầu production
-7.
-Luồng user hệ thống
-User đăng nhập
-  → Xem/filter/search sản phẩm
-  → Chọn đặt theo mẫu của shop hoặc tạo custom request
-  → Nếu đặt theo mẫu của shop:
-      thêm cart theo userId
-      áp dụng voucher user/reputation
-      checkout bằng thông tin tài khoản
-      tạo order
-  → Nếu custom:
-      tạo request
-      manager duyệt/báo giá
-      user xác nhận
-      tạo order
-  → Manager phân staff chính phụ trách order
-  → Staff và user trao đổi trong phòng chat riêng của order
-  → Staff gửi deadline proposal
-  → User bấm xác nhận thời hạn
-  → Khi thanh toán/checkout hợp lệ: bắt đầu production
-  → Nếu item handmade:
-      manager phân staff theo item
-      staff submit checkpoint 1
-      gửi qua chat socket
-      user phản hồi
-      staff submit checkpoint 2
-      gửi qua chat socket
-      final QC nếu policy yêu cầu
-  → Giao hàng
-  → Hoàn tất
-8.
-Luồng non-user/guest
-Guest vào shop
-  → Hệ thống tạo/đọc guestSessionId
-  → Xem/filter/search sản phẩm
-  → Thêm cart theo guestSessionId
-  → Nếu muốn custom request:
-      yêu cầu đăng nhập/tạo tài khoản
-  → Checkout guest
-  → Nhập họ tên/email/phone/địa chỉ/ghi chú
-  → Áp dụng public voucher nếu có
-  → Tạo guest order
-  → Lưu contact snapshot
-  → Tạo orderLookupToken
-  → Gửi email xác nhận
-  → Manager phân staff chính phụ trách order
-  → Staff gửi deadline proposal
-  → Guest xác nhận thời hạn bằng link bảo mật trong email
-  → Khi thanh toán/checkout hợp lệ: bắt đầu production
-  → Nếu item handmade:
-      manager phân staff theo item
-      staff submit checkpoint 1
-      auto email hoặc manager duyệt theo policy
-      staff submit checkpoint 2
-      manager final QC
-      gửi email checkpoint final
-  → Giao hàng
-  → Hoàn tất
-  → Email mời tạo tài khoản để nhận voucher/theo dõi tốt hơn
-9.
-Redis/Camunda mapping
-Redis Cache:
-  category, product listing/search, product detail, voucher template,
-  guest session TTL, rate limit, checkout idempotency, chat presence
+A. MỤC ĐÍCH VÀ CÁCH SỬ DỤNG
 
-Redis Stream:
-  order created, guest order created, custom request submitted,
-  order staff assigned, item staff assigned, deadline proposed/confirmed,
-  production started, checkpoint submitted/approved/rework,
-  email requested, notification requested, audit, statistics
+Tài liệu mô tả hệ thống cần xây dựng để đội phát triển thiết kế database, API, giao diện, BPMN, sự kiện và kiểm thử. Mỗi luồng chỉ rõ người thực hiện, đầu vào, hoạt động, đầu ra và điều kiện chấp nhận kết quả. Không cần tham chiếu lịch sử trao đổi để hiểu yêu cầu.
 
-Camunda:
-  custom request approval,
-  quote acceptance,
-  order staff assignment,
-  deadline proposal/confirmation,
-  order item production,
-  staff assignment,
-  checkpoint review/rework,
-  final QC,
-  change request approval
-CHƯƠNG 1:triển khai
-I,Phase 2 — Guest checkout data model
-Mục tiêu:
-•
-DB hỗ trợ order của guest.
-Thêm/sửa entity:
-Order.user nullable
-Order.guestSessionId
-OrderContactSnapshot
-Order.orderLookupToken hoặc bảng OrderLookupToken
-Thông tin snapshot:
-fullName
-email
-phone
-address
-note
-Test:
-•
-Migration/JPA chạy được.
-•
-Tạo order user vẫn hoạt động.
-•
-Tạo order guest lưu được userId = null.
-•
-Không ảnh hưởng order hiện tại.
-Phase 3 — Guest checkout API đồng bộ, chưa Camunda
-Mục tiêu:
-•
-Guest có thể checkout tạo order thật.
-•
-Chưa đưa Camunda vào runtime.
-•
-Chưa cần email thật nếu muốn đơn giản.
-API đề xuất:
-POST /api/checkout/guest
-Header: X-Guest-Session-Id
-Body:
-{
-  "fullName": "...",
-  "email": "...",
-  "phone": "...",
-  "address": "...",
-  "note": "...",
-  "paymentMethod": "COD",
-  "voucherCode": "..."
+Nội dung gồm:
+- Yêu cầu đã xác định: các hành vi nghiệp vụ được mô tả trực tiếp.
+- Thiết kế triển khai đề xuất: tên trạng thái trung gian, cấu trúc dữ liệu, hợp đồng API và cách xử lý kỹ thuật; phải đối chiếu khi hiện thực.
+- Quyết định nghiệp vụ còn thiếu: tập trung tại mục O, có mã Oxx để dev không tự đặt chính sách thay người phụ trách sản phẩm.
+
+ORDER_ACCEPTED, ORDER_CREATING và READY_TO_SHIP là các mốc đã xác định.
+Tên enum trung gian và trạng thái kết thúc trong bảng trạng thái là đề xuất chuẩn hóa. Tài liệu không khẳng định mọi chức năng đã có trong code.
+
+B. MỤC TIÊU, PHẠM VI VÀ TÁC NHÂN
+
+B1. Mục tiêu
+Xây dựng shop handmade đa danh mục theo mô hình made-to-order. Catalog là mẫu thiết kế, ảnh sản phẩm là ảnh mẫu. Sản phẩm được làm sau khi đơn đủ điều kiện và staff bấm bắt đầu.
+Khách có thể đặt theo mẫu catalog hoặc, nếu có tài khoản, tạo yêu cầu custom.
+Mỗi đơn do một staff phụ trách cả giao tiếp và sản xuất. Staff chỉ có một assignment sản xuất đang hoạt động; assignment kết thúc khi toàn đơn qua KCS checkpoint 2 hoặc đơn bị hủy.
+
+B2. Phạm vi triển khai
+- Catalog, danh mục, lọc/tìm kiếm, cấu hình thời gian tham khảo.
+- Tài khoản và phân quyền.
+- Cart user/guest, checkout, voucher và reputation.
+- Nhiều bản nháp custom của một user; chuyển bản nháp được chọn thành Order.
+- Manager duyệt khả năng làm; assign/claim staff.
+- Chat theo Order, user nhập thỏa thuận, staff xác nhận.
+- Thanh toán online sau duyệt/chốt thông tin; COD theo điều kiện.
+- Staff chủ động bắt đầu; hai checkpoint, rework và final QC.
+- ChangeRequest miễn phí cho chi tiết chưa triển khai; không thay đổi giá hoặc tạo thanh toán bổ sung.
+- Giao hàng, tra cứu và xác nhận số lượng thực nhận.
+- Hủy đơn, đặt lại theo catalog, email, notification và lịch sử.
+
+Không triển khai trong phạm vi:
+- Quản lý tồn kho thành phẩm, giữ/trừ/hoàn stock.
+- Quản lý nguyên vật liệu và tối ưu công suất xưởng chi tiết.
+- Nhiều staff đồng thời chia việc sản xuất trong một Order.
+- Workflow complaint và hồ sơ khiếu nại sau bán. Đối chiếu số lượng nằm trong luồng nhận hàng; đánh giá chỉ triển khai cho catalog, chưa có đánh giá custom.
+- Tích hợp hãng vận chuyển: giao hàng là bên thứ ba, thời gian giả định 2 ngày cho mọi đơn. Không xây dựng tài khoản/luồng tác nghiệp shipper trong hệ thống.
+- Tự động hoàn tiền và tự xác nhận nhận hàng khi khách im lặng; không suy từ timer custom 24 giờ sang bước nhận hàng.
+
+B3. Tác nhân
+- Guest: xem catalog, giỏ phiên, checkout COD, public voucher, tra cứu và nhận hàng qua link bảo mật; không có ví voucher/reputation/custom.
+- USER: tài khoản, giỏ, COD/online theo reputation, custom, chat, gửi thỏa thuận, thanh toán, ChangeRequest, nhận hàng, hủy và reorder theo quyền.
+- STAFF: nhận đơn khi AVAILABLE, trao đổi, xác nhận thỏa thuận/ChangeRequest, bấm bắt đầu, thực hiện sản xuất và checkpoint, chuẩn bị giao.
+- MANAGER: duyệt khả năng thực hiện, phân công, giám sát đơn, review/QC theo policy, quản lý catalog/voucher.
+- ADMIN: quản trị kỹ thuật và các chức năng quản trị được cấp quyền; không tự kế thừa toàn bộ quyền MANAGER.
+- Cổng thanh toán: tạo giao dịch và gửi webhook kết quả.
+- Dịch vụ email: gửi các thông báo email.
+- Backend, Camunda và event consumer: tác nhân nội bộ thực hiện bước tự động.
+
+C. DỮ LIỆU VÀ CÁC QUY TẮC CHUNG
+
+C1. Phân loại đơn
+CATALOG:
+- Tạo từ các mục được chọn trong cart.
+- Backend lấy giá catalog và lưu snapshot vào OrderItem khi tạo đơn.
+- User/staff không sửa hoặc thương lượng đơn giá trong chat, form xác nhận hoặc ChangeRequest.
+- Thay đổi giá catalog sau khi đặt không cập nhật ngược giá OrderItem.
+- Voucher làm giảm tổng tiền theo chính sách, không sửa đơn giá snapshot.
+
+CUSTOM:
+- Tạo từ một CustomRequest user chọn gửi.
+- Có một loại CustomItem, có thể có quantity lớn hơn một.
+- Nội dung/ảnh được chụp vào đơn, không phụ thuộc việc sửa bản nháp sau đó.
+- Giá thương lượng chỉ thành giá chính thức khi staff xác nhận bản thông tin user gửi.
+- Trước khi chốt, giá phải được biểu diễn là chưa xác định; không coi số 0 mặc định là giá thanh toán hợp lệ.
+
+C2. Số lượng và khả năng nhận đơn
+- CartItem.quantity và OrderItem.quantity là số nguyên dương.
+- exportedQuantity: số lượng thực tế bàn giao giao hàng.
+- receivedQuantity: số lượng khách thực nhận.
+- Không dùng các trường này làm tồn kho.
+- Product availability: ACCEPTING_ORDERS, PAUSED, DISCONTINUED.
+- Chỉ mẫu ACCEPTING_ORDERS được thêm mới, checkout hoặc reorder.
+- Quota voucher là giới hạn phát hành/sử dụng voucher, phải được kiểm soát độc lập.
+
+C3. Định danh, liên hệ và giá trị tiền
+- User được xác định từ JWT, không tin userId do client tự nhận.
+- Guest cart gắn guestSessionId; phiên giỏ không cấp quyền xem mọi đơn.
+- Order user có userId; Order guest có userId = null và guestSessionId.
+- Khi tạo đơn lưu snapshot họ tên, email, điện thoại, địa chỉ và ghi chú.
+- Guest bắt buộc họ tên/email/phone/address; note tùy chọn.
+- Token guest lưu bản băm; không trả token của đơn khác trong API danh sách.
+- Backend tính tổng tiền và số tiền thanh toán từ dữ liệu chính thức.
+- Triển khai tiền bằng biểu diễn chính xác, ví dụ số nguyên VND hoặc decimal; không dựa vào phép tính dấu phẩy động phía client.
+- Quy tắc làm tròn, đơn vị thời gian và timezone cần thể hiện thống nhất trong API.
+
+C4. Một staff một assignment sản xuất
+- Điều kiện nhận: tài khoản STAFF hợp lệ, AVAILABLE, không có assignment sản xuất đang hoạt động.
+- Assign bởi manager và self-claim dùng cùng điều kiện và kiểm tra nguyên tử.
+- Staff bận từ khi nhận đơn, kể cả đang trao đổi hoặc chờ payment.
+- Khi manager duyệt KCS checkpoint 2 và toàn bộ loại sản phẩm của đơn đạt, đánh dấu READY_TO_SHIP và release active assignment của staff trong cùng transaction.
+- Đơn bị hủy cũng release active assignment. Không phải chờ giao/nhận hàng để release.
+- Giữ assignedStaffId/lịch sử trên Order để truy vết; release không xóa người đã làm đơn.
+- Sau release, staff có thể nhận đơn mới nếu AVAILABLE. Các đơn đang giao không chiếm suất sản xuất.
+- Không triển khai đổi staff, chuyển giao do nghỉ việc hoặc workflow reassign.
+- Staff bấm/nộp checkpoint 2 không tự release: phải có quyết định KCS đạt của manager.
+- Quyết định lặp không được release nhầm assignment mới staff đã nhận sau đó; thao tác release phải gắn đúng assignmentId/orderId.
+
+C5. Thanh toán và production
+- Manager duyệt khả năng làm trước khi mở thanh toán online.
+- CUSTOM phải được staff xác nhận giá/thỏa thuận trước khi mở thanh toán.
+- Reputation user < 20: không được chọn COD; user >= 20: có thể chọn COD hoặc ONLINE.
+- Guest triển khai checkout COD, không suy ra quyền online từ reputation.
+- ONLINE chờ tối đa 1 giờ kể từ khi mở yêu cầu thanh toán sau các bước duyệt/chốt.
+- Webhook thành công ghi PAID/paidAt, báo staff và hoàn thành bước chờ payment.
+- Webhook không chuyển ORDER_CREATING, không ghi productionStartedAt.
+- Staff phụ trách bấm bắt đầu mới chuyển ORDER_ACCEPTED sang ORDER_CREATING.
+- Lệnh bắt đầu kiểm tra đơn hợp lệ, dữ liệu custom đã chốt hoặc mẫu catalog đã được chấp thuận, COD được phép hoặc ONLINE đã thanh toán.
+- Không lặp lại một quy trình phân công/thanh toán khác trong production.
+
+D. TRẠNG THÁI VÀ QUYỀN CHUYỂN
+
+D1. Trạng thái Order trước và sau sản xuất
+Tên trạng thái trung gian đề xuất cho dev; các mốc chính được giữ thống nhất toàn tài liệu:
+- PENDING_APPROVAL: đã tạo Order, chờ manager xét khả năng làm.
+- PENDING_ASSIGNMENT: manager duyệt, chưa có staff.
+- DISCUSSING: có staff, đang trao đổi.
+- WAITING_STAFF_CONFIRMATION: user đã gửi thông tin, chờ staff xác nhận.
+- ORDER_ACCEPTED: CUSTOM đã được staff xác nhận thỏa thuận; Guest CATALOG đã được manager duyệt theo mẫu và có staff nhận thực hiện, không cần guest xác nhận lại design. ONLINE có thể vẫn chưa trả tiền.
+- ORDER_CREATING: staff đã bấm bắt đầu, sản xuất đang diễn ra.
+- READY_TO_SHIP: sản phẩm/checkpoint cuối đã đủ điều kiện giao.
+- SHIPPING: đã bàn giao giao hàng.
+- DELIVERED: khách đã xác nhận hoàn tất nhận hàng. Dùng tên này làm ánh xạ triển khai đề xuất, tránh thêm COMPLETED với cùng ý nghĩa.
+- CANCELLED: đơn đã bị hủy.
+
+D2. Payment và workflow là các trục độc lập
+- paymentMethod: COD hoặc ONLINE.
+- paymentStatus đề xuất: NOT_DUE, PENDING, PAID, FAILED, EXPIRED.
+- COD thu tiền qua shipper bên thứ ba, ngoài hệ thống; không chờ webhook COD và không tự ghi một giao dịch online PAID cho COD.
+- Payment chỉ phục vụ tiền đơn đã chốt; không có paymentPurpose CHANGE_REQUEST trong phạm vi này.
+- workflow step lưu việc đang chờ manager, staff claim, thỏa thuận, payment hoặc staff start.
+- Không dùng một status Order để đồng thời biểu diễn cả thanh toán và sản xuất.
+- APPROVED của manager không đồng nghĩa ORDER_ACCEPTED; việc mở chat phải xảy ra trước khi chốt thỏa thuận.
+
+D3. Quy tắc chuyển
+Manager duyệt: PENDING_APPROVAL → PENDING_ASSIGNMENT, hoặc DISCUSSING khi gán thành công và chuẩn bị kênh trao đổi.
+Staff nhận CUSTOM/user cần trao đổi: PENDING_ASSIGNMENT → DISCUSSING.
+Guest CATALOG: manager duyệt và staff nhận → ORDER_ACCEPTED, dùng giá/design/thời lượng catalog, không tạo chat hoặc chờ guest chốt lại.
+User gửi: DISCUSSING → WAITING_STAFF_CONFIRMATION.
+Staff yêu cầu sửa: WAITING_STAFF_CONFIRMATION → DISCUSSING.
+Staff xác nhận: WAITING_STAFF_CONFIRMATION → ORDER_ACCEPTED.
+Webhook INITIAL_ORDER thành công: paymentStatus → PAID; Order vẫn ORDER_ACCEPTED.
+Staff bắt đầu: ORDER_ACCEPTED → ORDER_CREATING.
+Manager duyệt checkpoint 2 của mọi loại sản phẩm: ORDER_CREATING → READY_TO_SHIP và release staff.
+Bàn giao: READY_TO_SHIP → SHIPPING.
+Khách xác nhận hoàn tất: SHIPPING → DELIVERED.
+Nhánh CANCELLED chỉ từ điều kiện hủy được quy định ở F16, không cho phép chuyển tùy ý.
+
+E. BẢNG WORKFLOW VÀ ĐẦU RA
+
+WF01 custom_request:
+Người thực hiện: USER.
+Đầu ra: bản nháp lưu được hoặc một Order custom đã gửi chờ manager.
+WF02 accept_order (tên nghiệp vụ dùng chung cho đầu vào acceptcart/custom):
+Người thực hiện: khách, MANAGER, backend.
+Đầu ra: Order bị từ chối/hủy hoặc được duyệt nhận làm; không thu online trước duyệt.
+WF03 agree_order:
+Người thực hiện: MANAGER/STAFF/USER và Camunda service task.
+Đầu ra: staff phụ trách và ORDER_ACCEPTED; CUSTOM có chat/thỏa thuận xác nhận, guest CATALOG dùng snapshot mẫu và email, không có bước chat.
+WF04 payment_and_start:
+Người thực hiện: cổng thanh toán, webhook, consumer, STAFF.
+Đầu ra: ORDER_CREATING khi staff bấm bắt đầu; nhánh online có timer PT1H.
+WF05 start_made_product:
+Người thực hiện: STAFF, MANAGER/khách theo policy.
+Đầu ra: READY_TO_SHIP sau INITIAL_SHAPE, FINAL_PRODUCT và QC.
+WF06 change_request:
+Người thực hiện: USER và staff phụ trách; không có bước payment.
+Đầu ra: thay đổi được áp dụng hoặc bị từ chối, có lịch sử.
+WF07 ship_order:
+Người thực hiện: staff phụ trách.
+Đầu ra: SHIPPING và số lượng bàn giao.
+WF08 complete_order:
+Người thực hiện: USER/Guest và backend.
+Đầu ra: DELIVERED hoặc kết quả chênh lệch chưa hoàn tất; không mở complaint workflow.
+WF09 cancel_order:
+Người thực hiện: USER, MANAGER hoặc hệ thống do timeout/payment fail.
+Đầu ra: CANCELLED cùng lịch sử, voucher/thông báo tương ứng.
+
+Các workflow có thể là subprocess/call activity, không bắt buộc mỗi tên thành một file BPMN. Mỗi bước chỉ có một nơi chịu trách nhiệm chuyển trạng thái.
+
+F. ĐẶC TẢ CÁC LUỒNG CHỨC NĂNG
+
+F01. XEM VÀ QUẢN LÝ CATALOG
+Người thực hiện: Guest/USER xem; MANAGER và quyền quản trị được cấp quản lý.
+Đầu vào: danh mục, keyword, khoảng giá, màu, chất liệu, phân trang; với quản lý là mẫu/biến thể/ảnh/giá/availability/cấu hình thời gian.
+Hoạt động:
+1. Khách lọc/tìm và mở chi tiết mẫu.
+2. Backend trả thông tin và giá niêm yết, biến thể, ảnh mẫu, trạng thái nhận đơn.
+3. Manager tạo/cập nhật mẫu, availability và số ngày sản xuất cơ sở cho một sản phẩm. Validate madeDay bắt buộc, là số hữu hạn và >= 2 tại form manager và backend; từ chối lưu catalog có madeDay < 2. Backend dùng số ngày này cùng quantity để tính thời lượng theo quy tắc ở mục H.
+4. Backend làm mất hiệu lực cache liên quan sau cập nhật.
+Đầu ra: danh sách/chi tiết catalog hoặc bản ghi mẫu đã lưu.
+Yêu cầu kết quả:
+- Công khai cho user/guest.
+- Hiển thị sản phẩm làm theo đơn, không hiển thị “còn hàng” dựa trên stock thành phẩm.
+- Mẫu ngừng nhận không được checkout dù đã có trong giỏ.
+- Không sửa giá các OrderItem đã tạo khi đổi giá catalog.
+
+F02. GIỎ USER VÀ GUEST
+Người thực hiện: USER/Guest.
+Đầu vào: JWT hoặc X-Guest-Session-Id; variantId, quantity.
+Hoạt động:
+1. Xác định chủ giỏ; tìm/tạo giỏ tương ứng.
+2. Kiểm tra biến thể/mẫu tồn tại, chưa bị xóa, đang nhận đơn.
+3. Thêm, cập nhật số lượng, xóa mục hoặc đọc giỏ.
+4. Backend tính tổng tham khảo bằng giá catalog.
+Đầu ra: giỏ và các mục hiện tại.
+Yêu cầu kết quả:
+- Quantity dương, không kiểm tra stock.
+- Một người/phiên không sửa giỏ người khác.
+- Giá hiển thị giỏ không phải quyền gửi đơn giá tùy ý khi checkout.
+- Guest session có TTL; thời hạn cụ thể thuộc cấu hình được thống nhất khi triển khai.
+
+F03. VOUCHER VÀ REPUTATION
+Người thực hiện: USER đổi/dùng voucher; Guest dùng public voucher; MANAGER quản lý campaign; backend tính giảm.
+Đầu vào: voucherId/templateId/code, subtotal, danh tính người dùng hoặc email/phone/session guest.
+Hoạt động user:
+1. Xem template và ví voucher.
+2. Đổi template bằng số reputation tương ứng pointCost.
+3. Kiểm tra template không phải guest voucher, đang active, chưa hết hạn và còn quota. Không cho đổi thêm cùng template nếu ví đã có voucher còn sử dụng được của template đó. Sau khi trừ pointCost, reputation phải còn ít nhất 40 điểm.
+4. Giảm quota và trừ pointCost; tạo UserVoucher; lưu ReputationHistory.
+5. Khi áp dụng: kiểm tra chủ sở hữu, chưa dùng, chưa hết hạn và đạt minOrderValue.
+6. Đánh dấu used và usedDate cùng transaction áp dụng vào đơn.
+Hoạt động guest:
+1. Tra mã public/campaign, kiểm tra guestVoucher, active, expiry, quota và minOrderValue.
+2. Chuẩn hóa email/phone; dùng hash và session để kiểm tra giới hạn sử dụng. Từ chối nếu cùng template đã có usage trùng guestSessionId HOẶC emailHash HOẶC phoneHash; đổi session không vượt được giới hạn theo email/phone.
+3. Giảm quota nguyên tử và ghi GuestVoucherUsage gắn Order.
+Tính tiền:
+- Voucher phần trăm: subtotal × discountPercent / 100, giới hạn maxDiscountAmount nếu cấu hình > 0.
+- Voucher số tiền cố định: số tiền giảm cấu hình, tối đa subtotal.
+- finalPrice = max(0, subtotal - discountAmount).
+Đầu ra: voucher đã đổi hoặc kết quả áp dụng với subtotal/discount/finalPrice.
+Yêu cầu kết quả:
+- Guest không có ví/reputation và không sử dụng UserVoucher của người khác.
+- Không dùng quota âm hoặc dùng trùng voucher do request đồng thời.
+- Snapshot giá catalog không bị thay đổi.
+- Reputation không âm; mọi thay đổi ghi delta, balanceAfter, reason, reference và thời gian.
+- Hoàn tất nhận hàng của user cộng 2 điểm một lần; guest không cộng.
+- Trừ điểm tự hủy theo F16.
+- Voucher CUSTOM hiển thị trong form thông tin đơn ở phòng chat. User chọn voucher cùng giá đã trao đổi; backend tính bản xem trước subtotal/discount/finalPrice.
+- Thiết kế transaction: khi staff xác nhận version, backend kiểm tra lại quyền sở hữu, hạn, mức đơn và khả năng dùng voucher, rồi ghi used/usedDate cùng giá chính thức. Không tiêu thụ voucher chỉ vì mở form hoặc xem trước.
+- Voucher không còn hợp lệ tại xác nhận phải trả lỗi/yêu cầu user chọn lại, không âm thầm tăng số tiền đã xác nhận.
+- Ngưỡng đổi voucher là còn ít nhất 40 điểm sau đổi; ngưỡng được chọn COD là 20 điểm. Đây là hai điều kiện khác nhau.
+
+F04. CHECKOUT CATALOG
+Người thực hiện: USER/Guest, backend.
+Đầu vào: các cart item được chọn, thông tin giao hàng, voucher tùy chọn, phương thức thanh toán, idempotency key.
+Tiền điều kiện: giỏ thuộc khách, item hợp lệ, quantity dương, mẫu ACCEPTING_ORDERS.
+Hoạt động:
+1. Lấy danh tính từ JWT hoặc guestSessionId.
+2. USER: kiểm tra reputation cho COD; Guest: kiểm tra đầy đủ contact và phương thức COD.
+3. Đọc giá và cấu hình thời gian từ database, không dùng đơn giá client để tạo OrderItem. Lưu snapshot cấu hình/thời lượng từng loại.
+4. Kiểm tra voucher và tính tiền.
+5. Lưu Order CATALOG ở PENDING_APPROVAL, item/giá/contact snapshot; guest tạo lookup token và lưu hash.
+6. Ghi voucher usage và xóa các mục đã checkout khỏi giỏ trong transaction.
+7. Sau commit, đăng ký workflow manager review và sự kiện tạo đơn: gửi email xác nhận PENDING_APPROVAL cho chủ đơn; USER nhận thêm notification, Guest chỉ nhận email.
+8. Trả kết quả để mở trang Order.
+Đầu ra: orderId, orderType, trạng thái chờ duyệt, tổng tiền, trạng thái bước tiếp theo; guest nhận token theo cơ chế cấp phát.
+Yêu cầu kết quả:
+- Không tạo URL thanh toán trước manager duyệt.
+- Không có bước user nhập/staff sửa giá catalog.
+- Checkout một phần không xóa các mục không được chọn.
+- Cùng idempotency key/nội dung không tạo hai đơn; key trùng nhưng nội dung khác phải bị phát hiện.
+- Email/workflow lỗi sau commit không làm mất Order; phải có trạng thái retry, không yêu cầu tạo lại đơn.
+
+F05. CUSTOM DRAFT VÀ GỬI ORDER
+Người thực hiện: USER.
+Đầu vào: chất liệu, màu, hình dáng, kích thước, quantity, ghi chú và ảnh.
+Hoạt động:
+1. User tạo, sửa, xem danh sách bản nháp của mình.
+2. Lưu nhiều request chưa đặt.
+3. User chọn một bản và xác nhận gửi yêu cầu tạo đơn.
+4. Backend kiểm tra chủ sở hữu và thông tin, chụp dữ liệu custom vào một Order CUSTOM ở PENDING_APPROVAL.
+5. Liên kết bản nháp nguồn với đơn; hiển thị đơn trên MyOrder và danh sách manager.
+6. Bắt đầu manager review, gửi email và notification tạo đơn thành công ở PENDING_APPROVAL cho USER. Lưu bản nháp chưa tạo Order không gửi thông báo này. Sau khi manager duyệt, bắt đầu timer CUSTOM_CONFIRMATION PT24H theo F09b.
+Đầu ra: draftId khi lưu nháp; orderId khi gửi thành đơn.
+Yêu cầu kết quả:
+- Custom chỉ dành cho user; guest được hướng dẫn đăng nhập/đăng ký.
+- Một custom order một loại item, quantity không giới hạn thành một chiếc.
+- Chưa có giá chính thức thì không mở payment.
+- Bản nháp khác không tự chuyển thành đơn.
+- Gửi lặp một yêu cầu không sinh thêm Order ngoài ý muốn.
+- Snapshot không bị thay đổi bởi sửa bản nháp.
+- Không cần một cart giả để dùng chung logic tiếp nhận đơn.
+
+F06. MANAGER DUYỆT KHẢ NĂNG THỰC HIỆN
+Người thực hiện: MANAGER.
+Đầu vào: orderId, quyết định chấp nhận/từ chối, lý do, staffId tùy chọn.
+Tiền điều kiện: đơn đang chờ manager, người thao tác có quyền.
+Hoạt động:
+1. Xem sản phẩm/spec, số lượng, thông tin cần thiết để đánh giá khả năng thực hiện.
+2. Chấp nhận hoặc từ chối kèm lý do.
+3. Nếu chấp nhận và có staffId: thực hiện điều kiện assign tại F07.
+4. Nếu chấp nhận nhưng chưa gán: đưa vào danh sách chờ claim.
+5. Ghi người duyệt, thời gian, quyết định và lịch sử.
+6. Hoàn thành task Camunda tương ứng và ghi kết quả. Không tự gửi email chủ đơn cho các trạng thái trung gian như PENDING_ASSIGNMENT/DISCUSSING; email trạng thái tuân theo bốn mốc tại F18.
+7. Với guest catalog, email ORDER_ACCEPTED chứa link bảo mật tới thông tin Order đã được duyệt, mẫu/giá/số lượng và thời lượng tính từ catalog. Guest đã chọn design lúc checkout, không cần xác nhận lại hoặc tham gia chat. Không gửi thêm một email duyệt trùng với mốc ORDER_ACCEPTED.
+8. Với custom, lưu managerApprovedAt và tạo cửa sổ xác nhận 24 giờ; không chạy timer từ lúc bản nháp hoặc lúc manager chưa duyệt.
+Đầu ra: đơn đã được nhận làm hoặc CANCELLED với lý do từ chối.
+Yêu cầu kết quả:
+- Manager không quyết định quyền COD thay cho reputation.
+- Manager duyệt không đồng nghĩa chốt giá custom hoặc đã thanh toán.
+- Không duyệt lặp/từ trạng thái không phù hợp.
+- DB và workflow phải chuyển nhất quán, không chỉ đổi status nhưng để task đứng yên.
+
+F07. ASSIGN/CLAIM STAFF
+Người thực hiện: MANAGER assign hoặc STAFF self-claim.
+Đầu vào: orderId; staffId khi manager gán.
+Tiền điều kiện: manager đã duyệt; Order chưa có staff cho thao tác nhận lần đầu.
+Hoạt động:
+1. Kiểm tra tài khoản staff và điều kiện AVAILABLE/không có đơn đang hoạt động.
+2. Khóa/kiểm tra version dữ liệu liên quan.
+3. Ghi assignedStaff, assignedAt, người gán hoặc nguồn SELF_CLAIM.
+4. Đánh dấu staff đã có công việc.
+5. Đăng ký event phân công và chuyển workflow tới service task tạo chat.
+Đầu ra: một staff phụ trách Order, staff không còn đủ điều kiện nhận đơn khác.
+Yêu cầu kết quả:
+- Hai claim đồng thời trên cùng đơn: chỉ một thành công.
+- Hai assign vào cùng staff: không tạo hai assignment sản xuất đang hoạt động; đơn đã release sau KCS có thể vẫn đang giao.
+- Staff bận từ khi nhận đến KCS checkpoint 2 toàn đơn đạt hoặc hủy, không đợi payment để chiếm suất.
+- Không dùng chat presence để xác định AVAILABLE.
+- Không triển khai đổi staff/reassign; endpoint assign/claim không được ghi đè assignment đã nhận.
+
+F08. TẠO PHÒNG CHAT VÀ TRAO ĐỔI
+Người thực hiện: Camunda service task tạo phòng; USER/STAFF trao đổi; MANAGER xem theo quyền.
+Đầu vào: Order đã được manager duyệt, có user và assignedStaff.
+Hoạt động:
+1. Service task tìm/tạo ChatThread theo orderId.
+2. Gắn quyền khách sở hữu, staff phụ trách, manager được phép.
+3. Lưu message và đẩy realtime theo phòng.
+4. Hiển thị nút “Thông tin & chốt đơn” cạnh avatar staff.
+5. Hiển thị trạng thái đang trao đổi/chờ xác nhận/thanh toán để khách biết bước tiếp theo.
+Đầu ra: chatThreadId, lịch sử tin nhắn và kênh realtime đúng người.
+Yêu cầu kết quả:
+- Tạo phòng retry không sinh nhiều phòng.
+- Kiểm tra quyền cả REST đọc lịch sử lẫn gửi/subscribe WebSocket.
+- Staff khác không được truy cập.
+- Không đợi ORDER_ACCEPTED để tạo chat custom: chat là nơi chốt trước trạng thái đó.
+- Guest chỉ có catalog, nhận thông tin qua email/trang token; không tạo chat, không chờ guest thương lượng/chốt design hoặc deadline.
+
+F09. USER GỬI THÔNG TIN, STAFF CHỐT THỎA THUẬN
+Người thực hiện: USER và staff phụ trách.
+Đầu vào custom: spec, quantity, unitPrice, số ngày sản xuất đã trao đổi, userVoucherId tùy chọn, ghi chú và version.
+Đầu vào catalog: thông tin thời gian/ghi chú trong phạm vi cho phép; giá snapshot chỉ đọc.
+Hoạt động:
+1. Hai bên trao đổi trong chat.
+2. User nhập thông tin đã trao đổi và bấm gửi xác nhận.
+3. Backend kiểm tra dữ liệu, lưu phiên bản, người gửi và userSubmittedAt; dừng timer xác nhận custom 24 giờ ngay khi form hợp lệ được lưu thành công, rồi hiển thị nội dung cho staff. Không chờ staff duyệt để dừng timer.
+4. Staff xác nhận đúng hoặc yêu cầu sửa kèm lý do.
+5. Nếu xác nhận: lưu giá/spec/deadline chính thức và phiên bản được duyệt.
+6. Backend tính subtotal = tổng(unitPrice × quantity), kiểm tra voucher đã chọn và tính finalPrice = max(0, subtotal - discountAmount). Lưu voucher usage; email/notification xác nhận thỏa thuận được gửi cùng mốc ORDER_ACCEPTED ở bước 7, không tạo hai thông báo trạng thái trùng nhau.
+7. Chuyển ORDER_ACCEPTED; mở bước thanh toán ONLINE hoặc bước staff start cho COD.
+Đầu ra: bản thỏa thuận xác nhận hoặc phản hồi yêu cầu sửa; tổng tiền chính thức; trạng thái đơn.
+Yêu cầu kết quả:
+- Chỉ staff đang phụ trách được xác nhận.
+- Bản cũ bị thay thế không được duyệt.
+- CATALOG không nhận giá khác qua API, kể cả client cố gửi trường unitPrice.
+- CUSTOM chưa được xác nhận không được thu tiền dựa trên giá tạm.
+- Chỉnh sửa sau khi chốt phải đi qua ChangeRequest.
+- Thời lượng sản xuất được chốt; deadline tính từ productionStartedAt khi staff bấm bắt đầu và Order chuyển ORDER_CREATING, không từ tạo đơn/duyệt/thanh toán.
+- Staff trao đổi ngày dự kiến bắt đầu với user; đối với guest, staff cung cấp ngày bắt đầu và lý do bắt đầu muộn nếu có để MailService gửi khách.
+- Form có thể gửi một version nhiều lần nhưng chỉ tạo một lần xác nhận nghiệp vụ.
+
+F09b. TIMER XÁC NHẬN CUSTOM 24 GIỜ
+Người thực hiện: USER gửi thông tin; Camunda timer và backend xử lý hết hạn.
+Đầu vào: Order CUSTOM đã tồn tại, managerApprovedAt, thông tin xác nhận của user.
+Hoạt động:
+1. Khi manager duyệt, ghi confirmationDueAt = managerApprovedAt + 24 giờ và bắt đầu timer PT24H.
+2. User trao đổi và gửi form F09. Backend kiểm tra hợp lệ, lưu form và userSubmittedAt, hoàn thành bước chờ user/cancel timer PT24H ngay; staff review là bước tiếp theo độc lập.
+3. Nếu hết hạn mà chưa lưu thành công form hợp lệ, hủy đơn với lý do CUSTOM_CONFIRMATION_TIMEOUT.
+4. Phát email và notification cho user, thông báo staff nếu có, release assignment và xử lý voucher đã tiêu thụ nếu có.
+Đầu ra: có xác nhận để tiếp tục staff review hoặc CANCELLED do timeout.
+Yêu cầu kết quả:
+- Không áp dụng Guest/catalog, vì khách đã chọn mẫu catalog.
+- Không nhầm với timer ONLINE PT1H sau ORDER_ACCEPTED.
+- Hủy hệ thống do timeout không trừ điểm như user chủ động hủy.
+- Không đổi thời hạn chỉ vì gửi email lại.
+- Form hợp lệ đã lưu thì timer dừng, không hủy vì staff chưa duyệt. Yêu cầu staff sửa lại thông tin không tự khởi động lại timer 24 giờ.
+- Request lỗi validate/chỉ lưu nháp chưa gửi không dừng timer. Submit và timeout đồng thời phải kiểm tra nguyên tử trạng thái bước chờ; chỉ một kết quả được áp dụng.
+
+F10. TẠO PAYMENT VÀ CHỜ 1 GIỜ
+Người thực hiện: backend, cổng thanh toán, USER và Camunda.
+Đầu vào: orderId; số tiền lấy từ finalPrice chính thức.
+Tiền điều kiện: manager đã duyệt, thông tin/giá/voucher hợp lệ, Order ở ORDER_ACCEPTED.
+Hoạt động:
+1. Tạo PaymentAttempt có mã giao dịch và expectedAmount = finalPrice.
+2. Ghi PENDING, openedAt và paymentDueAt = openedAt + 1 giờ.
+3. Trả URL/thông tin payment; Camunda chờ message thành công hoặc PT1H.
+4. Webhook thành công đi F11; hết hạn/thất bại xử lý hủy hệ thống F16.
+Đầu ra: payment attempt, URL và hạn thanh toán.
+Yêu cầu kết quả:
+- Không thu trước manager duyệt/chốt giá; không tính giờ khi còn thương lượng.
+- Retry tạo payment không tự kéo dài cửa sổ 1 giờ.
+- COD do shipper thu ngoài hệ thống, bỏ nhánh chờ payment.
+- Không có payment bổ sung cho ChangeRequest.
+- Retry webhook là cơ chế giao lại kết quả, không thay kiểm tra idempotency/trạng thái.
+
+F11. WEBHOOK VÀ THÔNG BÁO STAFF
+Người thực hiện: cổng thanh toán gọi webhook; backend và notification consumer xử lý.
+Đầu vào: mã giao dịch, order reference, số tiền, result, signature và thông tin nhà cung cấp.
+Hoạt động:
+1. Xác minh signature và giao dịch thuộc đúng đơn/số tiền.
+2. Kiểm tra trạng thái hiện tại, hạn và việc callback đã xử lý.
+3. Trong transaction ghi kết quả; thành công lưu PAID, paidAt.
+4. Lấy assignedStaffId từ database, phát NOTIFICATION_REQUESTED cho staff.
+5. Correlate message vào process đang chờ payment.
+6. Consumer lưu và đẩy thông báo “Đơn đã thanh toán, có thể bắt đầu làm”.
+7. Phản hồi webhook theo hợp đồng nhà cung cấp.
+Đầu ra: payment đã cập nhật, staff nhận thông báo, workflow hết chờ payment.
+Yêu cầu kết quả:
+- Order vẫn ORDER_ACCEPTED.
+- Không ghi productionStartedAt.
+- Không tin staffId phía cổng thanh toán gửi.
+- Callback lặp không cộng tiền/đổi trạng thái/phát nghiệp vụ nhiều lần.
+- Cổng thanh toán retry webhook khi giao thất bại; backend xử lý lặp an toàn.
+- Callback đến sau khi đơn đã hủy/hết hạn không tự khôi phục trạng thái. Retry không tự quyết định việc hoàn tiền hoặc đảo hủy; ghi nhận ngoại lệ đối soát khi xảy ra.
+- Không có callback CHANGE_REQUEST vì thay đổi không thu thêm tiền.
+- Nếu DB commit nhưng correlate/event lỗi, có cơ chế retry/reconciliation; không trả lỗi rồi tạo lại đơn.
+
+F12. STAFF BẤM BẮT ĐẦU
+Người thực hiện: staff phụ trách.
+Đầu vào: orderId, yêu cầu bắt đầu.
+Tiền điều kiện: ORDER_ACCEPTED, thỏa thuận CUSTOM hoặc snapshot CATALOG hợp lệ; ONLINE đã PAID hoặc COD được phép.
+Hoạt động:
+1. Staff mở thông báo/danh sách công việc và bấm “Bắt đầu làm”.
+2. Backend kiểm tra quyền, trạng thái và điều kiện.
+3. Chuyển ORDER_CREATING, ghi productionStartedAt và lịch sử. Duyệt từng OrderItem để tính deadline riêng từ productionStartedAt và productionDurationDays, bỏ qua Chủ nhật/ngày lễ/ngày nghỉ theo mục H; thời gian giao giả định 2 ngày được hiển thị tách khỏi thời gian làm.
+4. Hoàn thành user task bắt đầu và tiếp tục production.
+5. Phát PRODUCTION_STARTED để gửi email ngày bắt đầu/ngày dự kiến xong và lý do bắt đầu muộn do staff nhập nếu có; user có thêm notification.
+Đầu ra: ORDER_CREATING và thời điểm thực tế bắt đầu.
+Yêu cầu kết quả:
+- Không tự bắt đầu vì gửi/đọc thông báo.
+- Request lặp không ghi đè thời gian và không tạo hai process sản xuất.
+- Staff khác không bắt đầu thay nếu không có quyền được xác định.
+- Không tạo thêm vòng phân công hoặc payment bên trong production.
+
+F13. CHECKPOINT THEO LOẠI SẢN PHẨM VÀ KCS
+Người thực hiện: staff phụ trách nộp; MANAGER thực hiện KCS checkpoint 2.
+Đầu vào: orderId, loại/dòng sản phẩm, stage, ảnh, ghi chú, attempt và quyết định review.
+Hoạt động:
+1. Theo dõi INITIAL_SHAPE và FINAL_PRODUCT riêng cho từng loại sản phẩm trong Order.
+2. Staff nộp INITIAL_SHAPE; lưu ảnh/ghi chú/attempt rồi gửi thẳng báo cáo tiến trình qua email cho chủ đơn USER hoặc Guest. USER nhận thêm notification: “Đã có hình ảnh đầu tiên của item #{orderItemId}”.
+3. Checkpoint 1 không cần manager hoặc khách duyệt, không chờ khách đọc email hay bấm xác nhận; staff tiếp tục làm sản phẩm. Gửi báo cáo checkpoint không làm đổi trạng thái Order khỏi ORDER_CREATING.
+4. Staff hoàn thiện, nộp FINAL_PRODUCT của từng loại.
+5. Manager KCS checkpoint 2: đạt hoặc yêu cầu sửa có lý do.
+6. Chưa đạt: rework loại đó, tạo attempt mới, chưa release staff.
+7. Tất cả loại trong đơn qua checkpoint 2: Order READY_TO_SHIP, đóng active assignment và release staff trong cùng transaction.
+8. Phát email/notification READY_TO_SHIP; guest có link tới Order.
+Đầu ra: checkpoint theo loại, kết quả KCS, READY_TO_SHIP và staff được giải phóng khi toàn đơn đạt.
+Yêu cầu kết quả:
+- Quantity 20 của cùng loại không tạo 20 luồng; một custom order một loại nên checkpoint 2 đạt là đủ.
+- Catalog nhiều loại: một loại đạt không làm các loại khác mặc nhiên đạt; toàn đơn READY_TO_SHIP khi mọi loại qua checkpoint 2.
+- Manager xem xét khối lượng toàn đơn trước khi nhận làm.
+- Giữ ảnh, attempt, người duyệt và lý do trong lịch sử.
+- Không có cổng duyệt production thứ ba sau khi checkpoint 2 của tất cả loại đã đạt.
+- Release gắn đúng active assignment; không xóa assignedStaffId lịch sử.
+- Checkpoint/event retry không phát lại quyết định hoặc release một assignment mới.
+
+F14. CHANGE_REQUEST KHÔNG THAY ĐỔI TIỀN
+Người thực hiện: USER đề nghị, staff phụ trách quyết định.
+Đầu vào: chi tiết muốn thay đổi, lý do, phiên bản spec đang áp dụng và phần sản phẩm liên quan.
+Hoạt động:
+1. User gửi yêu cầu có cấu trúc về chi tiết chưa triển khai.
+2. Staff kiểm tra tiến độ và khả năng thực hiện trong giá đã chốt.
+3. Không chấp nhận: lưu lý do, thông báo và tiếp tục sản phẩm theo spec đang áp dụng.
+4. Chấp nhận: cập nhật phiên bản chi tiết chưa làm, lưu quyết định và thông báo.
+Đầu ra: REJECTED hoặc APPLIED, spec có lịch sử.
+Yêu cầu kết quả:
+- Không thay unitPrice/subtotal/discount/finalPrice, không tính chênh lệch hay thu thêm phí.
+- Không tạo payment/payment webhook cho ChangeRequest.
+- Phần đã thực hiện không được dùng luồng này để yêu cầu làm lại có phí.
+- Staff không được duyệt thay đổi vượt phạm vi chi tiết chưa triển khai hoặc đòi tăng giá.
+- Rework để đạt spec đã chốt thuộc F13.
+- Không reset productionStartedAt, trạng thái hoặc deadline khi áp dụng một thay đổi chi tiết. Nếu cần đổi cam kết thời gian, phải có quyết định nghiệp vụ riêng; không âm thầm thay bằng ChangeRequest.
+
+F15. GIAO HÀNG, TRA CỨU, XÁC NHẬN NHẬN HÀNG
+Người thực hiện: staff phụ trách bàn giao; USER/Guest tra cứu và xác nhận; backend đối chiếu.
+Đầu vào: số lượng bàn giao từng dòng; thông tin giao hàng; danh sách số lượng nhận; acceptMismatch; note phản ánh.
+Hoạt động giao:
+1. Khi READY_TO_SHIP, gửi email/thông báo; email guest có link Order kèm token. Staff đã release sau KCS checkpoint 2 đạt.
+2. Ghi số lượng bàn giao từng dòng ở bước hoàn tất sản phẩm/bàn giao; không quản lý nghiệp vụ vận chuyển của shipper.
+3. Vận chuyển do bên thứ ba, ngoài phạm vi dự án; shipper tự liên hệ qua ứng dụng nhắn tin/kênh ngoài hệ thống. Không có tài khoản shipper, chat shipper, webhook hay API hãng vận chuyển. Thời gian giao hiển thị giả định 2 ngày cho mọi đơn; mốc SHIPPING chỉ là thông tin nội bộ phục vụ theo dõi và nhận hàng, không chứng minh tiến độ hoặc đối soát của bên thứ ba.
+Hoạt động đọc/xác nhận:
+4. User mở đơn bằng JWT/ownership; guest dùng orderId + token.
+5. Trả snapshot đơn và thông tin được phép xem; không trả dữ liệu nội bộ ngoài phạm vi.
+6. Khách nhập receivedQuantity cho đầy đủ từng dòng.
+7. Backend kiểm tra số không âm, không trùng, không có dòng ngoài đơn, không thiếu dòng.
+8. So sánh receivedQuantity với exportedQuantity; dữ liệu migrated thiếu exportedQuantity có thể dùng ordered quantity làm fallback hiển thị, nhưng đơn mới phải ghi số bàn giao.
+9. Nếu khớp: lưu nhận hàng, DELIVERED, endOrderTime, history, hoàn thành task.
+10. Nếu lệch và acceptMismatch=false: trả mismatches, chưa hoàn tất và chưa cộng điểm.
+11. Nếu chưa chấp nhận chênh lệch, trả kết quả để khách xem lại, Order vẫn chờ nhận hàng; không tạo endpoint/workflow complaint riêng.
+12. Nếu khách chọn acceptMismatch=true: lưu số thực nhận, hoàn tất với dấu vết đã chấp nhận chênh lệch.
+13. Hoàn tất user: cộng 2 reputation một lần, phát ORDER_DELIVERED. Với CATALOG, gửi mời đánh giá cho người mua; CUSTOM chưa có đánh giá. Guest không có reputation.
+14. Không release staff lần nữa khi khách nhận hàng: assignment đã đóng ở KCS checkpoint 2 hoặc hủy.
+Đầu ra API:
+- matched: số lượng có khớp hay không.
+- completed: có hoàn tất đơn hay chưa.
+- mismatches: dòng/biến thể, số đặt, số bàn giao, số nhận.
+- message và trạng thái đơn.
+Yêu cầu kết quả:
+- Link gửi từ READY_TO_SHIP chưa cho xác nhận cho đến bước nhận hàng.
+- Guest không được đọc/ghi chỉ với orderId.
+- Không cộng reputation hoặc kết thúc task lần hai khi gửi lặp.
+- Người đã mua catalog được đánh giá sản phẩm; chưa phát triển đánh giá custom.
+- Không triển khai hồ sơ/endpoint complaint hoặc tự bồi thường.
+- Timer 24 giờ dành cho xác nhận custom trước làm, không phải tự hoàn tất nhận hàng. Chưa có quy tắc tự xác nhận nhận hàng nếu khách im lặng.
+- Dùng orderItemId làm khóa phù hợp cho cả custom không có variant; chuyển đổi API đang dùng variantId phải được thiết kế rõ.
+
+F16. HỦY ĐƠN
+Người thực hiện: USER/Guest chủ đơn; MANAGER từ chối; hệ thống timeout/payment fail.
+Đầu vào: orderId, nguồn hủy, lý do; JWT owner hoặc token guest có quyền hủy.
+Quyền tự hủy của khách:
+- Chỉ cho phép ở PENDING_APPROVAL, PENDING_ASSIGNMENT, DISCUSSING và WAITING_STAFF_CONFIRMATION, tức các trạng thái trước ORDER_ACCEPTED.
+- Từ ORDER_ACCEPTED trở đi, USER/Guest không được tự hủy, kể cả ONLINE đang chờ thanh toán. Email ORDER_ACCEPTED không có nút/link hành động hủy.
+- Email tạo đơn PENDING_APPROVAL có link tới chức năng hủy; nếu mở link sau khi trạng thái đã đổi sang ORDER_ACCEPTED, backend phải từ chối hủy dù link/token còn hạn.
+- Timer hủy hệ thống, payment fail và manager từ chối là nguồn hủy riêng; quyền tự hủy của khách không ngăn nhánh timeout payment hợp lệ.
+Hoạt động:
+1. Guest nhận email tạo đơn thành công có link tới chức năng hủy của đúng Order, có token xác thực ngoài orderId.
+2. Mở link hiển thị trang xác nhận; sau thao tác xác nhận mới gọi endpoint mutation hủy với reason. Không hủy bằng GET mở email để tránh trình quét link hủy ngoài ý muốn.
+3. Backend kiểm tra ownership/token, rate limit Redis theo orderId và trạng thái cho phép.
+4. Khóa đơn, thực hiện hủy một lần; dừng các task/process liên quan.
+5. Nếu USER tự hủy đơn có finalPrice chính thức, mức trừ reputation:
+   < 1.000.000 VND: 1 điểm.
+   1.000.000 đến 5.000.000 VND: 2 điểm.
+   > 5.000.000 đến 10.000.000 VND: 3 điểm.
+   > 10.000.000 VND: 5 điểm.
+   Số dư không đủ: trả lỗi, không ghi số âm. Manager từ chối/timer/payment fail không bị tính là user tự hủy; guest không có reputation.
+6. Với CUSTOM, finalPrice tính từ giá thỏa thuận và voucher đã áp dụng. Nếu chưa có giá xác nhận và đơn còn trước ORDER_ACCEPTED, cho phép chủ đơn hủy, không thu phí và không trừ reputation; bỏ qua kiểm tra số dư để phạt. Không gán giá 0 giả làm finalPrice. Vẫn kiểm tra ownership/token, trạng thái và rate limit.
+7. UserVoucher đã dùng: used=false, usedDate=null; không hoàn lại pointCost đổi voucher vì voucher được trả vào ví.
+8. Guest voucher: hoàn quota tổng một lần, giữ usage theo session/email/phone để không được sử dụng lại cùng giới hạn, chống spam.
+9. Ghi CANCELLED, reason, endOrderTime và history; release đúng assignment đang hoạt động nếu có.
+10. Gửi email cho chủ đơn, notification cho user/staff/manager phù hợp; invalidate cache.
+Đầu ra: CANCELLED hoặc lỗi quyền/trạng thái/rate limit; lý do và tác động được ghi nhận.
+Yêu cầu kết quả:
+- Rate limit theo orderId chỉ chống lặp/spam, không thay token hoặc quyền sở hữu.
+- Request/event lặp không trừ điểm/hoàn quota/release lần hai.
+- Không hoàn stock, không báo hoàn tiền thành công khi chưa có giao dịch hoàn.
+- Không reassign hoặc tạo luồng nghỉ việc; release xảy ra khi hủy hoặc toàn đơn qua KCS checkpoint 2.
+- Ngưỡng rate limit/TTL là cấu hình triển khai cần chọn, không ghi số tùy ý như quy tắc đã chốt.
+
+F17. ĐẶT LẠI CATALOG VÀ CUSTOM
+Người thực hiện: USER sở hữu đơn kết thúc (DELIVERED hoặc CANCELLED).
+Đầu vào: orderId.
+CATALOG:
+1. Kiểm tra owner, trạng thái; duyệt từng dòng.
+2. Mẫu/biến thể tồn tại, chưa xóa, ACCEPTING_ORDERS thì thêm quantity vào cart.
+3. Mục không hợp lệ trả skippedItems và lý do.
+Kết quả: addedItems/skippedItems; chưa tạo Order hoặc charge.
+Yêu cầu: checkout mới dùng giá catalog và voucher hiện hành, không kiểm tra stock.
+CUSTOM:
+1. Kiểm tra owner và lấy snapshot spec/quantity/ảnh tham khảo của đơn nguồn.
+2. Tạo CustomRequest mới ở DRAFT thuộc user, liên kết sourceOrderId để truy vết.
+3. Trả draftId để user chỉnh sửa và gửi một quy trình mới.
+Kết quả: một bản nháp mới, không phải Order đã duyệt/đã chốt.
+Yêu cầu: không mang theo payment, staff assignment, voucher đã tiêu thụ, xác nhận, deadline hoặc checkpoint cũ. Giá cũ nếu hiển thị chỉ tham khảo; phải thương lượng/xác nhận lại qua đầy đủ luồng.
+
+F18. EMAIL, NOTIFICATION VÀ LỊCH SỬ
+Người thực hiện: backend phát sự kiện, Redis consumer gửi, USER/STAFF/MANAGER nhận.
+Đầu vào: eventId, eventType, orderId, recipient/context, version và payload cần thiết.
+Hoạt động:
+1. Lưu thay đổi nghiệp vụ.
+2. Sau commit đăng ký/phát sự kiện có khả năng retry.
+3. Consumer kiểm tra idempotency và dữ liệu hiện hành.
+4. Chỉ gửi email trạng thái cho chủ đơn ở bốn mốc: PENDING_APPROVAL (tạo Order thành công), ORDER_ACCEPTED, ORDER_CREATING, READY_TO_SHIP. Một đơn đi hết luồng bình thường có bốn email trạng thái, không tính email báo cáo checkpoint. USER nhận notification tương ứng; Guest chỉ nhận email.
+5. Nội dung từng mốc gồm thông tin đơn, trạng thái, thời điểm, hành động tiếp theo và lý do theo case. Không đăng ký gửi email chỉ vì bất kỳ trường status nào thay đổi; PENDING_ASSIGNMENT, DISCUSSING, WAITING_STAFF_CONFIRMATION, SHIPPING và DELIVERED không tự tạo email trạng thái chủ đơn. Ghi audit và các cập nhật UI vẫn thực hiện.
+6. Khi ORDER_CREATING, gửi ngày bắt đầu, thời lượng, ngày dự kiến hoàn thành và lý do bắt đầu muộn nếu staff cung cấp; vận chuyển giả định 2 ngày được tách riêng.
+7. Ghi kết quả gửi/lỗi để retry; không rollback đơn vì email không gửi được.
+Đầu ra: email/notification và lịch sử xử lý sự kiện.
+Yêu cầu kết quả:
+- Bốn mốc là bốn email trạng thái trên luồng bình thường; đơn bị hủy sớm không nhận các mốc chưa đạt. Email hủy/timeout đã quy định ở F09b/F16 thuộc nhánh ngoại lệ, không phải bật gửi email cho mọi chuyển trạng thái.
+- Báo cáo checkpoint là loại email tiến trình riêng, có stage/item/ảnh/ghi chú; không tính vào bốn email trạng thái và không yêu cầu đổi status Order để gửi.
+- Checkpoint 1 gửi trực tiếp ngay sau lưu thành công; checkpoint 2 gửi kết quả cho khách sau KCS manager đạt. Không tạo email ORDER_CREATING mới khi chỉ nộp checkpoint.
+- Email ORDER_ACCEPTED hiển thị đơn được chốt và bước tiếp theo; không có hành động tự hủy. Email PENDING_APPROVAL xác nhận mới tạo, không diễn đạt như manager đã duyệt.
+- Chống gửi trùng theo loại thông báo: email trạng thái theo orderId/mốc; email tiến trình theo checkpointId/attempt/sự kiện công bố. Retry không tăng số email nghiệp vụ dự kiến.
+- Staff payment notification dùng assignedStaffId từ Order.
+- Guest nhận email, không tạo notification cho userId rỗng như một tài khoản.
+- Checkpoint 2 đang chờ KCS không công bố cho khách chỉ vì CHECKPOINT_SUBMITTED; checkpoint 1 được gửi trực tiếp, không áp cổng review của checkpoint 2.
+- Retry không tạo lại nghiệp vụ; không tuyên bố gửi email exactly-once nếu nhà cung cấp không hỗ trợ.
+- Email READY_TO_SHIP của guest có link bảo mật đúng đơn.
+- Audit gồm old/new state, actor, timestamp, reason/reference; không chỉ ghi console.
+
+G. HỢP ĐỒNG SỰ KIỆN VÀ BPMN
+
+G1. Redis Stream
+Dùng stream:workflow-events với trường eventType; không mặc định mỗi event là một topic Redis riêng.
+Các event nghiệp vụ mục tiêu:
+- ORDER_CREATED/GUEST_ORDER_CREATED: đơn vừa lưu ở PENDING_APPROVAL, kích hoạt email xác nhận tạo đơn; USER có thêm notification, Guest chỉ email; chưa đồng nghĩa manager duyệt.
+- CUSTOM_REQUEST_SUBMITTED: yêu cầu custom được gửi.
+- ORDER_APPROVED/ORDER_REJECTED: kết quả manager; tên đề xuất.
+- ORDER_STAFF_ASSIGNED: staff nhận phụ trách.
+- ORDER_AGREEMENT_CONFIRMED/ORDER_ACCEPTED: thỏa thuận chính thức; chọn một event chuẩn hoặc quy định rõ tác dụng để tránh gửi trùng.
+- PAYMENT_CONFIRMED: payment attempt của đơn thành công, có reference và amount.
+- PRODUCTION_STARTED: staff bắt đầu.
+- CHECKPOINT_SUBMITTED/APPROVED/REWORK_REQUIRED: stage, attempt, đối tượng được nhận. INITIAL_SHAPE submitted gửi email báo cáo trực tiếp và notification USER; FINAL_PRODUCT cần KCS đạt trước khi gửi kết quả khách. Đây là báo cáo tiến trình, độc lập email trạng thái Order.
+- ORDER_READY_TO_SHIP: đủ điều kiện giao.
+- ORDER_DELIVERED: đã hoàn tất nhận hàng.
+- ORDER_CANCELLED: đã hủy và lý do.
+Các event yêu cầu gửi:
+- ORDER_CONFIRMATION_EMAIL_REQUESTED.
+- ORDER_CANCELLATION_EMAIL_REQUESTED.
+- ORDER_STATUS_CHANGED: consumer chỉ tạo email trạng thái cho PENDING_APPROVAL, ORDER_ACCEPTED, ORDER_CREATING, READY_TO_SHIP; các thay đổi khác dùng audit/UI. WORKFLOW_EMAIL_REQUESTED có loại báo cáo checkpoint riêng; email hủy/timeout đi theo sự kiện ngoại lệ đã định nghĩa.
+- WORKFLOW_EMAIL_REQUESTED.
+- NOTIFICATION_REQUESTED.
+Payload đề xuất: eventId, type, orderId, aggregateVersion, occurredAt, actorId, recipientId hoặc email reference, payment/checkpoint/changeRequest reference.
+Consumer phải có routing cụ thể từ sự kiện nghiệp vụ tới yêu cầu gửi; không coi tên ORDER_CREATED hoặc ORDER_CANCELLED tự có tác dụng gửi email.
+
+G2. BPMN
+- Manager review là user task, trước payment.
+- Claim/assign có kiểm tra nguyên tử ở service; tiếp theo service task tạo chat.
+- CUSTOM có bước chờ user gửi form với timer PT24H từ managerApprovedAt; form hợp lệ được lưu thì dừng timer và chuyển sang bước staff review riêng. Staff review không nằm trong timer này.
+- Guest CATALOG không có chat hoặc task khách xác nhận lại design; dùng snapshot catalog và gửi thông tin qua email.
+- ONLINE: message catch thanh toán thành công cạnh tranh timer PT1H.
+- COD: bỏ nhánh chờ payment, đi tới task staff start.
+- Staff start là user task; service cập nhật ORDER_CREATING chỉ khi lệnh bắt đầu hợp lệ.
+- INITIAL_SHAPE: lưu checkpoint → phát email báo cáo và notification USER → tiếp tục; không có user task review/approval ở checkpoint 1.
+- FINAL_PRODUCT: manager KCS; không đạt quay lại rework và tạo attempt mới, đạt thì kiểm tra mọi loại để hoàn tất sản xuất.
+- Checkpoint theo loại; khi tất cả loại qua KCS checkpoint 2: READY_TO_SHIP và release staff, thông báo, giao giả định và nhận.
+- Không chèn deductInventoryDelegate/reservation vào quy trình này.
+- Custom một loại item không dùng multi-instance theo quantity.
+- Correlation dùng orderId và paymentAttemptId; không chỉ userId vì user có nhiều đơn. ChangeRequest không có nhánh payment.
+- Process retry không tạo lại Order/chat/payment/assignment.
+- Nếu DB đã commit nhưng workflow/event chưa cập nhật, phải có outbox hoặc cơ chế retry/reconciliation tương đương có trạng thái quan sát được.
+
+H. MÔ HÌNH DỮ LIỆU TRIỂN KHAI
+
+Nhóm catalog:
+Product, ProductVariant, Category; availability, giá niêm yết, thuộc tính lọc và ảnh mẫu.
+Manager nhập/cập nhật madeDay (D): số ngày cơ sở làm một sản phẩm của mẫu catalog. Điều kiện bắt buộc: D là số hữu hạn và D >= 2, kiểm tra ở giao diện lẫn backend cho cả tạo và cập nhật. Không tự clamp giá trị sai thành 2. Lưu snapshot madeDay, quantity và phiên bản quy tắc tính cùng OrderItem; sửa catalog không tính lại đơn đã tạo.
+Công thức chính thức áp dụng cho từng loại/OrderItem CATALOG, với q = item.quantity là số nguyên dương và D = item.madeDay:
+if (q > 5) {
+    makeDays = D + 1 + (D - 1.5) * (q - 5) + (D - 1) * 4;
+} else {
+    makeDays = D + 1 + (D - 1) * (q - 1);
 }
-Backend xử lý:
-validate guestSessionId
-validate cart
-validate contact
-validate voucher public nếu có
-validate mẫu sản phẩm vẫn ở trạng thái ACCEPTING_ORDERS
-không reserve/deduct tồn kho thành phẩm
-create guest order
-save contact snapshot
-generate lookup token
-clear guest cart
-return orderId + lookupToken/maskedEmail
-Test:
-•
-Checkout guest COD thành công.
-•
-Cart trống sau checkout.
-•
-Order detail có snapshot.
-•
-Thiếu email/phone/address trả 400.
-•
-Cart rỗng trả 400.
-•
-Bấm checkout lặp không tạo 2 đơn nếu có idempotency key.
-Phase 4 — Email + Redis Stream
-Mục tiêu:
-•
-Tách gửi email khỏi checkout transaction.
-•
-Checkout xong publish event.
-Event:
-GUEST_ORDER_CREATED
-Consumer:
-Email consumer gửi email xác nhận đơn
-Notification/audit consumer nếu cần
-Test:
-•
-Checkout tạo event.
-•
-Consumer nhận event.
-•
-EmailService được gọi.
-•
-Event xử lý lại không gửi trùng nếu có eventId.
-Nếu chưa muốn gửi email thật, dùng log/mock email trước.
-Phase 5 — Public voucher cho guest
-Mục tiêu:
-•
-Tách rõ user voucher và guest/public voucher.
-Quy tắc:
-•
-User dùng UserVoucher, reputation.
-•
-Guest dùng public voucher/campaign voucher.
-•
-Guest voucher chống abuse bằng email/phone hash + sessionId.
-Test:
-•
-Guest dùng voucher hợp lệ.
-•
-Voucher hết hạn/không đủ điều kiện bị từ chối.
-•
-Một email/phone không dùng lại voucher một lần nếu rule không cho.
-•
-User voucher cũ không bị ảnh hưởng.
-Phase này có thể làm trước Phase 4 nếu voucher cần ngay, nhưng mình khuyên để sau guest checkout cơ bản.
-Phase 6 — Workflow delegate framework cho Camunda
-Mục tiêu:
-•
-Chuẩn bị runtime cho BPMN nhưng chưa gắn toàn bộ business.
-Tạo:
-WorkflowTaskDelegate
-WorkflowTaskHandler interface
-WorkflowTaskHandlerRegistry
-Handler ban đầu:
-RESOLVE_GUEST_SESSION
-VALIDATE_GUEST_CHECKOUT
-PUBLISH_WORKFLOW_EVENT
-SEND_EMAIL
-Test:
-•
-Unit test registry tìm đúng handler.
-•
-Unknown taskType throw lỗi rõ.
-•
-Handler đọc/ghi process variables được.
-•
-BPMN service task dùng ${workflowTaskDelegate} chạy được trong test process nhỏ.
-Phase 7 — Bật Camunda cho guest purchase từng phần
-Mục tiêu:
-•
-Không thay toàn bộ checkout ngay.
-•
-Bật Camunda ở đoạn ít rủi ro trước.
-Cách làm an toàn:
-1.
-Đầu tiên chỉ dùng Camunda sau khi order đã tạo:
-POST /checkout/guest
-  → create order đồng bộ
-  → start GuestPurchaseFlow với orderId
-  → process bắt đầu từ publish/email/handmade branch
-2.
-Sau khi ổn mới cân nhắc đưa validate/payment/create order vào Camunda.
-Lý do: create order/payment là phần nhạy cảm, không nên chuyển vào workflow quá sớm.
-Test:
-•
-Order tạo xong start process instance.
-•
-Process gửi email xác nhận.
-•
-Incident không làm mất order.
-•
-Nếu Camunda lỗi, checkout vẫn không tạo đơn mồ côi hoặc có trạng thái rõ.
-Phase 8 — Handmade production checkpoint cho guest
-Mục tiêu:
-•
-Order item handmade đi qua assignment/checkpoint/final QC.
-Thêm entity:
-OrderItemAssignment
-ProductionCheckpoint
-ProductionCheckpointImage
-ProductionDecision
-API:
-POST /api/order-items/{itemId}/assign-staff
-POST /api/order-items/{itemId}/checkpoints
-POST /api/order-items/{itemId}/checkpoints/{checkpointId}/review
-Test:
-•
-Manager assign staff.
-•
-Staff submit checkpoint 1.
-•
-Nếu policy không cần duyệt: gửi email checkpoint 1.
-•
-Nếu cần duyệt: tạo manager task.
-•
-Manager reject → staff rework.
-•
-Staff submit final.
-•
-Manager final QC approve → item ready.
-•
-Khi tất cả item ready → order ready to ship.
-Phase 9 — Chuyển catalog sang made-to-order và loại bỏ tồn kho thành phẩm
-Mục tiêu:
-•
-Sản phẩm trên shop là mẫu thiết kế nhận làm theo đơn, không phải thành phẩm đang có trong kho.
-•
-Loại bỏ phụ thuộc vào tồn kho thành phẩm nhưng giữ nguyên số lượng trong cart/order và quota voucher.
-Thay đổi:
-Product/ProductVariant:
-  bổ sung availabilityStatus: ACCEPTING_ORDERS, PAUSED, DISCONTINUED
-  loại bỏ ProductVariant.quantity dùng như tồn kho thành phẩm
-Cart/checkout/reorder:
-  loại bỏ kiểm tra đủ stock
-  loại bỏ giữ/trừ/hoàn stock
-Inventory:
-  loại bỏ InventoryReservationService, InventoryTransaction, DeductInventoryDelegate,
-  API nhập kho/lịch sử tồn kho và stockReserved/stockDeducted nếu không còn mục đích khác
-Giữ lại:
-  CartItem.quantity
-  OrderItem.quantity
-  exportedQuantity
-  receivedQuantity
-  quantity/quota của voucher campaign
-Test:
-•
-Khách đặt được nhiều sản phẩm theo cùng một mẫu khi mẫu đang ACCEPTING_ORDERS.
-•
-Mẫu PAUSED hoặc DISCONTINUED không thể được thêm mới/checkout.
-•
-Checkout không còn thất bại vì ProductVariant.quantity.
-•
-Quantity của cart/order và quota voucher không bị ảnh hưởng.
-•
-Không còn luồng reserve/deduct/restore tồn kho thành phẩm.
-Phase 10 — Staff chính phụ trách Order và phòng chat theo Order
-Mục tiêu:
-•
-Mỗi Order có một staff chính làm đầu mối trao đổi với khách và theo dõi tiến độ toàn Order.
-•
-Tái sử dụng WebSocket/chat hiện có, mở rộng từ consultation thread sang order thread.
-Thêm/sửa:
-Order.assignedStaff
-Order.assignedByManager
-Order.assignedAt
-ChatThread/ChatMessage.orderId hoặc context tương đương để phân biệt CONSULTATION và ORDER
-Phân quyền:
-  customer tạo Order, staff chính được phân công và manager mới được truy cập phòng chat Order
-  OrderItemAssignment tiếp tục quản lý người trực tiếp sản xuất từng item
-  giai đoạn đầu staff chính và staff sản xuất có thể là cùng một người
-Luồng:
-  Order PENDING_ASSIGNMENT
-    → Manager gán staff chính
-    → Order DISCUSSING
-    → Tạo/mở phòng chat Order
-    → Staff và khách trao đổi yêu cầu, thời gian và thay đổi
-Test:
-•
-Manager gán/đổi staff chính đúng quyền.
-•
-Customer và staff được phân công gửi/nhận tin nhắn realtime.
-•
-Staff không được phân công không đọc hoặc gửi tin nhắn trong Order.
-•
-Manager có thể theo dõi/can thiệp theo policy.
-•
-Lịch sử consultation chat cũ không bị ảnh hưởng.
-Phase 11 — Thời gian sản xuất và xác nhận deadline
-Mục tiêu:
-•
-Có thời gian tham khảo theo mẫu/số lượng nhưng deadline cuối cùng phải do staff đề xuất và khách xác nhận.
-•
-Không tự động cam kết ngày hoàn thành chỉ dựa trên công thức.
-Thêm/sửa Product:
-productionTimeFirstUnit
-productionTimeAdditionalUnit
-productionBufferDays
-Công thức tham khảo:
-itemEstimatedTime = productionTimeFirstUnit
-                  + (quantity - 1) * productionTimeAdditionalUnit
-                  + productionBufferDays
-Thời gian chuẩn bị cho mẫu đầu tiên được tính trong productionTimeFirstUnit.
-Không dùng công thức giảm 10% lũy tiến cho từng sản phẩm tiếp theo.
-Thêm/sửa Order/OrderItem:
-  thời gian dự kiến từng item
-  proposedCompletionAt
-  committedCompletionAt
-  deadlineConfirmedAt
-  deadlineConfirmedBy
-  productionStartedAt
-  deadline proposal version/history
-Trạng thái dự kiến:
-PENDING_ASSIGNMENT
-  → DISCUSSING
-  → WAITING_CUSTOMER_CONFIRMATION
-  → CONFIRMED
-  → IN_PRODUCTION
-  → READY_TO_SHIP
-  → COMPLETED
-Rule:
-•
-Staff gửi deadline proposal có cấu trúc; một tin nhắn văn bản “đồng ý” không được tính là xác nhận.
-•
-User xác nhận bằng nút chức năng; guest xác nhận bằng link bảo mật trong email.
-•
-Thay đổi proposal đã xác nhận sẽ làm xác nhận cũ mất hiệu lực và yêu cầu khách xác nhận lại.
-•
-Chỉ chuyển sang IN_PRODUCTION khi payment/checkout hợp lệ và deadline đã được xác nhận.
-•
-Sau khi xác nhận, gửi email gồm mã Order, staff phụ trách, thời hạn từng item và thời hạn toàn Order.
-•
-Chat chỉ dùng để trao đổi và hiển thị system message; deadline agreement chính thức phải lưu trong database.
-API đề xuất:
-POST /api/orders/{orderId}/deadline-proposals
-POST /api/orders/{orderId}/deadline-proposals/{proposalId}/confirm
-Test:
-•
-Staff chính tạo proposal và hệ thống lưu đúng version.
-•
-Customer khác không thể xác nhận proposal.
-•
-User/guest xác nhận thành công theo đúng cơ chế.
-•
-Thay đổi proposal yêu cầu xác nhận lại.
-•
-Order không bắt đầu production nếu chưa xác nhận deadline hoặc payment/checkout chưa hợp lệ.
-•
-Xác nhận thành công tạo event/email đúng một lần.
-Thứ tự triển khai thực tế nên bắt đầu
-Mình khuyên bắt đầu bằng 3 phase đầu:
-1. Guest session + cart foundation
-2. Guest checkout data model
-3. Guest checkout API đồng bộ
-Sau 3 phase này, bạn đã có luồng guest mua hàng chạy được mà chưa phụ thuộc Camunda/Redis Stream phức tạp.
-Sau đó mới thêm:
-4. Email/Redis Stream
-5. Voucher guest
-6. Workflow delegate framework
-7. Camunda runtime
-8. Production checkpoint
-9. Made-to-order catalog + loại bỏ tồn kho thành phẩm
-10. Staff chính + order chat
-11. Production time + deadline agreement
+roundedMakeDays = Math.ceil(makeDays);
+inspectionDays = Math.ceil(makeDays * 0.1);
+totalMakeDay = roundedMakeDays + inspectionDays;
+productionDurationDays = totalMakeDay;
+Ý nghĩa:
+- Sản phẩm thứ nhất: D + 1 ngày.
+- Sản phẩm thứ 2 đến hết thứ 5: mỗi sản phẩm D - 1 ngày.
+- Từ sản phẩm thứ 6: mỗi sản phẩm D - 1.5 ngày.
+- Mức giảm tính so với D, không giảm lũy tiến theo sản phẩm trước.
+- Làm tròn lên riêng thời gian làm và thời gian kiểm tra rồi cộng: totalMakeDay = ceil(makeDays) + ceil(makeDays * 0.1). Tổng thời lượng là số ngày nguyên.
+- inspectionDays là 10% makeDays chưa làm tròn, sau đó làm tròn lên. Không tính 10% trên roundedMakeDays hoặc tổng đã cộng thời gian kiểm tra.
+- Không gộp hai phần rồi mới làm tròn. Ví dụ hai phần 3.6 và 0.2 được tính thành ceil(3.6) + ceil(0.2) = 4 + 1 = 5 ngày. Đây là ví dụ cách làm tròn; theo tỷ lệ 10%, makeDays=3.6 có phần kiểm tra 0.36, cũng cho tổng 5 ngày.
+Ví dụ D = 3 ngày:
+- q = 1: makeDays = 4; roundedMakeDays = 4; inspectionDays = 1; totalMakeDay = 5 ngày.
+- q = 5: makeDays = 12; roundedMakeDays = 12; inspectionDays = 2; totalMakeDay = 14 ngày.
+- q = 6: makeDays = 13.5; roundedMakeDays = 14; inspectionDays = 2; totalMakeDay = 16 ngày.
+- q = 10: makeDays = 19.5; roundedMakeDays = 20; inspectionDays = 2; totalMakeDay = 22 ngày.
+CATALOG dùng thời lượng tính từ cấu hình manager và lưu snapshot theo từng loại; guest không cần chốt lại. Không áp dụng công thức catalog cho thời lượng CUSTOM đã được hai bên thỏa thuận.
+Tính độc lập cho từng OrderItem bằng vòng lặp, không cộng quantity của các loại khác nhau hoặc lấy tổng thời lượng các loại để áp lại công thức:
+for (OrderItem item : order.items) {
+    item.productionDurationDays = calculateCatalogDays(item.madeDay, item.quantity);
+    item.computedCompletionAt = addProductionDays(order.productionStartedAt, item.productionDurationDays);
+}
+Vòng lặp trên dành cho CATALOG; CUSTOM dùng số ngày hai bên đã chốt thay calculateCatalogDays. Mỗi item có thời lượng và deadline riêng. Điều kiện READY_TO_SHIP vẫn là tất cả loại qua checkpoint 2, không thay bằng phép so sánh ngày hoặc tính tổng ngày toàn đơn.
+Quy tắc addProductionDays:
+- Lấy ngày bắt đầu từ productionStartedAt theo múi giờ ứng dụng Asia/Saigon. Không tính ngày bắt đầu là ngày sản xuất thứ nhất.
+- Duyệt từ ngày kế tiếp; Chủ nhật hoặc ngày nằm trong danh sách ngày lễ/ngày nghỉ của shop không tăng bộ đếm.
+- Những ngày còn lại tăng bộ đếm một; dừng khi đủ productionDurationDays và lưu ngày hạn hoàn thành cho item.
+- Thứ Bảy vẫn được tính nếu không thuộc danh sách ngày nghỉ. Không triển khai lịch ca hoặc tối ưu lịch sản xuất.
+- Ví dụ kiểm tra cách cộng ngày: bắt đầu thứ Bảy, thời lượng đã tính là 2 ngày; bỏ Chủ nhật, thứ Hai là ngày 1, thứ Ba là ngày 2, hạn hoàn thành là thứ Ba. Ví dụ này minh họa cộng ngày, không phải kết quả công thức catalog với madeDay=2.
+- Ngày lễ/ngày nghỉ phải có dữ liệu cấu hình để backend nhận biết; có thể dùng danh sách ngày cụ thể của shop. Không tự bỏ qua ngày lễ chỉ dựa vào thứ trong tuần hoặc tự suy ngày nghỉ chưa cấu hình. Đây là dữ liệu hỗ trợ tính hạn, không yêu cầu module lịch công việc riêng.
+Giao hàng giả định 2 ngày, hiển thị tách biệt và không cộng vào productionDurationDays; vận chuyển nằm ngoài phạm vi sản xuất.
+
+Nhóm identity/cart:
+User(role, reputation), GuestSession, Cart(userId hoặc guestSessionId), CartItem.
+Danh tính phiên không thay token truy cập Order.
+
+Nhóm order:
+Order(orderType, status, userId nullable, guestSessionId, assignedStaffId, managerId, timestamps, totals, paymentMethod, currentAgreementVersion).
+OrderContactSnapshot(fullName, email, phone, address, note).
+OrderItem(sourceType, productVariantId nullable cho custom, specSnapshot, unitPrice, quantity, exportedQuantity, receivedQuantity).
+OrderLookupToken(hash, scope, expiry/revocation theo cấu hình) hoặc trường tương đương trong Order.
+
+Nhóm custom/agreement:
+CustomRequest(ownerId, draft status, spec, attachments, linkedOrderId).
+OrderAgreement(orderId, version, submittedBy/At, confirmedBy/At, state, item prices/spec, duration/deadline).
+Một version xác nhận phải liên kết được tới snapshot Order đã áp dụng.
+Lưu productionDurationDays, productionStartedAt, computedCompletionAt, expectedShippingDays=2, plannedStartAt nếu có và lateStartReason. Deadline chỉ tính từ ORDER_CREATING. Lưu managerApprovedAt/confirmationDueAt, userSubmittedAt và trạng thái bước chờ để timer custom 24 giờ dừng ngay khi form hợp lệ được gửi.
+
+Nhóm staff:
+Thông tin AVAILABLE và ràng buộc active assignment.
+Assignment lưu Order, staff, nguồn assign/claim, actor, thời điểm, thời điểm kết thúc.
+Có thể dùng unique constraint cho active assignment hoặc khóa tương đương để bảo vệ quy tắc một staff một assignment sản xuất. Lưu releasedAt/releaseReason: FINAL_KCS_PASSED hoặc ORDER_CANCELLED; không đếm các assignment đã release là đơn đang chiếm suất.
+
+Nhóm payment:
+PaymentAttempt(orderId, providerTransactionId, expectedAmount, status, createdAt, dueAt, paidAt, provider result). Không có payment bổ sung ChangeRequest.
+Unique/idempotency cho mã giao dịch nhà cung cấp; lưu dữ liệu xác minh cần thiết, không ghi secret vào log.
+
+Nhóm production:
+Checkpoint(order/item reference, stage, attempt, submittedBy/At, note, state).
+CheckpointImage(checkpointId, URL, thứ tự).
+Decision(checkpointId, actor, decision, reason, timestamp).
+Unique checkpoint stage/attempt theo đối tượng; không ghi đè attempt cũ.
+
+Nhóm change:
+ChangeRequest(orderId, ownerId, baseAgreementVersion, chi tiết chưa làm, staff decision, reason, appliedVersion). Không có giá mới, phí chênh lệch hoặc payment reference; finalPrice bất biến.
+
+Nhóm ưu đãi/audit:
+VoucherTemplate, UserVoucher, GuestVoucherUsage, ReputationHistory, OrderStatusHistory, Notification, ChatThread, ChatMessage.
+Đổi voucher chỉ hợp lệ khi reputation - pointCost >= 40. Quyền chọn COD yêu cầu reputation >= 20; hai ngưỡng cần được đặt tên riêng trong cấu hình/logic để không nhầm lẫn.
+Các trường/version/history phục vụ truy vết, không chỉ lưu trạng thái cuối.
+
+I. HỢP ĐỒNG API VÀ GIAO DIỆN
+
+Tên URL cụ thể có thể thiết kế theo cấu trúc repo; hành vi bắt buộc:
+- Catalog list/detail: public, có filter/paging.
+- Cart CRUD: chủ giỏ xác định từ token/header.
+- Checkout: trả Order đã tạo chờ review, không trả payment URL trước điều kiện.
+- Custom draft list/create/update/submit: chỉ owner, submit idempotent.
+- Manager review: decision/reason/staffId tùy chọn.
+- Assign/claim: trả assignment và trạng thái, lỗi conflict khi staff/Order đã được nhận.
+- Agreement submit: version/spec/deadline; CUSTOM có giá, CATALOG giá chỉ đọc.
+- Agreement confirm/request changes: staff phụ trách, kiểm tra version.
+- Payment create/status/webhook: amount server-side, webhook xác minh provider.
+- Start production: thao tác chủ động staff, trả productionStartedAt.
+- Checkpoint submit/review: stage/attempt và attachment hợp lệ.
+- ChangeRequest create/decision/status: version và phạm vi chi tiết chưa làm rõ, không cho cập nhật giá.
+- Shipping submit: số lượng từng OrderItem.
+- Order detail/history: owner/assigned staff/manager hoặc guest token theo quyền.
+- Receipt confirm: receivedItems + acceptMismatch; trả matched/completed/mismatches.
+- Đánh giá catalog cho người mua; không có API complaint hoặc đánh giá custom trong phạm vi.
+- Cancel: reason, orderId, JWT hoặc guest action token; rate limit Redis theo orderId; link mở trang xác nhận, endpoint mutation kiểm tra trạng thái.
+- Reorder catalog: addedItems/skippedItems; reorder custom: draftId mới, bắt đầu lại quy trình.
+Giao diện phải hiển thị tách:
+- Manager đã duyệt.
+- Staff đã nhận.
+- Thỏa thuận đang chờ/xác nhận.
+- Thanh toán đang chờ/đã trả.
+- Staff chưa bắt đầu/đã bắt đầu.
+Không dùng một nhãn “đã duyệt” cho tất cả các mốc.
+
+Phản hồi lỗi đề xuất:
+400: dữ liệu/điều kiện nghiệp vụ không hợp lệ.
+401: thiếu hoặc hết hiệu lực xác thực.
+403: không có quyền sở hữu/phụ trách.
+404: đối tượng không tồn tại hoặc không được công bố theo chính sách.
+409: version cũ, tranh chấp assignment, thao tác xung đột trạng thái.
+Mã lỗi nghiệp vụ cần ổn định để FE hiển thị đúng hành động tiếp theo.
+
+J. YÊU CẦU PHI CHỨC NĂNG VÀ NHẤT QUÁN
+
+- Transaction cho tạo đơn/giỏ/voucher, xác nhận giá, assignment, bắt đầu, receipt, cancel.
+- Kiểm tra version/khóa cho concurrent claim, confirm, webhook-timeout và nhận hàng.
+- Idempotency cho checkout, custom submit, payment callback, staff start, event consumer.
+- Timer và webhook tranh chấp phải có một kết quả nghiệp vụ duy nhất.
+- Không để staff start chạy đồng thời với cancel mà cả hai cùng thành công.
+- Phân quyền cả endpoint và WebSocket; token guest có scope, không chỉ orderId.
+- Cache chỉ tối ưu đọc, database quyết định giá/quyền/trạng thái.
+- Sau thay đổi nghiệp vụ, invalidate cache đơn/danh sách/giỏ/reputation liên quan.
+- Log có correlation orderId/processId/eventId/paymentId, không chứa token/secret.
+- Tất cả ngày giờ có timezone rõ, lưu nhất quán.
+- Có quan sát event lỗi, workflow incident, retry và trạng thái cần người xử lý.
+- Không chạy lại giao dịch tạo đơn chỉ để chữa lỗi email.
+
+K. TIÊU CHÍ NGHIỆM THU
+
+AC01: Guest/user xem được mẫu, biết là made-to-order; mẫu PAUSED không checkout.
+AC02: Checkout cart lấy đúng giá server; API không cho sửa giá CATALOG.
+AC03: Giá catalog thay đổi sau đặt không sửa snapshot Order.
+AC04: Một user có nhiều custom draft; gửi một draft tạo một Order.
+AC05: Custom chưa manager duyệt/chưa staff chốt không có payment hợp lệ.
+AC06: Manager duyệt khả năng làm độc lập reputation; user <20 không COD.
+AC07: Staff không AVAILABLE hoặc có active assignment chưa qua KCS checkpoint 2/hủy không được nhận thêm.
+AC08: Hai assign/claim đồng thời không vượt giới hạn hoặc nhận trùng.
+AC09: Staff bận ngay khi nhận; manager duyệt KCS checkpoint 2 toàn đơn đạt chuyển READY_TO_SHIP và release đúng assignment; hủy cũng release.
+AC10: Service task chat retry tạo một phòng; người ngoài không đọc/subscribe.
+AC11: Staff chỉ xác nhận version hiện hành; CATALOG không có bước nhập giá mới.
+AC12: ONLINE timer 1 giờ từ mở payment; không tính từ tạo request.
+AC13: Webhook sai chữ ký/số tiền/reference không đánh dấu PAID.
+AC14: Webhook lặp không tạo lại nghiệp vụ; thông báo đúng assignedStaff.
+AC15: Sau thanh toán Order vẫn ORDER_ACCEPTED, chưa có productionStartedAt.
+AC16: Staff bấm bắt đầu hợp lệ mới ORDER_CREATING; bấm lặp không đổi timestamp.
+AC17: Custom quantity 20 không tạo 20 workflow checkpoint.
+AC18: Rework giữ attempt/ảnh/decision cũ; final chưa đạt không READY_TO_SHIP.
+AC19: ChangeRequest từ chối không sửa giá/spec/deadline.
+AC20: ChangeRequest chỉ tác động chi tiết chưa làm; không đổi giá, voucher, finalPrice, không tạo payment.
+AC21: Guest link READY_TO_SHIP có token; thiếu token không đọc/xác nhận.
+AC22: Receipt thiếu/trùng/ngoài đơn hoặc số âm bị từ chối.
+AC23: Lệch chưa chấp nhận không hoàn tất; chấp nhận lệch có audit.
+AC24: Hoàn tất user cộng 2 điểm một lần; guest không có reputation.
+AC25: Hủy hợp lệ ghi lý do, dừng workflow, xử lý voucher một lần; không hoàn stock.
+AC26: Reorder catalog trả mục thêm/bỏ qua; reorder custom tạo DRAFT mới và không sao chép quyền/phê duyệt/payment.
+AC27: Email/workflow lỗi sau commit không mất đơn; có retry quan sát được.
+AC28: Không có reserve/deduct/restore tồn thành phẩm trong bất kỳ luồng đặt/hủy/reorder.
+AC29: Guest catalog nhận email duyệt với link và thời lượng công thức; không có task guest chốt design/custom.
+AC30: ORDER_CREATING ghi productionStartedAt và tính deadline, email có ngày bắt đầu và lý do muộn nếu có.
+AC31: Custom chưa gửi form hợp lệ sau 24 giờ từ manager duyệt bị hủy và thông báo; form gửi hợp lệ đúng hạn dừng timer ngay, không chờ staff duyệt; guest không có timer này.
+AC32: Luồng bình thường chỉ có bốn email trạng thái tại PENDING_APPROVAL, ORDER_ACCEPTED, ORDER_CREATING, READY_TO_SHIP; trạng thái trung gian/giao/nhận không tạo thêm email trạng thái. Retry không gửi trùng; checkpoint là email tiến trình riêng.
+AC33: Guest hủy hoàn quota nhưng không xóa giới hạn session/email/phone; rate limit không thay xác thực.
+AC34: Catalog nhiều loại chỉ READY_TO_SHIP khi mọi loại qua checkpoint 2; quantity không nhân workflow theo chiếc.
+AC35: INITIAL_SHAPE gửi email ảnh trực tiếp và notification USER “Đã có hình ảnh đầu tiên của item #{orderItemId}”; không chờ duyệt và Order vẫn ORDER_CREATING.
+AC36: Order tạo thành công có status PENDING_APPROVAL; USER nhận email + notification, Guest chỉ email; draft chưa gửi không phát email tạo Order.
+AC37: Tự hủy chỉ trước ORDER_ACCEPTED. Link từ email tạo đơn mở sau khi đã ORDER_ACCEPTED bị từ chối, dù token còn hạn; email ORDER_ACCEPTED không có nút hủy.
+AC38: Chủ đơn CUSTOM chưa có giá xác nhận được hủy trước ORDER_ACCEPTED, không phạt tiền/reputation và không gán finalPrice bằng 0 để tính phạt.
+AC39: Manager cấu hình madeDay; CATALOG tính đúng hai nhánh q <= 5 và q > 5, sau đó totalMakeDay = Math.ceil(makeDays) + Math.ceil(makeDays * 0.1). Với madeDay=3: q=1/5/6/10 lần lượt trả 5/14/16/22 ngày. Làm tròn riêng từng phần, không làm tròn sau khi cộng. CUSTOM không tự áp công thức catalog.
+AC40: Tạo/cập nhật catalog thiếu madeDay, không phải số hữu hạn hoặc madeDay < 2 bị từ chối ở backend; frontend có validation tương ứng. madeDay=2 được chấp nhận.
+AC41: Order nhiều loại tính thời lượng riêng trong vòng lặp từng OrderItem; không gộp quantity hoặc cộng thời lượng các loại vào công thức một item.
+AC42: Bắt đầu thứ Bảy với thời lượng đã tính 2 ngày cho hạn thứ Ba nếu thứ Hai/thứ Ba không là ngày nghỉ; không tính ngày bắt đầu, bỏ Chủ nhật. Nếu thứ Hai được cấu hình là ngày nghỉ thì hạn là thứ Tư.
+Các kịch bản phụ thuộc Oxx chỉ nghiệm thu sau khi quyết định tương ứng được xác nhận.
+
+L. PHÂN CHIA CÔNG VIỆC TRIỂN KHAI
+
+1. Chuẩn hóa state/data contract, xác nhận các Oxx ảnh hưởng release; migration dữ liệu cũ có kế hoạch ánh xạ.
+2. Catalog availability, bỏ phụ thuộc stock; cart user/guest, snapshot giá và contact.
+3. Custom drafts/submit, checkout idempotency, voucher theo thời điểm giá hợp lệ.
+4. Manager review và assignment một staff một đơn; xử lý race ở DB.
+5. Camunda service task chat, membership và form agreement/version.
+6. Timer xác nhận custom PT24H; mở payment sau thỏa thuận, timer PT1H, webhook retry/idempotency.
+7. Notification staff và user task bắt đầu; ORDER_CREATING/productionStartedAt.
+8. Checkpoint/ảnh/review/rework và READY_TO_SHIP.
+9. ChangeRequest miễn phí cho chi tiết chưa triển khai, giá không đổi.
+10. Giao/nhận chung user/guest, token, chênh lệch, hủy và reorder.
+11. Event routing, retry/reconciliation, cache invalidation và kiểm thử tích hợp xuyên luồng.
+Mỗi hạng mục bàn giao API contract, migration nếu có, BPMN tương ứng, FE state và test theo AC.
+
+M. CÁC PHÂN HỆ HỖ TRỢ
+
+Các phân hệ tài khoản, wishlist, đánh giá, tư vấn trước bán và thống kê không được coi là yêu cầu ngầm “dev tự tìm hiểu”.
+Phạm vi tích hợp trong đợt workflow này:
+- Tài khoản cung cấp userId, role, contact và reputation; đăng ký/đăng nhập/quên mật khẩu/cập nhật hồ sơ phục vụ truy cập.
+- Wishlist cho USER thêm/xóa/xem sản phẩm quan tâm; không tạo Order và không giữ stock.
+- Người mua catalog nhận quyền đánh giá sau DELIVERED; kiểm tra đơn/dòng hàng đã mua, guest dùng cơ chế chứng minh quyền qua link/token. Chưa phát triển đánh giá custom và complaint.
+- Consultation/chat trước bán là ngữ cảnh riêng, không gán nhầm quyền sang ChatThread ORDER.
+- ORDER_CREATED có thể kích hoạt ghi nhận đóng góp tư vấn; ORDER_DELIVERED xác nhận và ORDER_CANCELLED hủy ghi nhận.
+- Phân công sản xuất không tự sinh hoa hồng tư vấn.
+- Báo cáo quản lý lấy trạng thái/giá trị chính thức từ database; không tính doanh thu chỉ từ Order vừa tạo chưa thanh toán/hoàn tất.
+Không có yêu cầu thay đổi công thức hoa hồng hoặc quy trình quản lý tài khoản trong phạm vi này; nếu mở rộng phải có đặc tả riêng về đầu vào, quyền và kết quả, không suy từ workflow Order.
+
+N. NGUỒN THAM CHIẾU TRIỂN KHAI
+- OrderService: hủy, nhận hàng, phản ánh số lượng, reorder, callback và lịch sử.
+- CartService: giỏ/checkout, điều kiện reputation COD.
+- VoucherService, ReputationService: tính giảm, sử dụng/đổi voucher và lịch sử điểm.
+- approve-cart.bpmn: process cần tái cấu trúc; timer mục tiêu PT1H, review trước payment, staff start riêng.
+- GuestPurchaseWorkflowService và guest-purchase-runtime.bpmn: cơ chế khởi process guest sau tạo đơn.
+Tài liệu này mô tả hành vi đích; source chỉ để xác định điểm cần triển khai/migrate, không thay đặc tả.
+
+O. ĐIỂM CẦN LÀM RÕ VÀ THIẾT KẾ XÁC THỰC
+
+Các quyết định đã đủ rõ đã được đưa trực tiếp vào luồng, không còn để thành câu hỏi O01–O13.
+
+Vận chuyển và liên hệ shipper nằm ngoài phạm vi; không còn yêu cầu thiết kế workflow/chat/tài khoản shipper. Thời gian giao giả định 2 ngày và COD thu qua shipper là dữ liệu mô tả, không phải tích hợp/đối soát nhà vận chuyển.
+
+Xác thực guest và đề xuất refresh token:
+- Refresh token cấp mới access token cho một phiên đã được xác thực; nó không tự chứng minh người cầm orderId là chủ đơn.
+- Triển khai link email với token ngẫu nhiên/bảo mật gắn Order và scope đọc/hủy/nhận hàng. Backend kiểm tra token, quyền trạng thái và rate limit độc lập.
+- Có thể đổi email token thành guest access session ngắn hạn; nếu muốn duy trì phiên dài thì thêm refresh token có lưu hash, rotation/revocation và hết hạn. Đây là phương án kỹ thuật đề xuất, chưa xác nhận áp dụng.
+- Guest không cần tạo user account. Không dùng refresh token tài khoản để giả lập quyền guest.
+- Thời hạn cụ thể, cấp lại link và lựa chọn có dùng guest refresh session cần chốt khi thiết kế xác thực. Không bỏ token bảo mật chỉ vì đã rate limit theo orderId.
+
+Webhook retry:
+- Dùng retry của nhà cung cấp, xử lý idempotency khi giao lại.
+- Retry giải quyết lỗi giao webhook, không giải quyết xung đột giao dịch thành công nhưng callback đến sau khi timer hủy đơn. Ghi nhận ngoại lệ đối soát, không tự khôi phục/hoàn tiền khi chưa có chính sách.
+
+Các Oxx là đầu việc quyết định rõ ràng, không phải lý do bỏ qua kiểm tra quyền/tiền/trạng thái trong các luồng đã xác định.

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Biểu đồ Use Case tổng quát — WF01 Custom Request</title>
+  <desc id="desc">Khách hàng có tài khoản liên kết với ba use case: xem bản nháp, tạo hoặc cập nhật bản nháp, và gửi yêu cầu tạo đơn custom. Dịch vụ email hỗ trợ use case gửi yêu cầu. Đơn tạo thành công có trạng thái PENDING_APPROVAL. Manager duyệt trong workflow tiếp theo.</desc>
+  <rect width="1280" height="800" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="640" y="48" text-anchor="middle" font-size="25" font-weight="700">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="640" y="80" text-anchor="middle" font-size="19">WF01 — Custom Request</text>
+    <rect x="270" y="115" width="710" height="505" rx="0" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M270 157 H640 L659 139 V115" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="292" y="143" font-size="17" font-weight="700">Hệ thống shop handmade — WF01</text>
+
+    <!-- Actor USER -->
+    <g stroke="#263244" stroke-width="2.5" fill="none" stroke-linecap="round">
+      <circle cx="125" cy="294" r="19"/>
+      <path d="M125 313 V375 M89 338 H161 M125 375 L96 414 M125 375 L154 414"/>
+    </g>
+    <text x="125" y="448" text-anchor="middle" font-size="18" font-weight="700">Khách hàng</text>
+    <text x="125" y="474" text-anchor="middle" font-size="17">có tài khoản</text>
+    <text x="125" y="500" text-anchor="middle" font-size="16">USER</text>
+
+    <!-- Associations do not imply execution order -->
+    <g stroke="#374151" stroke-width="1.8" fill="none">
+      <path d="M161 338 L425 235"/>
+      <path d="M161 338 L425 375"/>
+      <path d="M161 338 L425 515"/>
+      <path d="M825 515 L1089 515"/>
+    </g>
+
+    <!-- Use cases -->
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="625" cy="235" rx="200" ry="53"/>
+      <ellipse cx="625" cy="375" rx="200" ry="53"/>
+      <ellipse cx="625" cy="515" rx="200" ry="53"/>
+    </g>
+    <g text-anchor="middle" font-size="19">
+      <text x="625" y="226"><tspan font-weight="700">UC01.1</tspan><tspan x="625" dy="27">Xem danh sách và chi tiết bản nháp</tspan></text>
+      <text x="625" y="366"><tspan font-weight="700">UC01.2</tspan><tspan x="625" dy="27">Tạo / cập nhật bản nháp custom</tspan></text>
+      <text x="625" y="506"><tspan font-weight="700">UC01.3</tspan><tspan x="625" dy="27">Gửi yêu cầu tạo đơn custom</tspan></text>
+    </g>
+
+    <!-- External supporting actor -->
+    <g stroke="#263244" stroke-width="2.5" fill="none" stroke-linecap="round">
+      <circle cx="1125" cy="471" r="19"/>
+      <path d="M1125 490 V552 M1089 515 H1161 M1125 552 L1096 591 M1125 552 L1154 591"/>
+    </g>
+    <text x="1125" y="624" text-anchor="middle" font-size="18" font-weight="700">Dịch vụ email</text>
+    <text x="1125" y="650" text-anchor="middle" font-size="15">Tác nhân hỗ trợ</text>
+
+    <!-- UML note -->
+    <path d="M1020 181 H1220 L1240 201 V298 H1020 Z" fill="#fff9e8" stroke="#737373" stroke-width="1.2"/>
+    <path d="M1220 181 V201 H1240" fill="none" stroke="#737373" stroke-width="1.2"/>
+    <text x="1035" y="208" font-size="14"><tspan x="1035">Tiền điều kiện:</tspan><tspan x="1035" dy="23">đăng nhập USER;</tspan><tspan x="1035" dy="23">chỉ truy cập dữ liệu</tspan><tspan x="1035" dy="20">thuộc chính mình.</tspan></text>
+
+    <text x="640" y="679" text-anchor="middle" font-size="17" font-weight="700">Kết quả UC01.3: Order CUSTOM ở trạng thái PENDING_APPROVAL</text>
+    <text x="640" y="710" text-anchor="middle" font-size="16">Email và notification được xử lý bất đồng bộ sau khi tạo đơn thành công.</text>
+    <text x="640" y="741" text-anchor="middle" font-size="15" fill="#526072">Manager duyệt thuộc WF02; lưu bản nháp chưa tạo Order và chưa gửi thông báo tạo đơn.</text>
+    <text x="640" y="775" text-anchor="middle" font-size="14" fill="#526072">Đường nối thể hiện tác nhân tham gia chức năng, không thể hiện thứ tự xử lý.</text>
+  </g>
+</svg>
