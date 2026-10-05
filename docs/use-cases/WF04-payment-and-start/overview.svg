@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF04 — Thanh toán và bắt đầu sản xuất</title>
+  <desc id="desc">User thực hiện thanh toán online, cổng thanh toán gửi kết quả, staff phụ trách chủ động bắt đầu sản xuất. COD bỏ qua bước thanh toán online.</desc>
+  <rect width="1400" height="900" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="700" y="44" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="700" y="78" font-size="21" text-anchor="middle">WF04 — Thanh toán và bắt đầu sản xuất</text>
+
+    <rect x="320" y="112" width="760" height="570" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M320 156 H820 L842 134 V112" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="344" y="142" font-size="18" font-weight="700">Shop handmade — WF04 payment_and_start</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M201 247 L460 245"/>
+      <path d="M201 537 L460 565"/>
+      <path d="M1199 407 L940 245"/>
+      <path d="M1199 407 L940 405"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="700" cy="245" rx="240" ry="64"/>
+      <ellipse cx="700" cy="405" rx="240" ry="64"/>
+      <ellipse cx="700" cy="565" rx="240" ry="64"/>
+    </g>
+
+    <g text-anchor="middle" font-size="19">
+      <text x="700" y="222" font-weight="700">UC04.1</text>
+      <text x="700" y="250">Mở và thực hiện thanh toán online</text>
+      <text x="700" y="382" font-weight="700">UC04.2</text>
+      <text x="700" y="410">Tiếp nhận kết quả thanh toán</text>
+      <text x="700" y="542" font-weight="700">UC04.3</text>
+      <text x="700" y="570">Staff bắt đầu sản xuất</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="163" cy="203" r="19"/><path d="M163 222 V286 M125 247 H201 M163 286 L135 325 M163 286 L191 325"/>
+      <circle cx="163" cy="493" r="19"/><path d="M163 512 V576 M125 537 H201 M163 576 L135 615 M163 576 L191 615"/>
+      <circle cx="1237" cy="363" r="19"/><path d="M1237 382 V446 M1199 407 H1275 M1237 446 L1209 485 M1237 446 L1265 485"/>
+    </g>
+
+    <g text-anchor="middle" font-size="18">
+      <text x="163" y="355" font-weight="700">Khách có tài khoản</text><text x="163" y="380">USER</text>
+      <text x="163" y="645" font-weight="700">Nhân viên phụ trách</text><text x="163" y="670">STAFF</text>
+      <text x="1237" y="515" font-weight="700">Cổng thanh toán</text><text x="1237" y="540" font-size="15">Tác nhân hệ thống ngoài</text>
+    </g>
+
+    <text x="700" y="738" text-anchor="middle" font-size="18" font-weight="700">COD bỏ qua UC04.1–UC04.2 và đi thẳng tới task chờ staff bắt đầu.</text>
+    <text x="700" y="775" text-anchor="middle" font-size="17">Webhook PAID chỉ thông báo, Order vẫn ORDER_ACCEPTED.</text>
+    <text x="700" y="812" text-anchor="middle" font-size="17">Chỉ staff phụ trách bấm bắt đầu mới chuyển ORDER_CREATING.</text>
+    <text x="700" y="860" text-anchor="middle" font-size="15" fill="#526072">Camunda, timer, database và notification consumer là thành phần nội bộ nên không vẽ thành actor.</text>
+  </g>
+</svg>
