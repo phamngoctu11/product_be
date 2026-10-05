@@ -1,0 +1,29 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF02 Tiếp nhận và duyệt đơn
+actor "Khách có tài khoản\nUSER" as User
+actor "Khách vãng lai\nGuest" as Guest
+actor "Quản lý\nMANAGER" as Manager
+actor "Dịch vụ email" as Email
+rectangle "Shop handmade — WF02 accept_order" {
+  usecase "UC02.1\nĐặt hàng catalog\ntừ giỏ" as Checkout
+  usecase "UC02.2\nXem danh sách và chi tiết\nđơn chờ duyệt" as View
+  usecase "UC02.3\nChấp nhận hoặc từ chối\ntiếp nhận đơn" as Review
+}
+User -- Checkout
+Guest -- Checkout
+Manager -- View
+Manager -- Review
+Checkout -- Email
+Review -- Email
+note bottom of Review
+  CUSTOM đã được tạo tại WF01, không tạo lại.
+  Phân công/thỏa thuận: bàn giao WF03.
+  Thanh toán/bắt đầu: WF04.
+  Email review ở đây là nhánh từ chối;
+  không gửi email cho mọi trạng thái trung gian.
+end note
+@enduml

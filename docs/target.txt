@@ -1,5 +1,5 @@
 ĐẶC TẢ NGHIỆP VỤ VÀ TRIỂN KHAI SHOP HANDMADE MADE-TO-ORDER
-Phiên bản bàn giao phân tích: 03/10/2026
+Phiên bản bàn giao phân tích: 05/10/2026
 
 A. MỤC ĐÍCH VÀ CÁCH SỬ DỤNG
 
@@ -156,16 +156,20 @@ WF01 custom_request:
 Người thực hiện: USER.
 Đầu ra: bản nháp lưu được hoặc một Order custom đã gửi chờ manager.
 WF02 accept_order (tên nghiệp vụ dùng chung cho đầu vào acceptcart/custom):
-Người thực hiện: khách, MANAGER, backend.
+Người thực hiện: khách, MANAGER, backend và Camunda.
+Vai trò Camunda: bắt đầu/chuyển vào chặng manager review sau khi Order PENDING_APPROVAL đã được lưu; tạo user task cho MANAGER; giữ điểm chờ quyết định; rẽ nhánh duyệt sang WF03 hoặc từ chối sang nghiệp vụ hủy dùng chung. Checkout, kiểm tra giỏ, giá, voucher và lưu Order vẫn do backend service thực hiện.
 Đầu ra: Order bị từ chối/hủy hoặc được duyệt nhận làm; không thu online trước duyệt.
 WF03 agree_order:
 Người thực hiện: MANAGER/STAFF/USER và Camunda service task.
+Vai trò Camunda: giữ bước chờ assign/self-claim; sau khi có staff thì gọi service task tạo phòng chat cho nhánh USER cần trao đổi; quản lý bước chờ user gửi form, timer CUSTOM PT24H và bước chờ staff xác nhận; guest CATALOG bỏ qua chat/thỏa thuận. Chat message thông thường không phải task BPMN.
 Đầu ra: staff phụ trách và ORDER_ACCEPTED; CUSTOM có chat/thỏa thuận xác nhận, guest CATALOG dùng snapshot mẫu và email, không có bước chat.
 WF04 payment_and_start:
-Người thực hiện: cổng thanh toán, webhook, consumer, STAFF.
+Người thực hiện: cổng thanh toán, webhook, consumer, STAFF và Camunda.
+Vai trò Camunda: tại ORDER_ACCEPTED, rẽ nhánh COD/ONLINE; ONLINE chờ cạnh tranh giữa payment-success message và timer PT1H; COD bỏ qua bước chờ thanh toán; cả hai nhánh hội tụ tại user task chờ staff bấm bắt đầu. Webhook validation và ghi Payment do backend thực hiện trước khi correlate message.
 Đầu ra: ORDER_CREATING khi staff bấm bắt đầu; nhánh online có timer PT1H.
 WF05 start_made_product:
-Người thực hiện: STAFF, MANAGER/khách theo policy.
+Người thực hiện: STAFF, MANAGER, backend và Camunda; khách chỉ nhận báo cáo tiến trình, không duyệt checkpoint.
+Vai trò Camunda: điều phối checkpoint theo từng loại/OrderItem; checkpoint 1 nhận kết quả rồi tiếp tục và phát yêu cầu thông báo; checkpoint 2 tạo bước MANAGER KCS, rẽ nhánh đạt hoặc rework; chỉ khi mọi loại đã qua KCS mới gọi nghiệp vụ READY_TO_SHIP và release staff.
 Đầu ra: READY_TO_SHIP sau INITIAL_SHAPE, FINAL_PRODUCT và QC.
 WF06 change_request:
 Người thực hiện: USER và staff phụ trách; không có bước payment.
@@ -180,7 +184,22 @@ WF09 cancel_order:
 Người thực hiện: USER, MANAGER hoặc hệ thống do timeout/payment fail.
 Đầu ra: CANCELLED cùng lịch sử, voucher/thông báo tương ứng.
 
-Các workflow có thể là subprocess/call activity, không bắt buộc mỗi tên thành một file BPMN. Mỗi bước chỉ có một nơi chịu trách nhiệm chuyển trạng thái.
+WF02-WF05 là phạm vi điều phối chính bằng Camunda vì có human task, message, timer và vòng lặp rework kéo dài. Thiết kế mục tiêu dùng một process instance vòng đời đang làm của mỗi Order, định danh bằng businessKey duy nhất gắn orderId; WF02, WF03, WF04 và WF05 có thể là các embedded subprocess hoặc call activity có version riêng, không bắt buộc mỗi tên thành một process độc lập. WF01 chỉ lưu draft bằng CRUD; khi submit tạo Order PENDING_APPROVAL thì đăng ký bắt đầu process. WF06-WF09 là nghiệp vụ phụ/nhánh dùng chung, chỉ nối vào process bằng event/subprocess/call activity khi cần, không tạo thêm một process vòng đời cạnh tranh cho cùng Order.
+
+E1. NGUYÊN TẮC ÁP DỤNG CAMUNDA CHO WF02-WF05
+
+1. Database nghiệp vụ là nguồn dữ liệu chính cho Order, Payment, Assignment, Agreement, Checkpoint và trạng thái; Camunda giữ vị trí điều phối, task, timer và process variables tối thiểu như orderId, orderType, paymentMethod và các khóa tham chiếu. Không lưu toàn bộ entity hoặc dữ liệu chat/ảnh trong process variable.
+2. Mỗi chuyển trạng thái chỉ có một application service chịu trách nhiệm kiểm tra quyền, trạng thái hiện tại, version và quy tắc nghiệp vụ. Controller, delegate, worker và consumer gọi lại service này; không tự cập nhật Order theo nhiều cách.
+3. User task dùng cho hành động có người chịu trách nhiệm và cần xuất hiện trong hàng công việc: manager review, staff xác nhận thỏa thuận, staff bấm bắt đầu, staff nộp checkpoint và manager KCS. Việc xem danh sách, nhập form, gửi tin chat hoặc xem notification là chức năng ứng dụng, không mặc nhiên là một user task.
+4. Service task chỉ gọi thao tác tự động ngắn và lặp an toàn, ví dụ tạo phòng chat theo orderId, đăng ký event thông báo hoặc áp dụng kết quả chuyển bước. Không đưa giao diện chat realtime hay toàn bộ nghiệp vụ tính giá vào BPMN.
+5. Message event dùng cho sự kiện đã được backend xác thực và lưu thành công, ví dụ form custom hợp lệ, assignment hoàn tất, staff confirm hoặc payment webhook hợp lệ. Correlation dùng processInstance/businessKey theo orderId và eventId duy nhất; message lặp không làm hoàn tất bước hai lần.
+6. Timer được Camunda quản lý tại đúng wait state: PT24H bắt đầu từ managerApprovedAt cho CUSTOM và dừng ngay khi form hợp lệ được lưu; PT1H bắt đầu khi PaymentAttempt chính thức được mở. Retry không tạo timer mới hoặc kéo dài due date.
+7. Ghi dữ liệu nghiệp vụ và tiến bước Camunda phải nhất quán. Khi engine nhúng dùng cùng Spring transaction/datasource, có thể hoàn tất task và cập nhật DB trong cùng transaction. Nếu thao tác qua event/worker hoặc không chung transaction, dùng outbox/job bàn giao bền vững, idempotency và reconciliation; không bắt lỗi correlate rồi chỉ ghi log.
+8. Email, notification và topic là side effect sau khi mốc nghiệp vụ đã commit. Dùng event/outbox có khóa chống trùng theo orderId + eventType + milestone; lỗi gửi không rollback quyết định nghiệp vụ và không yêu cầu người dùng thực hiện lại.
+9. Nhánh hủy là event/subprocess hoặc call activity dùng chung: kiểm tra nguồn hủy và trạng thái được phép, kết thúc các task/timer còn chờ, release đúng active assignment và phục hồi voucher theo F16. Không xóa process trực tiếp để thay thế nghiệp vụ hủy đã audit.
+10. Checkpoint catalog nhiều loại dùng collection các OrderItem/type cần theo dõi. Có thể dùng multi-instance subprocess hoặc bộ đếm/trạng thái DB, nhưng điều kiện hội tụ phải đọc kết quả đã lưu và chỉ chuyển READY_TO_SHIP một lần khi tất cả checkpoint 2 đạt.
+11. Process definition phải được version hóa. Order đang chạy tiếp tục trên version đã khởi tạo trừ khi có migration được kiểm thử; Order mới dùng version mới. BPMN cần test các nhánh chính, timeout, retry, message trùng và hai người xử lý đồng thời.
+12. BPMN mục tiêu không phụ thuộc việc code hiện tại đã triển khai đủ. File approve-cart hiện hành phải được thiết kế lại theo thứ tự manager review trước payment và timer ONLINE PT1H. Phiên bản Camunda dùng cho môi trường vận hành phải là phiên bản còn được hỗ trợ hoặc có kế hoạch nâng cấp/migration riêng.
 
 F. ĐẶC TẢ CÁC LUỒNG CHỨC NĂNG
 

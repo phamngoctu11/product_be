@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="940" viewBox="0 0 1400 940" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF02 — Tiếp nhận và duyệt đơn</title>
+  <desc id="desc">USER và Guest đặt hàng catalog từ giỏ. MANAGER xem đơn chờ duyệt và quyết định chấp nhận hoặc từ chối. Dịch vụ email hỗ trợ thông báo tạo đơn và nhánh từ chối. Đơn custom được chuyển từ WF01.</desc>
+  <rect width="1400" height="940" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="700" y="46" font-size="26" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="700" y="79" font-size="21" text-anchor="middle">WF02 — Tiếp nhận và duyệt đơn</text>
+    <rect x="315" y="118" width="750" height="631" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M315 160 H815 L835 140 V118" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="337" y="146" font-size="18" font-weight="700">Shop handmade — WF02 accept_order</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M171 233 L465 255"/>
+      <path d="M171 429 L465 255"/>
+      <path d="M171 630 L465 435"/>
+      <path d="M171 630 L465 620"/>
+      <path d="M915 255 L1199 433"/>
+      <path d="M915 620 L1199 433"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="690" cy="255" rx="225" ry="66"/>
+      <ellipse cx="690" cy="435" rx="225" ry="66"/>
+      <ellipse cx="690" cy="620" rx="225" ry="66"/>
+    </g>
+    <g text-anchor="middle" font-size="20">
+      <text x="690" y="229" font-weight="700">UC02.1</text>
+      <text x="690" y="258">Đặt hàng catalog</text><text x="690" y="285">từ giỏ</text>
+      <text x="690" y="409" font-weight="700">UC02.2</text>
+      <text x="690" y="438">Xem danh sách và chi tiết</text><text x="690" y="465">đơn chờ duyệt</text>
+      <text x="690" y="594" font-weight="700">UC02.3</text>
+      <text x="690" y="623">Chấp nhận hoặc từ chối</text><text x="690" y="650">tiếp nhận đơn</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.5" stroke-linecap="round">
+      <circle cx="135" cy="189" r="18"/><path d="M135 207 V270 M99 233 H171 M135 270 L108 307 M135 270 L162 307"/>
+      <circle cx="135" cy="385" r="18"/><path d="M135 403 V466 M99 429 H171 M135 466 L108 503 M135 466 L162 503"/>
+      <circle cx="135" cy="586" r="18"/><path d="M135 604 V667 M99 630 H171 M135 667 L108 704 M135 667 L162 704"/>
+      <circle cx="1235" cy="389" r="18"/><path d="M1235 407 V470 M1199 433 H1271 M1235 470 L1208 507 M1235 470 L1262 507"/>
+    </g>
+    <g text-anchor="middle" font-size="18">
+      <text x="135" y="335" font-weight="700">Khách có tài khoản</text><text x="135" y="359">USER</text>
+      <text x="135" y="531" font-weight="700">Khách vãng lai</text><text x="135" y="555">Guest</text>
+      <text x="135" y="732" font-weight="700">Quản lý</text><text x="135" y="756">MANAGER</text>
+      <text x="1235" y="538" font-weight="700">Dịch vụ email</text><text x="1235" y="562" font-size="15">Tác nhân hỗ trợ</text>
+    </g>
+    <text x="700" y="799" text-anchor="middle" font-size="18" font-weight="700">CATALOG tạo từ giỏ; CUSTOM nhận Order đã tạo tại WF01.</text>
+    <text x="700" y="831" text-anchor="middle" font-size="17">Kết quả: duyệt để bàn giao WF03 hoặc từ chối và chuyển CANCELLED.</text>
+    <text x="700" y="863" text-anchor="middle" font-size="16">Email: xác nhận tạo đơn và nhánh từ chối; không gửi cho mọi trạng thái trung gian.</text>
+    <text x="700" y="900" text-anchor="middle" font-size="15" fill="#526072">Phân công/thỏa thuận chi tiết thuộc WF03; thanh toán và bắt đầu sản xuất thuộc WF04.</text>
+    <text x="700" y="925" text-anchor="middle" font-size="14" fill="#526072">Đường nối thể hiện tác nhân tham gia chức năng, không thể hiện thứ tự thực hiện.</text>
+  </g>
+</svg>
