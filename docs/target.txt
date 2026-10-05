@@ -344,11 +344,11 @@ Yêu cầu kết quả:
 - Không triển khai đổi staff/reassign; endpoint assign/claim không được ghi đè assignment đã nhận.
 
 F08. TẠO PHÒNG CHAT VÀ TRAO ĐỔI
-Người thực hiện: Camunda service task tạo phòng; USER/STAFF trao đổi; MANAGER xem theo quyền.
+Người thực hiện: Camunda service task tạo phòng; USER sở hữu Order và STAFF phụ trách trao đổi. MANAGER không tham gia và không có quyền truy cập phòng chat.
 Đầu vào: Order đã được manager duyệt, có user và assignedStaff.
 Hoạt động:
 1. Service task tìm/tạo ChatThread theo orderId.
-2. Gắn quyền khách sở hữu, staff phụ trách, manager được phép.
+2. Gắn quyền đúng hai bên: USER sở hữu Order và STAFF đang phụ trách. Không tạo membership hoặc quyền đọc/gửi/subscribe cho MANAGER.
 3. Lưu message và đẩy realtime theo phòng.
 4. Hiển thị nút “Thông tin & chốt đơn” cạnh avatar staff.
 5. Hiển thị trạng thái đang trao đổi/chờ xác nhận/thanh toán để khách biết bước tiếp theo.
@@ -357,6 +357,7 @@ Yêu cầu kết quả:
 - Tạo phòng retry không sinh nhiều phòng.
 - Kiểm tra quyền cả REST đọc lịch sử lẫn gửi/subscribe WebSocket.
 - Staff khác không được truy cập.
+- MANAGER chỉ duyệt và phân công staff ở luồng trước; không được xem lịch sử, đọc nội dung, gửi tin hoặc subscribe phòng chat.
 - Không đợi ORDER_ACCEPTED để tạo chat custom: chat là nơi chốt trước trạng thái đó.
 - Guest chỉ có catalog, nhận thông tin qua email/trang token; không tạo chat, không chờ guest thương lượng/chốt design hoặc deadline.
 

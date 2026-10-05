@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF03 — Phân công và xác nhận đơn</title>
+  <desc id="desc">Manager chỉ phân công staff. Staff tự nhận đơn, trao đổi và xác nhận thỏa thuận. Phòng chat chỉ dành cho User sở hữu đơn và Staff phụ trách.</desc>
+  <rect width="1600" height="1050" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="800" y="44" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="800" y="78" font-size="21" text-anchor="middle">WF03 — Phân công và xác nhận đơn</text>
+
+    <rect x="320" y="112" width="960" height="720" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M320 156 H870 L892 134 V112" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="344" y="142" font-size="18" font-weight="700">Shop handmade — WF03 agree_order</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M203 237 L485 235"/>
+      <path d="M203 501 L485 515"/>
+      <path d="M203 501 L485 675"/>
+      <path d="M1397 433 L1115 395"/>
+      <path d="M1397 433 L1115 515"/>
+      <path d="M1397 433 L1115 775"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="800" cy="235" rx="315" ry="57"/>
+      <ellipse cx="800" cy="395" rx="315" ry="57"/>
+      <ellipse cx="800" cy="515" rx="315" ry="57"/>
+      <ellipse cx="800" cy="675" rx="315" ry="57"/>
+      <ellipse cx="800" cy="775" rx="315" ry="42"/>
+    </g>
+
+    <g text-anchor="middle" font-size="19">
+      <text x="800" y="222" font-weight="700">UC03.1</text><text x="800" y="251">Manager phân công staff</text>
+      <text x="800" y="382" font-weight="700">UC03.2</text><text x="800" y="411">Staff tự nhận đơn</text>
+      <text x="800" y="502" font-weight="700">UC03.3</text><text x="800" y="531">Truy cập và trao đổi trong phòng chat</text>
+      <text x="800" y="662" font-weight="700">UC03.4</text><text x="800" y="691">User gửi form thông tin thỏa thuận</text>
+      <text x="800" y="770" font-weight="700">UC03.5</text><text x="800" y="796">Staff xác nhận hoặc yêu cầu sửa</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="165" cy="193" r="19"/><path d="M165 212 V276 M127 237 H203 M165 276 L137 315 M165 276 L193 315"/>
+      <circle cx="165" cy="457" r="19"/><path d="M165 476 V540 M127 501 H203 M165 540 L137 579 M165 540 L193 579"/>
+      <circle cx="1435" cy="389" r="19"/><path d="M1435 408 V472 M1397 433 H1473 M1435 472 L1407 511 M1435 472 L1463 511"/>
+    </g>
+
+    <g text-anchor="middle" font-size="18">
+      <text x="165" y="345" font-weight="700">Quản lý</text><text x="165" y="370">MANAGER</text>
+      <text x="165" y="609" font-weight="700">Khách có tài khoản</text><text x="165" y="634">USER</text>
+      <text x="1435" y="541" font-weight="700">Nhân viên</text><text x="1435" y="566">STAFF</text>
+    </g>
+
+    <text x="800" y="884" text-anchor="middle" font-size="18" font-weight="700">CUSTOM: timer 24 giờ từ managerApprovedAt, dừng khi form hợp lệ được lưu.</text>
+    <text x="800" y="919" text-anchor="middle" font-size="17">Guest CATALOG bỏ qua chat/form và dùng snapshot catalog sau khi có staff.</text>
+    <text x="800" y="954" text-anchor="middle" font-size="17">Kết quả: ORDER_ACCEPTED để bàn giao WF04 hoặc CANCELLED do timeout.</text>
+    <text x="800" y="997" text-anchor="middle" font-size="15" fill="#526072">Camunda là thành phần nội bộ nên không vẽ thành actor. Đường nối không thể hiện thứ tự thực hiện.</text>
+  </g>
+</svg>

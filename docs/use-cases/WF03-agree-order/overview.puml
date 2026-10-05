@@ -1,0 +1,33 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF03 Phân công và xác nhận đơn
+
+actor "Khách có tài khoản\nUSER" as User
+actor "Nhân viên\nSTAFF" as Staff
+actor "Quản lý\nMANAGER" as Manager
+
+rectangle "Shop handmade — WF03 agree_order" {
+  usecase "UC03.1\nManager phân công staff" as Assign
+  usecase "UC03.2\nStaff tự nhận đơn" as Claim
+  usecase "UC03.3\nTruy cập và trao đổi\ntrong phòng chat" as Chat
+  usecase "UC03.4\nUser gửi form\nthông tin thỏa thuận" as Submit
+  usecase "UC03.5\nStaff xác nhận hoặc\nyêu cầu sửa" as Confirm
+}
+
+Manager -- Assign
+Staff -- Claim
+Staff -- Chat
+Staff -- Confirm
+User -- Chat
+User -- Submit
+
+note bottom of Submit
+  CUSTOM: timer 24 giờ từ managerApprovedAt,
+  dừng ngay khi form hợp lệ được lưu.
+  Guest CATALOG bỏ qua chat và form.
+  Kết thúc WF03: ORDER_ACCEPTED hoặc CANCELLED do timeout.
+end note
+@enduml
