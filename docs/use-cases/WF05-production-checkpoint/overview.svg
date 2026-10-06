@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF05 — Sản xuất, checkpoint và KCS</title>
+  <desc id="desc">Staff phụ trách nộp checkpoint hình ảnh đầu tiên và sản phẩm hoàn thiện. Manager KCS sản phẩm hoàn thiện. User và Guest chỉ nhận báo cáo, không duyệt.</desc>
+  <rect width="1400" height="900" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="700" y="44" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="700" y="78" font-size="21" text-anchor="middle">WF05 — Sản xuất, checkpoint và KCS</text>
+
+    <rect x="320" y="112" width="760" height="570" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M320 156 H820 L842 134 V112" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="344" y="142" font-size="18" font-weight="700">Shop handmade — WF05 start_made_product</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M201 327 L460 245"/>
+      <path d="M201 327 L460 405"/>
+      <path d="M1199 567 L940 565"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="700" cy="245" rx="240" ry="64"/>
+      <ellipse cx="700" cy="405" rx="240" ry="64"/>
+      <ellipse cx="700" cy="565" rx="240" ry="64"/>
+    </g>
+
+    <g text-anchor="middle" font-size="19">
+      <text x="700" y="215" font-weight="700">UC05.1</text>
+      <text x="700" y="244">Nộp checkpoint</text><text x="700" y="270">hình ảnh đầu tiên</text>
+      <text x="700" y="375" font-weight="700">UC05.2</text>
+      <text x="700" y="404">Nộp sản phẩm</text><text x="700" y="430">hoàn thiện</text>
+      <text x="700" y="535" font-weight="700">UC05.3</text>
+      <text x="700" y="564">KCS sản phẩm</text><text x="700" y="590">hoàn thiện</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="163" cy="283" r="19"/><path d="M163 302 V366 M125 327 H201 M163 366 L135 405 M163 366 L191 405"/>
+      <circle cx="1237" cy="523" r="19"/><path d="M1237 542 V606 M1199 567 H1275 M1237 606 L1209 645 M1237 606 L1265 645"/>
+    </g>
+
+    <g text-anchor="middle" font-size="18">
+      <text x="163" y="435" font-weight="700">Nhân viên phụ trách</text><text x="163" y="460">STAFF</text>
+      <text x="1237" y="675" font-weight="700">Quản lý</text><text x="1237" y="700">MANAGER</text>
+    </g>
+
+    <text x="700" y="742" text-anchor="middle" font-size="18" font-weight="700">Checkpoint theo OrderItem/loại sản phẩm, không theo quantity.</text>
+    <text x="700" y="779" text-anchor="middle" font-size="17">USER/Guest chỉ nhận báo cáo tiến trình, không duyệt checkpoint.</text>
+    <text x="700" y="816" text-anchor="middle" font-size="17">Tất cả KCS checkpoint 2 đạt mới READY_TO_SHIP và release staff.</text>
+    <text x="700" y="860" text-anchor="middle" font-size="15" fill="#526072">Camunda, database, email và notification consumer là thành phần nội bộ nên không vẽ thành actor.</text>
+  </g>
+</svg>

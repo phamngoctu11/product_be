@@ -1,0 +1,26 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF05 Sản xuất, checkpoint và KCS
+
+actor "Nhân viên phụ trách\nSTAFF" as Staff
+actor "Quản lý\nMANAGER" as Manager
+
+rectangle "Shop handmade — WF05 start_made_product" {
+  usecase "UC05.1\nNộp checkpoint\nhình ảnh đầu tiên" as Initial
+  usecase "UC05.2\nNộp sản phẩm\nhoàn thiện" as Final
+  usecase "UC05.3\nKCS sản phẩm\nhoàn thiện" as KCS
+}
+
+Staff -- Initial
+Staff -- Final
+Manager -- KCS
+
+note bottom of KCS
+  Checkpoint theo OrderItem/loại, không theo quantity.
+  USER/Guest chỉ nhận báo cáo, không duyệt.
+  Tất cả KCS đạt mới READY_TO_SHIP và release staff.
+end note
+@enduml
