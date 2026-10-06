@@ -1,0 +1,26 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF08 Tra cứu và xác nhận nhận hàng
+
+actor "Khách có tài khoản\nUSER" as User
+actor "Khách không tài khoản\nGUEST" as Guest
+
+rectangle "Shop handmade — WF08 complete_order" {
+  usecase "UC08.1\nTra cứu thông tin Order\nđể nhận hàng" as Lookup
+  usecase "UC08.2\nXác nhận số lượng\nthực nhận" as Confirm
+}
+
+User -- Lookup
+User -- Confirm
+Guest -- Lookup
+Guest -- Confirm
+
+note bottom of Confirm
+  Chỉ xác nhận khi Order SHIPPING.
+  Khớp hoặc chấp nhận chênh lệch mới DELIVERED.
+  Không mở complaint và không tự hoàn tất bằng timer.
+end note
+@enduml

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="720" viewBox="0 0 1300 720" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF07 — Bàn giao vận chuyển</title>
+  <desc id="desc">Staff đã phụ trách ghi nhận số lượng bàn giao theo từng dòng hàng. Shipper, User, Guest và Manager không phải tác nhân của WF07.</desc>
+  <rect width="1300" height="720" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="650" y="46" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="650" y="82" font-size="21" text-anchor="middle">WF07 — Bàn giao vận chuyển</text>
+
+    <rect x="350" y="125" width="760" height="360" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M350 169 H820 L842 147 V125" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="374" y="155" font-size="18" font-weight="700">Shop handmade — WF07 ship_order</text>
+
+    <path d="M230 310 L472 305" fill="none" stroke="#374151" stroke-width="1.8"/>
+
+    <ellipse cx="760" cy="305" rx="288" ry="82" fill="white" stroke="#374151" stroke-width="1.8"/>
+    <g text-anchor="middle" font-size="20">
+      <text x="760" y="270" font-weight="700">UC07.1</text>
+      <text x="760" y="305">Ghi nhận bàn giao</text>
+      <text x="760" y="334">vận chuyển</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="192" cy="259" r="20"/>
+      <path d="M192 279 V345 M152 310 H230 M192 345 L162 388 M192 345 L222 388"/>
+    </g>
+    <g text-anchor="middle" font-size="18">
+      <text x="192" y="423" font-weight="700">Nhân viên đã phụ trách</text>
+      <text x="192" y="449">STAFF</text>
+    </g>
+
+    <text x="650" y="548" text-anchor="middle" font-size="18" font-weight="700">Lưu exportedQuantity theo từng OrderItem và chuyển READY_TO_SHIP → SHIPPING.</text>
+    <text x="650" y="588" text-anchor="middle" font-size="17">Assignment đã được release ở WF05, quyền dựa trên lịch sử staff phụ trách.</text>
+    <text x="650" y="626" text-anchor="middle" font-size="17">Đơn vị vận chuyển, USER, Guest và MANAGER không phải tác nhân của WF07.</text>
+    <text x="650" y="671" text-anchor="middle" font-size="15" fill="#526072">Không có carrier API, webhook tracking, chat shipper hoặc email trạng thái SHIPPING.</text>
+  </g>
+</svg>

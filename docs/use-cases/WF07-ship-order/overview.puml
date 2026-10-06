@@ -1,0 +1,21 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF07 Bàn giao vận chuyển
+
+actor "Nhân viên đã phụ trách\nSTAFF" as Staff
+
+rectangle "Shop handmade — WF07 ship_order" {
+  usecase "UC07.1\nGhi nhận bàn giao\nvận chuyển" as Handover
+}
+
+Staff -- Handover
+
+note bottom of Handover
+  Lưu exportedQuantity theo từng OrderItem.
+  READY_TO_SHIP → SHIPPING.
+  Không tích hợp shipper và không gửi email trạng thái SHIPPING.
+end note
+@enduml

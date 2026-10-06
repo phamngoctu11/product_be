@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="790" viewBox="0 0 1400 790" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF08 — Tra cứu và xác nhận nhận hàng</title>
+  <desc id="desc">User sở hữu đơn hoặc Guest có token tra cứu thông tin Order và xác nhận số lượng thực nhận.</desc>
+  <rect width="1400" height="790" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="700" y="44" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="700" y="80" font-size="21" text-anchor="middle">WF08 — Tra cứu và xác nhận nhận hàng</text>
+
+    <rect x="310" y="112" width="780" height="470" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M310 156 H805 L827 134 V112" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="334" y="142" font-size="18" font-weight="700">Shop handmade — WF08 complete_order</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M201 286 L442 263"/>
+      <path d="M201 326 L442 433"/>
+      <path d="M1199 286 L958 263"/>
+      <path d="M1199 326 L958 433"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="700" cy="263" rx="258" ry="70"/>
+      <ellipse cx="700" cy="433" rx="258" ry="70"/>
+    </g>
+
+    <g text-anchor="middle" font-size="19">
+      <text x="700" y="232" font-weight="700">UC08.1</text>
+      <text x="700" y="261">Tra cứu thông tin Order</text>
+      <text x="700" y="288">để nhận hàng</text>
+      <text x="700" y="402" font-weight="700">UC08.2</text>
+      <text x="700" y="431">Xác nhận số lượng</text>
+      <text x="700" y="458">thực nhận</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="162" cy="243" r="20"/>
+      <path d="M162 263 V329 M122 294 H202 M162 329 L132 372 M162 329 L192 372"/>
+      <circle cx="1238" cy="243" r="20"/>
+      <path d="M1238 263 V329 M1198 294 H1278 M1238 329 L1208 372 M1238 329 L1268 372"/>
+    </g>
+
+    <g text-anchor="middle" font-size="18">
+      <text x="162" y="410" font-weight="700">Khách có tài khoản</text>
+      <text x="162" y="436">USER</text>
+      <text x="1238" y="410" font-weight="700">Khách không tài khoản</text>
+      <text x="1238" y="436">GUEST</text>
+    </g>
+
+    <text x="700" y="640" text-anchor="middle" font-size="18" font-weight="700">USER dùng JWT/ownership, Guest dùng orderId + token bảo mật.</text>
+    <text x="700" y="678" text-anchor="middle" font-size="17">Chỉ SHIPPING mới được xác nhận; khớp hoặc chấp nhận chênh lệch mới DELIVERED.</text>
+    <text x="700" y="716" text-anchor="middle" font-size="17">Không complaint workflow, không tự hoàn tất bằng timer và không release staff lần nữa.</text>
+    <text x="700" y="755" text-anchor="middle" font-size="15" fill="#526072">Backend đối chiếu và xử lý sự kiện là thành phần nội bộ nên không vẽ thành actor.</text>
+  </g>
+</svg>
