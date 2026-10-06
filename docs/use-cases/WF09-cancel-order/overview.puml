@@ -1,0 +1,27 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+title Biểu đồ Use Case tổng quát — WF09 Hủy đơn
+
+actor "Khách có tài khoản\nUSER" as User
+actor "Khách không tài khoản\nGUEST" as Guest
+actor "Quản lý\nMANAGER" as Manager
+
+rectangle "Shop handmade — WF09 cancel_order" {
+  usecase "UC09.1\nKhách chủ động\nhủy Order" as CustomerCancel
+  usecase "UC09.2\nManager từ chối\nOrder" as ManagerReject
+  usecase "UC09.3\nHệ thống hủy do\ntimeout/payment fail" as SystemCancel
+}
+
+User -- CustomerCancel
+Guest -- CustomerCancel
+Manager -- ManagerReject
+
+note bottom of SystemCancel
+  UC09.3 do timer/sự kiện nội bộ kích hoạt,
+  không vẽ Backend hoặc Camunda thành actor.
+  Mọi nguồn dùng chung nghiệp vụ hủy idempotent.
+end note
+@enduml

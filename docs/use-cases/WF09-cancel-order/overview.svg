@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1450" height="900" viewBox="0 0 1450 900" role="img" aria-labelledby="title desc">
+  <title id="title">Use Case tổng quát WF09 — Hủy đơn</title>
+  <desc id="desc">User hoặc Guest chủ động hủy trước Order Accepted, Manager từ chối tại bước review, hệ thống tự hủy do timeout hoặc payment fail.</desc>
+  <rect width="1450" height="900" fill="white"/>
+  <g font-family="Arial, 'Segoe UI', sans-serif" fill="#172033">
+    <text x="725" y="44" font-size="27" font-weight="700" text-anchor="middle">BIỂU ĐỒ USE CASE TỔNG QUÁT</text>
+    <text x="725" y="80" font-size="21" text-anchor="middle">WF09 — Hủy đơn</text>
+
+    <rect x="330" y="112" width="790" height="600" fill="#fbfcfe" stroke="#374151" stroke-width="2"/>
+    <path d="M330 156 H805 L827 134 V112" fill="none" stroke="#374151" stroke-width="1.5"/>
+    <text x="354" y="142" font-size="18" font-weight="700">Shop handmade — WF09 cancel_order</text>
+
+    <g fill="none" stroke="#374151" stroke-width="1.8">
+      <path d="M222 245 L462 245"/>
+      <path d="M222 500 L462 274"/>
+      <path d="M1228 407 L988 405"/>
+    </g>
+
+    <g fill="white" stroke="#374151" stroke-width="1.8">
+      <ellipse cx="725" cy="245" rx="263" ry="70"/>
+      <ellipse cx="725" cy="405" rx="263" ry="70"/>
+      <ellipse cx="725" cy="565" rx="263" ry="70"/>
+    </g>
+
+    <g text-anchor="middle" font-size="19">
+      <text x="725" y="214" font-weight="700">UC09.1</text>
+      <text x="725" y="243">Khách chủ động</text>
+      <text x="725" y="270">hủy Order</text>
+      <text x="725" y="374" font-weight="700">UC09.2</text>
+      <text x="725" y="403">Manager từ chối</text>
+      <text x="725" y="430">Order</text>
+      <text x="725" y="534" font-weight="700">UC09.3</text>
+      <text x="725" y="563">Hệ thống hủy do</text>
+      <text x="725" y="590">timeout/payment fail</text>
+    </g>
+
+    <g fill="none" stroke="#263244" stroke-width="2.6" stroke-linecap="round">
+      <circle cx="182" cy="199" r="20"/>
+      <path d="M182 219 V285 M142 250 H222 M182 285 L152 328 M182 285 L212 328"/>
+      <circle cx="182" cy="449" r="20"/>
+      <path d="M182 469 V535 M142 500 H222 M182 535 L152 578 M182 535 L212 578"/>
+      <circle cx="1268" cy="359" r="20"/>
+      <path d="M1268 379 V445 M1228 410 H1308 M1268 445 L1238 488 M1268 445 L1298 488"/>
+    </g>
+
+    <g text-anchor="middle" font-size="18">
+      <text x="182" y="345" font-weight="700">Khách có tài khoản</text>
+      <text x="182" y="369">USER</text>
+      <text x="182" y="615" font-weight="700">Khách không tài khoản</text>
+      <text x="182" y="639">GUEST</text>
+      <text x="1268" y="525" font-weight="700">Quản lý</text>
+      <text x="1268" y="549">MANAGER</text>
+    </g>
+
+    <text x="725" y="756" text-anchor="middle" font-size="18" font-weight="700">UC09.3 do timer/sự kiện nội bộ kích hoạt, không vẽ Backend hoặc Camunda thành actor.</text>
+    <text x="725" y="796" text-anchor="middle" font-size="17">Khách chỉ tự hủy trước ORDER_ACCEPTED; manager chỉ từ chối tại PENDING_APPROVAL.</text>
+    <text x="725" y="834" text-anchor="middle" font-size="17">Mọi nguồn dùng chung nghiệp vụ hủy idempotent, không hoàn stock hoặc tự công bố refund.</text>
+    <text x="725" y="872" text-anchor="middle" font-size="15" fill="#526072">CANCELLED lưu source, reason, actor/time, voucher, reputation, assignment và history theo từng case.</text>
+  </g>
+</svg>
