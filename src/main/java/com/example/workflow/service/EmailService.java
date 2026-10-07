@@ -48,8 +48,21 @@ public class EmailService {
                 EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
                 new OrderConfirmationEmailRequestedEvent(
                         toEmail, customerName, orderId, totalPrice, paymentMethod,
-                        orderAccessUrl, productionDurationDays
+                        orderAccessUrl, productionDurationDays, null, null
                 )
+        );
+    }
+
+    public void sendCustomOrderConfirmationEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            String customSpec,
+            Integer quantity
+    ) {
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
+                new OrderConfirmationEmailRequestedEvent(toEmail, customerName, orderId, customSpec, quantity)
         );
     }
 
@@ -74,6 +87,23 @@ public class EmailService {
             String orderAccessUrl,
             Integer productionDurationDays
     ) {
+        sendOrderConfirmationEmailNowOrThrow(
+                toEmail, customerName, orderId, totalPrice, paymentMethod,
+                orderAccessUrl, productionDurationDays, null, null
+        );
+    }
+
+    public void sendOrderConfirmationEmailNowOrThrow(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            Double totalPrice,
+            String paymentMethod,
+            String orderAccessUrl,
+            Integer productionDurationDays,
+            String customSpec,
+            Integer quantity
+    ) {
         Context context = new Context();
         context.setVariable("customerName", customerName);
         context.setVariable("orderId", orderId);
@@ -81,6 +111,8 @@ public class EmailService {
         context.setVariable("paymentMethod", paymentMethod);
         context.setVariable("orderAccessUrl", orderAccessUrl);
         context.setVariable("productionDurationDays", productionDurationDays);
+        context.setVariable("customSpec", customSpec);
+        context.setVariable("quantity", quantity);
 
         String htmlContent = templateEngine.process("order-confirmation", context);
         sendHtmlEmailOrThrow(toEmail, "Order confirmation #" + orderId, htmlContent);

@@ -330,7 +330,7 @@ public class ConsultationAttributionService {
             return 0;
         }
         int quantity = resolveCommissionQuantity(item, preferReceivedQuantity);
-        if (quantity <= 0 || item.getPrice() <= 0) {
+        if (quantity <= 0 || item.getPrice() == null || item.getPrice() <= 0) {
             return 0;
         }
         return item.getPrice() * quantity;

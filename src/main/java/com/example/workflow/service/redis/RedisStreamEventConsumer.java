@@ -214,7 +214,9 @@ public class RedisStreamEventConsumer {
                 event.totalPrice(),
                 event.paymentMethod(),
                 event.orderAccessUrl(),
-                event.productionDurationDays()
+                event.productionDurationDays(),
+                event.customSpec(),
+                event.quantity()
         );
     }
 

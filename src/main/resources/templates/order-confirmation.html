@@ -18,8 +18,11 @@
 
         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 5px 0;"><strong>Mã đơn hàng:</strong> #<span th:text="${orderId}">123</span></p>
-            <p style="margin: 5px 0;"><strong>Phương thức:</strong> <span th:text="${paymentMethod}">COD</span></p>
-            <p style="margin: 5px 0;"><strong>Tổng thanh toán:</strong> <strong style="color: #dc3545; font-size: 18px;" th:text="${#numbers.formatDecimal(totalPrice, 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</strong></p>
+            <p th:if="${paymentMethod != null}" style="margin: 5px 0;"><strong>Phương thức:</strong> <span th:text="${paymentMethod}">COD</span></p>
+            <p th:if="${totalPrice != null}" style="margin: 5px 0;"><strong>Tổng thanh toán:</strong> <strong style="color: #dc3545; font-size: 18px;" th:text="${#numbers.formatDecimal(totalPrice, 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</strong></p>
+            <p th:if="${customSpec != null}" style="margin: 5px 0;"><strong>Yêu cầu custom:</strong> <span th:text="${customSpec}">Mô tả</span></p>
+            <p th:if="${quantity != null}" style="margin: 5px 0;"><strong>Số lượng:</strong> <span th:text="${quantity}">1</span></p>
+            <p th:if="${customSpec != null}" style="margin: 5px 0;"><strong>Giá và phương thức thanh toán:</strong> sẽ được xác nhận sau khi quản lý duyệt và hai bên thỏa thuận.</p>
             <p th:if="${productionDurationDays != null}" style="margin: 5px 0;"><strong>Thời lượng hoàn thiện dự kiến:</strong> <span th:text="${productionDurationDays} + ' ngày sản xuất'">0 ngày</span></p>
         </div>
 

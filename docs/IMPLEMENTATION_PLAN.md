@@ -8,9 +8,9 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       HOÀN THÀNH WF01–WF09
-Tái triển khai code:      PHẦN 04 HOÀN THÀNH
-Phần đang thực hiện:      Chưa bắt đầu PHẦN 05
-Phần hoàn thành gần nhất: PHẦN 04 — Catalog, cart và checkout
+Tái triển khai code:      PHẦN 05 ĐÃ IMPLEMENTED, CHỜ REVIEW
+Phần đang thực hiện:      PHẦN 05 — Bàn giao API/transaction CustomRequest
+Phần hoàn thành gần nhất: PHẦN 05 — Custom request, WF01 (H2/application)
 Ngày cập nhật gần nhất:   07/10/2026
 ```
 
@@ -48,7 +48,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 02 | Domain contract và migration expand | State, entity, tiền, thời gian, dữ liệu mới | 01 | `VERIFIED` |
 | 03 | Hạ tầng nhất quán dùng chung | Transition, lock/version, idempotency, outbox, token, audit | 02 | `VERIFIED` |
 | 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
-| 05 | Custom request | WF01 | 02–04 | `NOT_STARTED` |
+| 05 | Custom request | WF01 | 02–04 | `IN_PROGRESS` |
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `NOT_STARTED` |
 | 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `NOT_STARTED` |
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `NOT_STARTED` |
@@ -196,7 +196,7 @@ Phạm vi chính:
 
 ### PHẦN 05 — Custom request, WF01
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` — entity/repository/mapper/migration, service/controller/API và transaction idempotent đã hoàn thành; còn nghiệm thu MySQL thực tế và nối process Camunda mới ở PHẦN 13.
 
 Phạm vi chính:
 
@@ -206,6 +206,9 @@ Phạm vi chính:
 - Chưa có giá chính thức trước khi staff xác nhận agreement.
 - Submit idempotent và liên kết draft–Order.
 - Email + notification chỉ khi Order được tạo, không gửi khi chỉ lưu draft.
+- API `/api/custom-requests` chỉ nhận JWT có authority `USER`; owner luôn lấy từ JWT.
+- Submit ghi Order, OrderItem, liên kết draft, kết quả durable request và ba outbox event trong cùng transaction.
+- Không gọi process `ApproveCartProcess` legacy. `ORDER_CREATED` đã được ghi bền vững; điểm bắt đầu manager-review của BPMN mục tiêu sẽ được nối khi cutover workflow ở PHẦN 13.
 
 Đầu ra bắt buộc:
 
@@ -429,6 +432,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 06/10/2026 | 03 | `IN_PROGRESS` | Thêm durable request/outbox/consumer ledger, transition/audit, guest token guard; nối event publisher và consumer hiện tại | H2/MySQL concurrency và JPA transaction atomicity đang xác minh | Chạy bộ test đầy đủ và ghi bàn giao PHẦN 03 |
 | 06/10/2026 | 03 | `VERIFIED` | Hoàn tất hạ tầng dùng chung và tích hợp event/cache consumer; cập nhật runbook và giới hạn SMTP/legacy | 187/187 test đạt; git diff --check đạt | PHẦN 04: catalog duration, cart/checkout, snapshots và bỏ stock |
 | 07/10/2026 | 04 | `VERIFIED` | Checkout USER/Guest mới dùng DB idempotency/lock/outbox; snapshot catalog/duration, PENDING_APPROVAL và email milestone | 198 test H2/application đạt với 6 MySQL opt-in skipped; chạy riêng 6/6 MySQL 8.0.36 đạt; [bàn giao](implementation/04-catalog-checkout.md) | PHẦN 05: CustomRequest draft/submit |
+| 07/10/2026 | 05 | `IN_PROGRESS` | Hoàn thiện checkpoint data layer: CustomRequest lifecycle/submittedAt, repository ownership + submit lock, DTO/mapper và mapper snapshot cho custom OrderItem | Targeted 12/12 đạt; full suite 206 test, 0 failure/error, 6 MySQL opt-in skipped; MySQL opt-in chưa chạy vì Docker daemon không sẵn sàng; [báo cáo review](implementation/05-custom-request.md) | Người dùng review data model; sau khi duyệt mới triển khai request DTO/service/controller/API |
+| 07/10/2026 | 05 | `IMPLEMENTED` | Hoàn tất draft CRUD, JWT ownership, version conflict, submit CUSTOM Order PENDING_APPROVAL, snapshot/contact, durable idempotency và outbox email/notification/ORDER_CREATED | Full suite 215 test đạt, 6 MySQL opt-in skipped; transaction integration chứng minh retry chỉ có 1 Order/Item/request và 3 outbox event; [bàn giao](implementation/05-custom-request.md) | Review PHẦN 05; sau đó bắt đầu PHẦN 06 CancelOrderService dùng chung |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -465,21 +470,20 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 11. Hiện trạng cần đặc biệt lưu ý trước khi bắt đầu
 
-- `OrderStatus` hiện vẫn mang mô hình kho cũ và thiếu state mục tiêu.
-- `Order` còn dùng `double`, `finalPrice` mặc định 0 và các cờ stock.
+- `OrderStatus` đã có state mục tiêu nhưng vẫn giữ state kho/payment legacy trong giai đoạn expand; code mới không được tạo state legacy.
+- `Order.totalPrice` còn là primitive `double` và Order vẫn giữ các cờ stock legacy. Giá chính thức CUSTOM chưa chốt được biểu diễn bằng `finalPrice=null`; API không được diễn giải `totalPrice=0.0` tương thích schema thành giá thỏa thuận.
 - KCS hiện có đường chuyển trực tiếp sang `SHIPPING`, thiếu `READY_TO_SHIP` riêng.
 - Code còn complaint receipt dù target đã loại bỏ complaint workflow.
-- Checkout/payment hiện có thứ tự không còn phù hợp với manager-review-before-payment.
+- Endpoint checkout mới đã tạo `PENDING_APPROVAL/NOT_DUE`; code checkout/payment legacy vẫn còn và phải được loại/cutover ở PHẦN 13.
 - Repo có nhiều BPMN cho user/guest; cần tránh duy trì hai lifecycle process cạnh tranh cho cùng Order.
 - Trước mọi lần sửa, phải giữ nguyên các thay đổi chưa commit không thuộc phần đang làm. Tại thời điểm tạo file này, worktree đã có thay đổi ở tài liệu use case và file cấu hình ứng dụng; cần chạy lại `git status` vì trạng thái này có thể thay đổi ở phiên sau.
 
 ## 12. Hành động tiếp theo chính xác
 
-Tiếp theo thực hiện **PHẦN 05 — Custom request, WF01**:
+Review [bàn giao PHẦN 05](implementation/05-custom-request.md), đặc biệt contract endpoint, snapshot JSON và ranh giới chưa nối BPMN legacy. Sau khi được duyệt, bắt đầu **PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09**:
 
-1. Đọc [bàn giao PHẦN 04](implementation/04-catalog-checkout.md), `target.txt` và đặc tả WF01.
-2. Hoàn thiện `CustomRequest`/repository cho nhiều draft thuộc một USER; Guest không có custom.
-3. Tạo DTO/controller/service draft CRUD; actor lấy từ JWT, optimistic version và ownership bắt buộc.
-4. Submit draft idempotent tạo đúng một CUSTOM Order `PENDING_APPROVAL`, snapshot request/contact và để price/finalPrice là `null`.
-5. Phát email + notification chỉ khi Order được tạo; lưu draft không phát milestone Order.
-6. Test authorization, version conflict, retry/concurrency submit, rollback và ghi bàn giao trước PHẦN 06.
+1. Rà toàn bộ đường hủy USER/Guest/manager/system hiện tại và xác định caller cần chuyển sang `CancelOrderService`.
+2. Triển khai policy trạng thái trước `ORDER_ACCEPTED`, ownership/token/rate limit và optimistic version/idempotency.
+3. Gom penalty/reputation, voucher, assignment release, stock legacy guard và event/email/notification vào một transaction/outbox.
+4. Viết migration nếu cần, test từng actor/source, callback payment muộn và retry không lặp side effect.
+5. Không triển khai timer Camunda hoặc manager review trong PHẦN 06; các luồng đó dùng service hủy chung ở phần workflow tương ứng.

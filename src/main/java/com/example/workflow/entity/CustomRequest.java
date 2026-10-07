@@ -1,18 +1,42 @@
 package com.example.workflow.entity;
 
-import com.example.workflow.nume.*;
-import jakarta.persistence.*;
+import com.example.workflow.nume.CustomRequestStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.time.LocalDateTime;
 
-/** Domain contract for the new order lifecycle; endpoints are implemented in later phases. */
+import java.time.LocalDateTime;
+import java.util.Objects;
+
 @Entity
 @Getter
 @Setter
-@Table(name = "custom_requests", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_custom_requests_1", columnNames = {"linked_order_id"})
-})
+@NoArgsConstructor
+@Table(
+        name = "custom_requests",
+        indexes = {
+                @Index(
+                        name = "idx_custom_request_owner_status_updated",
+                        columnList = "owner_id,status,updated_at,id"
+                )
+        },
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_custom_requests_1", columnNames = "linked_order_id")
+        }
+)
 public class CustomRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,7 +46,7 @@ public class CustomRequest {
     @Column(nullable = false)
     private Long version;
 
-    @Column(name = "owner_id", nullable = false, columnDefinition = "varchar(36)")
+    @Column(name = "owner_id", nullable = false, updatable = false, columnDefinition = "varchar(36)")
     private String ownerId;
 
     @Enumerated(EnumType.STRING)
@@ -41,12 +65,48 @@ public class CustomRequest {
     @Column(name = "linked_order_id", nullable = true, columnDefinition = "bigint")
     private Long linkedOrderId;
 
-    @Column(name = "source_order_id", nullable = true, columnDefinition = "bigint")
+    @Column(name = "source_order_id", nullable = true, updatable = false, columnDefinition = "bigint")
     private Long sourceOrderId;
 
-    @Column(name = "created_at", nullable = false, columnDefinition = "datetime")
+    @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "datetime")
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false, columnDefinition = "datetime")
     private LocalDateTime updatedAt;
+
+    @Column(name = "submitted_at", columnDefinition = "datetime")
+    private LocalDateTime submittedAt;
+
+    public boolean isEditable() {
+        return status == CustomRequestStatus.DRAFT && linkedOrderId == null;
+    }
+
+    public void markSubmitted(Long orderId, LocalDateTime submissionTime) {
+        if (!isEditable()) {
+            throw new IllegalStateException("Only an unsubmitted draft can be linked to an order");
+        }
+        linkedOrderId = Objects.requireNonNull(orderId, "orderId must not be null");
+        submittedAt = Objects.requireNonNull(submissionTime, "submissionTime must not be null");
+        status = CustomRequestStatus.SUBMITTED;
+        updatedAt = submissionTime;
+    }
+
+    @PrePersist
+    void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+        if (status == null) {
+            status = CustomRequestStatus.DRAFT;
+        }
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = createdAt;
+        }
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

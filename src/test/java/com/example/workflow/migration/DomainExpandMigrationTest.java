@@ -66,6 +66,10 @@ class DomainExpandMigrationTest {
                 rows.next();
                 assertThat(rows.getObject(1)).isNull();
             }
+            try (var statement = connection.createStatement(); var rows = statement.executeQuery(
+                    "SELECT submitted_at FROM custom_requests WHERE 1 = 0")) {
+                assertThat(rows.next()).isFalse();
+            }
             try (var statement = connection.createStatement()) {
                 statement.executeUpdate("UPDATE order_item SET price = NULL WHERE id = 1");
                 statement.executeUpdate("UPDATE orders SET status = 'ORDER_ACCEPTED' WHERE id = 3");

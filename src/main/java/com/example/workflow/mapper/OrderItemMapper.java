@@ -15,14 +15,38 @@ public interface OrderItemMapper {
     @Mapping(source = "id", target = "orderItemId")
     @Mapping(source = "productVariant.id", target = "variantId")
     @Mapping(source = "productVariant.product.id", target = "productId")
-    @Mapping(source = "productVariant.product.productName", target = "productName")
-    @Mapping(source = "productVariant.variantName", target = "variantName")
+    @Mapping(target = "productName", expression = "java(resolveProductName(orderItem))")
+    @Mapping(target = "variantName", expression = "java(resolveVariantName(orderItem))")
     @Mapping(source = "productVariant.attributes", target = "attributes")
     @Mapping(target = "reviewed", ignore = true)
     @Mapping(target = "reviewId", ignore = true)
     @Mapping(target = "imageUrl", ignore = true)
-        // Note: Trường price của orderItem không cần map từ variant vì bảng OrderItem đã lưu sẵn price lúc chốt đơn rồi
+    // Price is read from the OrderItem snapshot, never recalculated from the current variant.
     OrderItemDTO toDto(OrderItem orderItem);
+
+    default String resolveProductName(OrderItem orderItem) {
+        if (orderItem == null) {
+            return null;
+        }
+        if (orderItem.getProductNameSnapshot() != null && !orderItem.getProductNameSnapshot().isBlank()) {
+            return orderItem.getProductNameSnapshot();
+        }
+        if (orderItem.getProductVariant() == null || orderItem.getProductVariant().getProduct() == null) {
+            return null;
+        }
+        return orderItem.getProductVariant().getProduct().getProductName();
+    }
+
+    default String resolveVariantName(OrderItem orderItem) {
+        if (orderItem == null) {
+            return null;
+        }
+        if (orderItem.getVariantNameSnapshot() != null && !orderItem.getVariantNameSnapshot().isBlank()) {
+            return orderItem.getVariantNameSnapshot();
+        }
+        return orderItem.getProductVariant() == null ? null : orderItem.getProductVariant().getVariantName();
+    }
+
     default ItemCheckRequest toCheckRequest(OrderItem orderItem) {
         if (orderItem == null) {
             return null;

@@ -1,6 +1,10 @@
 package com.example.workflow.exception;
 
 public enum ConstantErrorCode {
+    CUSTOM_REQUEST_NOT_FOUND("Không tìm thấy yêu cầu custom"),
+    CUSTOM_REQUEST_NOT_EDITABLE("Yêu cầu custom không còn ở trạng thái có thể chỉnh sửa"),
+    CUSTOM_REQUEST_VERSION_CONFLICT("Phiên bản yêu cầu custom đã thay đổi; hãy tải lại dữ liệu"),
+    CUSTOM_REQUEST_INVALID("Thông tin yêu cầu custom không hợp lệ: %s"),
     ORDER_ITEM_NOT_HANDMADE("Sản phẩm trong đơn không thuộc quy trình handmade"),
     ORDER_ITEM_ASSIGNMENT_NOT_FOUND("Không tìm thấy phân công sản xuất cho sản phẩm trong đơn"),
     ORDER_ITEM_PRODUCTION_STATE_INVALID("Trạng thái sản xuất của sản phẩm không hợp lệ: %s"),
