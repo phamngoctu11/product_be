@@ -122,7 +122,8 @@ public class CartService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public CheckoutResponseDTO checkoutGuestCart(
+    @Deprecated(forRemoval = true)
+    CheckoutResponseDTO checkoutGuestCart(
             String guestSessionId,
             GuestCheckoutRequest request,
             String idempotencyKey
@@ -215,7 +216,8 @@ public class CartService {
     // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
     // ==============================================================================
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Map<String, String> approveCart(
+    @Deprecated(forRemoval = true)
+    Map<String, String> approveCart(
             String userId,
             List<Long> variantIdsToCheckout,
             Long userVoucherId,

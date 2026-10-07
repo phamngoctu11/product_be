@@ -3,9 +3,11 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartResDTO;
 import com.example.workflow.dto.CheckoutResponseDTO;
+import com.example.workflow.dto.CheckoutRequest;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.CartService;
+import com.example.workflow.service.CheckoutService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
@@ -19,7 +21,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/cart")
@@ -30,6 +31,7 @@ public class CartController {
     private static final String GUEST_SESSION_HEADER = "X-Guest-Session-Id";
 
     private final CartService cartService;
+    private final CheckoutService checkoutService;
 
     @PostMapping("/items")
     public ResponseEntity<ApiResponse<Void>> addToCart(
@@ -69,6 +71,7 @@ public class CartController {
 
     @PostMapping("/approve/{userId}")
     @PreAuthorize("hasAuthority('USER')")
+    @Deprecated(forRemoval = true)
     public ResponseEntity<ApiResponse<CheckoutResponseDTO>> approveCart(
             @PathVariable("userId") String userId,
             @Valid @NotEmpty(message = "Select at least one variant to checkout")
@@ -78,18 +81,15 @@ public class CartController {
             @Pattern(regexp = "(?i)COD|ONLINE", message = "Payment method must be COD or ONLINE")
             @RequestParam("paymentMethod") String paymentMethod,
             @RequestParam(value = "note", required = false) String note,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         try {
-            Map<String, String> rawResponse = cartService.approveCart(
-                    userId,
-                    productIdsToCheckout,
-                    userVoucherId,
-                    paymentMethod,
-                    note,
-                    idempotencyKey
-            );
-            CheckoutResponseDTO response = CheckoutResponseDTO.fromMap(rawResponse);
+            CheckoutRequest request = new CheckoutRequest();
+            request.setVariantIds(productIdsToCheckout);
+            request.setUserVoucherId(userVoucherId);
+            request.setPaymentMethod(paymentMethod);
+            request.setNote(note);
+            CheckoutResponseDTO response = checkoutService.checkoutLegacyUser(userId, request, idempotencyKey);
             return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
         } catch (AppException e) {
             throw e;

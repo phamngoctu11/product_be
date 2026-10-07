@@ -91,6 +91,26 @@ public class OptionalCacheService {
         }
     }
 
+    /** Durable consumer must see failures so the event remains eligible for retry. */
+    public void applyOrThrow(CacheEvictionRequestedEvent event) {
+        if (event == null || event.entries() == null) throw new IllegalArgumentException("Missing cache event");
+        for (CacheEvictionEntry entry : event.entries()) {
+            if (entry == null || !StringUtils.hasText(entry.cacheName())) throw new IllegalArgumentException("Invalid cache entry");
+            if (entry.keyPrefix() != null && !entry.allEntries()) {
+                List<String> keys = new ArrayList<>();
+                try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions()
+                        .match(entry.cacheName() + "::" + entry.keyPrefix() + "*").count(500).build())) {
+                    cursor.forEachRemaining(keys::add);
+                }
+                if (!keys.isEmpty()) redisTemplate.delete(keys);
+            } else {
+                Cache cache = cacheManager.getCache(entry.cacheName());
+                if (cache == null) throw new IllegalStateException("Unknown cache " + entry.cacheName());
+                if (entry.allEntries()) cache.clear(); else cache.evict(entry.key());
+            }
+        }
+    }
+
     private void apply(CacheEvictionEntry entry) {
         if (entry == null || entry.cacheName() == null || entry.cacheName().isBlank()) {
             return;

@@ -20,9 +20,13 @@
             <p style="margin: 5px 0;"><strong>Mã đơn hàng:</strong> #<span th:text="${orderId}">123</span></p>
             <p style="margin: 5px 0;"><strong>Phương thức:</strong> <span th:text="${paymentMethod}">COD</span></p>
             <p style="margin: 5px 0;"><strong>Tổng thanh toán:</strong> <strong style="color: #dc3545; font-size: 18px;" th:text="${#numbers.formatDecimal(totalPrice, 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</strong></p>
+            <p th:if="${productionDurationDays != null}" style="margin: 5px 0;"><strong>Thời lượng hoàn thiện dự kiến:</strong> <span th:text="${productionDurationDays} + ' ngày sản xuất'">0 ngày</span></p>
         </div>
 
-        <p>Admin sẽ sớm xử lý đơn hàng này. Bạn có thể theo dõi trạng thái đơn hàng trên website của chúng tôi.</p>
+        <p>Quản lý sẽ sớm xử lý đơn hàng này. Bạn có thể theo dõi trạng thái đơn hàng trên website của chúng tôi.</p>
+        <p th:if="${orderAccessUrl != null}" style="text-align: center; margin-top: 24px;">
+            <a th:href="${orderAccessUrl}" style="background:#0d6efd;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Xem thông tin đơn hàng</a>
+        </p>
     </div>
 
     <div style="text-align: center; border-top: 1px solid #f0f0f0; padding-top: 20px; font-size: 12px; color: #888888;">

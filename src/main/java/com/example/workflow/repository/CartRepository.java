@@ -1,7 +1,9 @@
 package com.example.workflow.repository;
 
 import com.example.workflow.entity.Cart;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -18,10 +20,26 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
             "WHERE c.user.id = :userId")
     Optional<Cart> findByUserId(@Param("userId") String userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT DISTINCT c FROM Cart c " +
+            "LEFT JOIN FETCH c.items i " +
+            "LEFT JOIN FETCH i.productVariant pv " +
+            "LEFT JOIN FETCH pv.product " +
+            "WHERE c.user.id = :userId")
+    Optional<Cart> findByUserIdForUpdate(@Param("userId") String userId);
+
     @Query("SELECT c FROM Cart c " +
             "LEFT JOIN FETCH c.items i " +
             "LEFT JOIN FETCH i.productVariant pv " +
             "LEFT JOIN FETCH pv.product " +
             "WHERE c.guestSessionId = :guestSessionId")
     Optional<Cart> findByGuestSessionId(@Param("guestSessionId") String guestSessionId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT DISTINCT c FROM Cart c " +
+            "LEFT JOIN FETCH c.items i " +
+            "LEFT JOIN FETCH i.productVariant pv " +
+            "LEFT JOIN FETCH pv.product " +
+            "WHERE c.guestSessionId = :guestSessionId")
+    Optional<Cart> findByGuestSessionIdForUpdate(@Param("guestSessionId") String guestSessionId);
 }

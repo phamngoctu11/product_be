@@ -1,12 +1,14 @@
 package com.example.workflow.entity;
 
 import com.example.workflow.nume.OrderItemProductionStatus;
+import com.example.workflow.nume.OrderItemSourceType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
 import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -34,7 +36,32 @@ public class OrderItem {
     private ProductVariant productVariant;
 
     @Column(name="price")
-    private double price;
+    private Double price;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", length = 20, columnDefinition = "varchar(20)")
+    private OrderItemSourceType sourceType;
+
+    @Column(name = "product_name_snapshot")
+    private String productNameSnapshot;
+
+    @Column(name = "variant_name_snapshot")
+    private String variantNameSnapshot;
+
+    @Column(name = "spec_snapshot", columnDefinition = "TEXT")
+    private String specSnapshot;
+
+    @Column(name = "made_day_snapshot")
+    private Double madeDaySnapshot;
+
+    @Column(name = "production_duration_days")
+    private Integer productionDurationDays;
+
+    @Column(name = "duration_rule_version", length = 32)
+    private String durationRuleVersion;
+
+    @Column(name = "computed_completion_at")
+    private LocalDateTime computedCompletionAt;
 
     /**
      * Snapshot at checkout time. Product configuration may change after the

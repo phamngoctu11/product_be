@@ -183,7 +183,7 @@ public class VoucherService {
             return null;
         }
 
-        UserVoucher voucher = userVoucherRepository.findById(userVoucherId)
+        UserVoucher voucher = userVoucherRepository.findByIdForUpdate(userVoucherId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
         validateVoucherForCheckout(voucher, userId, totalPrice);
         voucher.setUsed(true);

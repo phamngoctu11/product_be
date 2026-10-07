@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -38,6 +39,19 @@ class ProductServiceTest {
     );
 
     @Test
+    void managerCannotSetMissingNonFiniteOrShortDuration() {
+        when(userRepository.findById("manager-1")).thenReturn(Optional.of(new User()));
+        for (Double value : new Double[]{null, Double.NaN, Double.POSITIVE_INFINITY, 1.99}) {
+            ProductDTO request = new ProductDTO();
+            request.setMadeDay(value);
+            assertThatThrownBy(() -> productService.createProduct(request, "manager-1"))
+                    .isInstanceOf(com.example.workflow.exception.AppException.class);
+            assertThatThrownBy(() -> productService.updateProduct(10L, request, "manager-1"))
+                    .isInstanceOf(com.example.workflow.exception.AppException.class);
+        }
+    }
+
+    @Test
     void fullUpdateFromLegacyClientKeepsExistingAvailabilityWhenFieldIsMissing() {
         Product product = new Product();
         product.setId(10L);
@@ -45,6 +59,7 @@ class ProductServiceTest {
         product.setVariants(new ArrayList<>());
         ProductDTO request = new ProductDTO();
         request.setProduct_name("Updated sample");
+        request.setMadeDay(3.0);
 
         when(userRepository.findById("manager-1")).thenReturn(Optional.of(new User()));
         when(productRepository.findById(10L)).thenReturn(Optional.of(product));

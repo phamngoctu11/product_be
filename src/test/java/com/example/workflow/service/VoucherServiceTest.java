@@ -175,7 +175,7 @@ class VoucherServiceTest {
         userVoucher.setUser(user);
         userVoucher.setTemplate(template);
         userVoucher.setExpiryDate(LocalDateTime.now().plusDays(1));
-        when(userVoucherRepository.findById(12L)).thenReturn(Optional.of(userVoucher));
+        when(userVoucherRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(userVoucher));
         when(userVoucherRepository.save(userVoucher)).thenReturn(userVoucher);
 
         UserVoucher result = voucherService.useVoucherForCheckout(12L, "user-1", 500.0);

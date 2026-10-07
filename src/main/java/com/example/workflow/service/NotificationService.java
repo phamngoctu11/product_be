@@ -82,7 +82,14 @@ public class NotificationService {
         notification.setTargetUserId(targetUserId);
         notification.setConsultationRequestId(consultationRequestId);
         Notification savedNotification = notificationRepository.save(notification);
-        publishRealtimeNotification(destination, savedNotification);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { publishRealtimeNotification(destination, savedNotification); }
+                    });
+        } else {
+            publishRealtimeNotification(destination, savedNotification);
+        }
         return savedNotification;
     }
 

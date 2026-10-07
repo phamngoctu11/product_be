@@ -106,7 +106,15 @@ public enum ConstantErrorCode {
     KEYCLOAK_UNAVAILABLE("Không thể kết nối tới Keycloak"),
     KEYCLOAK_USER_SYNC_FAILED("Không thể đồng bộ người dùng với Keycloak"),
     KEYCLOAK_USER_NOT_FOUND("Không tìm thấy người dùng trong Keycloak"),
-    USER_DATA_ACCESS_FORBIDDEN("Bạn không có quyền truy cập dữ liệu của người dùng khác.");
+    USER_DATA_ACCESS_FORBIDDEN("Bạn không có quyền truy cập dữ liệu của người dùng khác."),
+    REQUEST_KEY_REQUIRED("Idempotency scope and key are required."),
+    REQUEST_KEY_CONFLICT("The same request key was used with different content."),
+    ORDER_VERSION_CONFLICT("Order version is stale; reload before retrying."),
+    ORDER_TRANSITION_INVALID("Order transition is not allowed."),
+    GUEST_TOKEN_INVALID("Order token is invalid, expired, revoked or lacks the required scope."),
+    GUEST_ORDER_RATE_LIMITED("Too many attempts for this order; retry later."),
+    RATE_LIMIT_UNAVAILABLE("Rate limiting is temporarily unavailable."),
+    CONCURRENT_UPDATE("Data was concurrently modified; reload and retry the same request key.");
 
     private final String messageTemplate;
 

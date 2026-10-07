@@ -3,7 +3,7 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.dto.GuestCheckoutRequest;
-import com.example.workflow.service.CartService;
+import com.example.workflow.service.CheckoutService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,15 +21,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class GuestCheckoutController {
     private static final String GUEST_SESSION_HEADER = "X-Guest-Session-Id";
 
-    private final CartService cartService;
+    private final CheckoutService checkoutService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<CheckoutResponseDTO>> checkout(
             @RequestHeader(GUEST_SESSION_HEADER) String guestSessionId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody GuestCheckoutRequest request
     ) {
-        CheckoutResponseDTO response = cartService.checkoutGuestCart(
+        CheckoutResponseDTO response = checkoutService.checkoutGuest(
                 guestSessionId,
                 request,
                 idempotencyKey

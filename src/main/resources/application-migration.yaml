@@ -1,0 +1,9 @@
+# Activate explicitly on a backed-up existing schema, with DB_URL supplied.
+# This expand changelog requires the legacy application tables to exist.
+spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.xml
+  jpa:
+    hibernate:
+      ddl-auto: validate

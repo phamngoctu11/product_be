@@ -1,8 +1,12 @@
 package com.example.workflow.entity;
 
-import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.GuestWorkflowStatus;
+import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderProductionStatus;
+import com.example.workflow.nume.OrderType;
+import com.example.workflow.nume.PaymentMethod;
+import com.example.workflow.nume.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,6 +25,10 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
@@ -33,8 +41,17 @@ public class Order {
     private LocalDateTime endOrderTime;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", length = 50)
+    @Column(name = "status", length = 50, columnDefinition = "varchar(50)")
     private OrderStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", length = 20, columnDefinition = "varchar(20)")
+    private OrderType orderType = OrderType.CATALOG;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", length = 20, columnDefinition = "varchar(20)")
+    // Null is retained for legacy rows whose payment outcome has not been reconciled.
+    private PaymentStatus paymentStatus;
 
     @Enumerated(EnumType.STRING)
     @Column(
@@ -59,10 +76,19 @@ public class Order {
     private Double discountAmount = 0.0;
 
     @Column(name = "final_price")
-    private Double finalPrice = 0.0;
+    private Double finalPrice;
 
     @Column(name = "payment_method")
     private String paymentMethod;
+
+    /**
+     * Normalized payment method used by the new lifecycle. The legacy string
+     * remains readable during migration and will be removed after consumers
+     * have switched.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method_v2", length = 20, columnDefinition = "varchar(20)")
+    private PaymentMethod paymentMethodType;
 
     @Column(name = "guest_session_id", length = 128)
     private String guestSessionId;
@@ -79,6 +105,15 @@ public class Order {
 
     @Column(name = "order_lookup_token_created_at")
     private LocalDateTime orderLookupTokenCreatedAt;
+
+    @Column(name = "order_lookup_token_scope", length = 100)
+    private String orderLookupTokenScope;
+
+    @Column(name = "order_lookup_token_expires_at")
+    private LocalDateTime orderLookupTokenExpiresAt;
+
+    @Column(name = "order_lookup_token_revoked_at")
+    private LocalDateTime orderLookupTokenRevokedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "guest_workflow_status", length = 32)
@@ -106,6 +141,56 @@ public class Order {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_staff_id")
     private User warehouseStaff;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_staff_id")
+    private User assignedStaff;
+
+    @Column(name = "manager_approved_at")
+    private LocalDateTime managerApprovedAt;
+
+    @Column(name = "confirmation_due_at")
+    private LocalDateTime confirmationDueAt;
+
+    @Column(name = "user_submitted_at")
+    private LocalDateTime userSubmittedAt;
+
+    @Column(name = "order_accepted_at")
+    private LocalDateTime orderAcceptedAt;
+
+    @Column(name = "production_started_at")
+    private LocalDateTime productionStartedAt;
+
+    @Column(name = "ready_to_ship_at")
+    private LocalDateTime readyToShipAt;
+
+    @Column(name = "shipped_at")
+    private LocalDateTime shippedAt;
+
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "planned_start_at")
+    private LocalDateTime plannedStartAt;
+
+    @Column(name = "late_start_reason", length = 1000)
+    private String lateStartReason;
+
+    @Column(name = "current_agreement_version")
+    private Integer currentAgreementVersion;
+
+    @Column(name = "expected_shipping_days", nullable = false)
+    private int expectedShippingDays = 2;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_source", length = 50, columnDefinition = "varchar(50)")
+    private CancellationSource cancellationSource;
+
+    @Column(name = "cancellation_reference", length = 100)
+    private String cancellationReference;
 
     @Column(name = "shipping_provider")
     private String shippingProvider;

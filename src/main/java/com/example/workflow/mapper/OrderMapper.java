@@ -4,6 +4,7 @@ import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
+import com.example.workflow.nume.OrderType;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -95,12 +96,15 @@ public interface OrderMapper {
         return order.getTotalPrice();
     }
 
-    default double resolveFinalPrice(Order order) {
+    default Double resolveFinalPrice(Order order) {
         if (order == null) {
             return 0.0;
         }
         if (order.getFinalPrice() != null) {
             return order.getFinalPrice();
+        }
+        if (order.getOrderType() == OrderType.CUSTOM) {
+            return null;
         }
         double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
         return Math.max(0.0, order.getTotalPrice() - discountAmount);

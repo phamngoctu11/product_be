@@ -6,9 +6,11 @@ import lombok.Getter;
 @Getter
 public class AppException extends RuntimeException {
     private final HttpStatus status;
+    private final ConstantErrorCode errorCode;
 
     public AppException(HttpStatus status, ConstantErrorCode errorCode, Object... args) {
         super(errorCode.format(args));
         this.status = status;
+        this.errorCode = errorCode;
     }
 }

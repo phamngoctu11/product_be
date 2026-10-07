@@ -1,12 +1,27 @@
 package com.example.workflow.nume;
 
 public enum OrderStatus {
-    PENDING_APPROVAL,  // 🚨 THÊM MỚI: Đơn vừa đặt, chờ Manager duyệt
-    PENDING_WAREHOUSE, // Đã duyệt, chờ Nhân viên nhặt hàng xuất kho
-    WAREHOUSE_ASSIGNED, // Đã gán cho nhân viên kho phụ trách
-    PENDING_KCS,       // Nhân viên đã cập nhật xuất kho, chờ manager KCS
-    SHIPPING,          // Đang giao
-    DELIVERED,         // Đã giao
-    CANCELLED,         // Đã hủy
-    PENDING_PAYMENT    // Chờ thanh toán Online
+    PENDING_APPROVAL,
+    PENDING_ASSIGNMENT,
+    DISCUSSING,
+    WAITING_STAFF_CONFIRMATION,
+    ORDER_ACCEPTED,
+    ORDER_CREATING,
+    READY_TO_SHIP,
+    SHIPPING,
+    DELIVERED,
+    CANCELLED,
+
+    /**
+     * Legacy states retained during the expand/backfill period. New workflow
+     * code must not create orders in these states.
+     */
+    @Deprecated(forRemoval = true)
+    PENDING_WAREHOUSE,
+    @Deprecated(forRemoval = true)
+    WAREHOUSE_ASSIGNED,
+    @Deprecated(forRemoval = true)
+    PENDING_KCS,
+    @Deprecated(forRemoval = true)
+    PENDING_PAYMENT
 }

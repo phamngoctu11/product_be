@@ -14,12 +14,12 @@ import java.time.LocalDateTime;
 public class OrderListDTO implements Serializable {
     private Long id;
     private String customerName;
-    private double finalPrice;
+    private Double finalPrice;
     private OrderStatus status;
     private LocalDateTime startOrderTime;
     private String paymentMethod;
     private String staffName;
-    public OrderListDTO(Long id, String customerName, double finalPrice, OrderStatus status, LocalDateTime startOrderTime, String paymentMethod) {
+    public OrderListDTO(Long id, String customerName, Double finalPrice, OrderStatus status, LocalDateTime startOrderTime, String paymentMethod) {
         this.id = id;
         this.customerName = customerName;
         this.finalPrice = finalPrice;

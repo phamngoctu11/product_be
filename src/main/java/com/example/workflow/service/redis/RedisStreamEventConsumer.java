@@ -52,7 +52,7 @@ public class RedisStreamEventConsumer {
     private final ConsultationAttributionService consultationAttributionService;
     private final StaffCommissionService staffCommissionService;
     private final OptionalCacheService optionalCacheService;
-    private final RedisEventIdempotencyService eventIdempotencyService;
+    private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests;
     private final RedisStreamRetryTemplate retryTemplate;
 
     @Value("${workflow.events.redis-stream.group:" + DEFAULT_GROUP + "}")
@@ -63,6 +63,9 @@ public class RedisStreamEventConsumer {
 
     @Value("${workflow.events.redis-stream.batch-size:20}")
     private int batchSize;
+
+    @Value("${app.frontend-base-url:http://localhost:4200}")
+    private String frontendBaseUrl;
 
     private volatile boolean groupReady;
     private boolean redisFailureLogged;
@@ -137,7 +140,11 @@ public class RedisStreamEventConsumer {
 
                 RedisStreamRetryTemplate.RetryDecision decision = retryTemplate.execute(
                         context,
-                        () -> handleRecord(context.eventType(), context.payload())
+                        () -> durableRequests.execute("stream-consumer:" + groupName,
+                                context.eventId(), context.eventType() + ":" + context.payload(), () -> {
+                                    handleRecord(context.eventType(), context.payload());
+                                    return "{}";
+                                })
                 );
                 if (decision == RedisStreamRetryTemplate.RetryDecision.ACK) {
                     acknowledge(record);
@@ -182,7 +189,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
             case EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED -> handleStaffCommissionRefreshRequested(payload);
             case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
-            default -> log.debug("Ignoring unknown Redis Stream event type {}", type);
+            default -> throw new IllegalArgumentException("Unsupported event type " + type);
         }
     }
 
@@ -205,7 +212,9 @@ public class RedisStreamEventConsumer {
                 event.customerName(),
                 event.orderId(),
                 event.totalPrice(),
-                event.paymentMethod()
+                event.paymentMethod(),
+                event.orderAccessUrl(),
+                event.productionDurationDays()
         );
     }
 
@@ -291,18 +300,42 @@ public class RedisStreamEventConsumer {
             log.debug("Skipping guest order confirmation email for order {} because email is empty", event.orderId());
             return;
         }
-        if (eventIdempotencyService.isCompleted(EventTypes.GUEST_ORDER_CREATED, event.orderId())) {
-            log.debug("Skipping duplicate GUEST_ORDER_CREATED email for order {}", event.orderId());
-            return;
-        }
-        emailService.sendOrderConfirmationEmailNowOrThrow(
-                order.getEmail(),
-                order.getRecipientName(),
-                order.getId(),
-                order.getFinalPrice(),
-                "Thanh toan khi nhan hang (COD)"
+        String accessUrl = StringUtils.hasText(event.lookupToken())
+                ? org.springframework.web.util.UriComponentsBuilder
+                        .fromHttpUrl(frontendBaseUrl)
+                        .path("/guest/orders/")
+                        .path(event.orderId().toString())
+                        .queryParam("token", event.lookupToken())
+                        .build()
+                        .encode()
+                        .toUriString()
+                : null;
+        durableRequests.execute(
+                "guest-order-created",
+                event.orderId().toString(),
+                event.productionDurationDays() == null
+                        ? event.orderId().toString()
+                        : event.orderId() + ":" + event.productionDurationDays(),
+                () -> {
+                    if (accessUrl == null && event.productionDurationDays() == null) {
+                        emailService.sendOrderConfirmationEmailNowOrThrow(
+                                order.getEmail(), order.getRecipientName(), order.getId(), order.getFinalPrice(),
+                                "Thanh toan khi nhan hang (COD)"
+                        );
+                    } else {
+                        emailService.sendOrderConfirmationEmailNowOrThrow(
+                                order.getEmail(),
+                                order.getRecipientName(),
+                                order.getId(),
+                                order.getFinalPrice(),
+                                "Thanh toán khi nhận hàng (COD)",
+                                accessUrl,
+                                event.productionDurationDays()
+                        );
+                    }
+                    return "{}";
+                }
         );
-        eventIdempotencyService.markCompleted(EventTypes.GUEST_ORDER_CREATED, event.orderId());
     }
 
     private void handleOrderDelivered(String payload) {
@@ -322,7 +355,7 @@ public class RedisStreamEventConsumer {
 
     private void handleCacheEvictionRequested(String payload) {
         CacheEvictionRequestedEvent event = readPayload(payload, CacheEvictionRequestedEvent.class);
-        optionalCacheService.apply(event);
+        optionalCacheService.applyOrThrow(event);
     }
 
     private <T> T readPayload(String payload, Class<T> payloadType) {

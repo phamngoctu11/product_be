@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       HOÀN THÀNH WF01–WF09
-Tái triển khai code:      CHƯA BẮT ĐẦU
-Phần đang chờ thực hiện:  PHẦN 01 — Baseline và bảng chênh lệch
-Phần hoàn thành gần nhất: Chưa có
-Ngày cập nhật gần nhất:   06/10/2026
+Tái triển khai code:      PHẦN 04 HOÀN THÀNH
+Phần đang thực hiện:      Chưa bắt đầu PHẦN 05
+Phần hoàn thành gần nhất: PHẦN 04 — Catalog, cart và checkout
+Ngày cập nhật gần nhất:   07/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -44,10 +44,10 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 
 | Phần | Phạm vi | Workflow/chức năng | Phụ thuộc | Trạng thái |
 |---:|---|---|---|---|
-| 01 | Baseline và bảng chênh lệch | Toàn hệ thống hiện tại | Không | `NOT_STARTED` |
-| 02 | Domain contract và migration | State, entity, tiền, thời gian, dữ liệu mới | 01 | `NOT_STARTED` |
-| 03 | Hạ tầng nhất quán dùng chung | Transition, lock/version, idempotency, outbox, token, audit | 02 | `NOT_STARTED` |
-| 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `NOT_STARTED` |
+| 01 | Baseline và bảng chênh lệch | Toàn hệ thống hiện tại | Không | `VERIFIED` |
+| 02 | Domain contract và migration expand | State, entity, tiền, thời gian, dữ liệu mới | 01 | `VERIFIED` |
+| 03 | Hạ tầng nhất quán dùng chung | Transition, lock/version, idempotency, outbox, token, audit | 02 | `VERIFIED` |
+| 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
 | 05 | Custom request | WF01 | 02–04 | `NOT_STARTED` |
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `NOT_STARTED` |
 | 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `NOT_STARTED` |
@@ -64,7 +64,7 @@ Thứ tự trên là thứ tự dependency, không phải thứ tự số workfl
 
 ### PHẦN 01 — Baseline và bảng chênh lệch
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `VERIFIED`.
 
 Mục tiêu:
 
@@ -84,14 +84,25 @@ Việc cần làm:
 
 Đầu ra bắt buộc:
 
-- Báo cáo baseline và gap matrix.
-- Danh sách migration rủi ro cao.
-- Kết quả test ban đầu.
-- Phạm vi chính xác của PHẦN 02.
+- [Báo cáo baseline và gap matrix](implementation/01-baseline-gap.md).
+- Danh sách migration rủi ro cao nằm tại mục 7 của báo cáo.
+- Baseline `.\mvnw.cmd test`: 167 test, 0 failure, 0 error, 0 skipped; `BUILD SUCCESS`.
+- Phạm vi chính xác của PHẦN 02 nằm tại mục 9 của báo cáo.
+- Frontend application source không có trong repository; báo cáo đã ghi rõ giới hạn audit và contract cần bàn giao.
 
 ### PHẦN 02 — Domain contract và migration
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `VERIFIED` trong phạm vi domain contract và migration expand. Chưa cutover workflow/state/assignment legacy hoặc triển khai lên database vận hành; các bước đó thuộc tích hợp/rollout.
+
+Bàn giao: [02-domain-migration.md](implementation/02-domain-migration.md), [preflight SQL](implementation/sql/02-preflight.sql).
+
+- Liquibase master/expand changelog, 6 entity/repository mới, enum lifecycle và metadata/snapshot.
+- Tiền giữ `double/Double`, giá CUSTOM chưa chốt giữ `null` qua mapper/DTO.
+- Assignment active unique theo Order/staff, payment provider reference unique, version cho Order.
+- Manager nhập madeDay hữu hạn >= 2; catalog legacy thiếu thời gian để null chờ bổ sung.
+- LegacyOrderStateMapper chỉ đánh giá, không đổi state/process cũ khi chưa có đủ bằng chứng.
+- Hibernate validate; bật profile migration trước khi khởi động với schema mới. Changelog yêu cầu database legacy, chưa bootstrap database trống.
+- Kiểm thử ngày 06/10/2026: 178 test đạt, gồm H2 và MySQL 8.0.36 Docker; không lỗi/bỏ qua. Command: `.\mvnw.cmd test '-DmysqlMigrationTests=true' '-Dapi.version=1.44'`.
 
 Mục tiêu:
 
@@ -103,7 +114,7 @@ Phạm vi chính:
 - `OrderStatus`: `PENDING_APPROVAL`, `PENDING_ASSIGNMENT`, `DISCUSSING`, `WAITING_STAFF_CONFIRMATION`, `ORDER_ACCEPTED`, `ORDER_CREATING`, `READY_TO_SHIP`, `SHIPPING`, `DELIVERED`, `CANCELLED`.
 - Tách `paymentStatus` khỏi Order status và chuẩn hóa `paymentMethod`.
 - Bổ sung `orderType`, version/optimistic locking, các timestamp và cancellation source/reference.
-- Thay biểu diễn tiền `double` bằng kiểu chính xác đã chọn.
+- Giữ `double/Double` cho tiền theo quyết định ngày 06/10/2026; giá CUSTOM chưa chốt dùng `null` và DTO phải giữ nguyên ý nghĩa này.
 - Chuẩn hóa Order/OrderItem snapshot, `exportedQuantity`, `receivedQuantity`.
 - Bổ sung/migrate Assignment, PaymentAttempt, CustomRequest, Agreement, ChangeRequest, receipt và lookup token theo thiết kế được chốt.
 - Lập ánh xạ state cũ như `PENDING_WAREHOUSE`, `WAREHOUSE_ASSIGNED`, `PENDING_KCS`, `PENDING_PAYMENT` sang dữ liệu mới.
@@ -117,7 +128,18 @@ Phạm vi chính:
 
 ### PHẦN 03 — Hạ tầng nhất quán dùng chung
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `VERIFIED` trong phạm vi hạ tầng dùng chung. Các workflow legacy sẽ được nối vào transition/idempotency/token guard khi triển khai từng phần tiếp theo.
+
+Bàn giao: [03-consistency.md](implementation/03-consistency.md).
+
+- Liquibase 03 tạo durable request ledger, outbox và transition audit; publisher/consumer hiện tại đã dùng hạ tầng này.
+- Request trùng trả response đã commit; khác payload trả 409. Consumer deduplicate theo group/eventId trong DB.
+- Outbox retry giữ eventId, có recovery nội bộ; cache event lỗi còn được retry.
+- Transition bắt buộc transaction ngoài, lock Order/version, audit và cache event nguyên tử. Workflow service phải kiểm tra authorization và điều kiện nghiệp vụ chuyên biệt.
+- Guest token có scope/expiry/revoke/rotate và rate limit theo Order. TTL/budget truyền rõ từ policy của endpoint sau này, chưa đặt mặc định nghiệp vụ.
+- Error code ổn định qua X-Error-Code và CORS expose; notification realtime chỉ sau commit.
+- Test: `.\mvnw.cmd test '-DmysqlMigrationTests=true' '-Dapi.version=1.44'` — **187 tests, 0 failure/error/skipped, BUILD SUCCESS**, H2 + MySQL 8.0.36 + JPA integration.
+- SMTP vẫn có cửa sổ gửi trùng nếu chết sau gửi nhưng trước commit ledger; giới hạn và bước rollout được ghi rõ trong bàn giao.
 
 Mục tiêu:
 
@@ -141,7 +163,15 @@ Phạm vi chính:
 
 ### PHẦN 04 — Catalog, cart và checkout
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `VERIFIED`.
+
+Bàn giao: [04-catalog-checkout.md](implementation/04-catalog-checkout.md).
+
+- Endpoint mới `/api/checkout` và endpoint Guest dùng `CheckoutService`, durable idempotency, DB cart lock và outbox trong cùng transaction.
+- Order CATALOG luôn bắt đầu `PENDING_APPROVAL`/`NOT_DUE`; không mở MoMo, không chạy BPMN checkout legacy.
+- Snapshot server gồm giá, tên, attributes, madeDay, duration và rule version; partial checkout chỉ xóa item được chọn.
+- USER email + notification; Guest email có link token và thời lượng catalog, không tạo notification hệ thống.
+- 198 test ứng dụng/H2 đạt (6 test MySQL opt-in skipped); 6/6 test MySQL 8.0.36 opt-in đạt riêng.
 
 Nguồn: target F01–F04, WF02 phần tạo Order.
 
@@ -391,6 +421,14 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | Ngày giờ | Phần | Trạng thái sau phiên | Nội dung | Test/bằng chứng | Hành động tiếp theo |
 |---|---:|---|---|---|---|
 | 06/10/2026 | Chuẩn bị | — | Hoàn thành tài liệu WF01–WF09 và tạo kế hoạch 13 phần | Có đủ 6 file cho mỗi WF | Bắt đầu PHẦN 01 |
+| 06/10/2026 | 01 | `IN_PROGRESS` | Bắt đầu chụp baseline, chưa thay đổi nghiệp vụ | Java 21.0.12, Maven 3.9.16; ghi nhận worktree có thay đổi cấu hình sẵn có | Chạy toàn bộ test hiện tại |
+| 06/10/2026 | 01 | `VERIFIED` | Hoàn thành audit code/schema/API/BPMN/event và gap matrix WF01–WF09; không sửa nghiệp vụ | `.\mvnw.cmd test`: 167/167 đạt; [báo cáo PHẦN 01](implementation/01-baseline-gap.md) | Xác nhận quyết định domain/migration và bắt đầu PHẦN 02 |
+| 06/10/2026 | 02 | `IN_PROGRESS` | Bắt đầu domain contract và migration theo chiến lược expand; chưa xóa dữ liệu legacy | Đề xuất ban đầu Flyway/VND nguyên, chưa triển khai | Kiểm kê schema/model và chờ quyết định kỹ thuật |
+| 06/10/2026 | 02 | `IN_PROGRESS` | Người dùng chốt Liquibase và tiếp tục dùng `double/Double` cho tiền; giá custom chưa xác định dùng `null`, không dùng `0.0` | Quyết định mới nhất thay thế đề xuất Flyway/VND nguyên | Triển khai Liquibase changelog, domain skeleton và migration test |
+| 06/10/2026 | 02 | `VERIFIED` | Hoàn thành domain contract và migration expand; giữ state/process/assignment legacy chờ cutover được kiểm thử | 178 tests, 0 failure/error/skipped, MySQL 8.0.36 + H2; [bàn giao](implementation/02-domain-migration.md) | PHẦN 03: transition, idempotency, outbox, token, audit |
+| 06/10/2026 | 03 | `IN_PROGRESS` | Thêm durable request/outbox/consumer ledger, transition/audit, guest token guard; nối event publisher và consumer hiện tại | H2/MySQL concurrency và JPA transaction atomicity đang xác minh | Chạy bộ test đầy đủ và ghi bàn giao PHẦN 03 |
+| 06/10/2026 | 03 | `VERIFIED` | Hoàn tất hạ tầng dùng chung và tích hợp event/cache consumer; cập nhật runbook và giới hạn SMTP/legacy | 187/187 test đạt; git diff --check đạt | PHẦN 04: catalog duration, cart/checkout, snapshots và bỏ stock |
+| 07/10/2026 | 04 | `VERIFIED` | Checkout USER/Guest mới dùng DB idempotency/lock/outbox; snapshot catalog/duration, PENDING_APPROVAL và email milestone | 198 test H2/application đạt với 6 MySQL opt-in skipped; chạy riêng 6/6 MySQL 8.0.36 đạt; [bàn giao](implementation/04-catalog-checkout.md) | PHẦN 05: CustomRequest draft/submit |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -414,11 +452,11 @@ HÀNH ĐỘNG TIẾP THEO CHÍNH XÁC:
 
 ## 10. Quyết định/chặn cần xử lý
 
-Hiện chưa có blocker bắt đầu PHẦN 01. Các lựa chọn kỹ thuật cần xác nhận bằng audit trong PHẦN 01–02:
+Không còn blocker của PHẦN 01. Audit đã xác nhận các lựa chọn cần khóa khi bắt đầu PHẦN 02:
 
-- Công cụ migration database sẽ dùng.
+- Công cụ migration database: **đã chốt Liquibase**. Hibernate dùng `validate` để không tự tạo cột trước changelog. Migration expand chỉ bật bằng profile `migration`, yêu cầu schema legacy có sẵn; bootstrap database trống chưa được hỗ trợ bởi changelog này.
 - Chiến lược tương thích/migrate process instance Camunda đang chạy.
-- Kiểu tiền chính xác dùng cho VND và cách migrate các cột `double`.
+- Kiểu tiền: **đã chốt tiếp tục dùng `double/Double`**. Giá chính thức chưa xác định phải là `null`, không dùng `0.0` làm giá giả.
 - Policy ánh xạ dữ liệu Order cũ sang state mới.
 - TTL/revoke/cấp lại guest token.
 - Policy tài chính cho payment success đến sau khi Order đã timeout và `CANCELLED`.
@@ -437,10 +475,11 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Tiếp theo thực hiện **PHẦN 01 — Baseline và bảng chênh lệch**:
+Tiếp theo thực hiện **PHẦN 05 — Custom request, WF01**:
 
-1. Chạy test suite hiện tại mà chưa sửa nghiệp vụ.
-2. Ghi các test đang pass/fail và nguyên nhân đã biết.
-3. Lập danh sách endpoint/entity/state/BPMN hiện tại.
-4. Tạo gap matrix ánh xạ từng yêu cầu target sang code cần giữ/sửa/thêm/bỏ.
-5. Cập nhật file này trước khi chuyển sang PHẦN 02.
+1. Đọc [bàn giao PHẦN 04](implementation/04-catalog-checkout.md), `target.txt` và đặc tả WF01.
+2. Hoàn thiện `CustomRequest`/repository cho nhiều draft thuộc một USER; Guest không có custom.
+3. Tạo DTO/controller/service draft CRUD; actor lấy từ JWT, optimistic version và ownership bắt buộc.
+4. Submit draft idempotent tạo đúng một CUSTOM Order `PENDING_APPROVAL`, snapshot request/contact và để price/finalPrice là `null`.
+5. Phát email + notification chỉ khi Order được tạo; lưu draft không phát milestone Order.
+6. Test authorization, version conflict, retry/concurrency submit, rollback và ghi bàn giao trước PHẦN 06.

@@ -4,3 +4,7 @@
 
 target/
 frontend/dist/
+
+# Temporary lock files created while WPS/Excel has a workbook open.
+~$*.xlsx
+~$*.xlsb

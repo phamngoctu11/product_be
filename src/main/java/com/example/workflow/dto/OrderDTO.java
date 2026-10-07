@@ -12,6 +12,12 @@ import java.util.List;
 @Data
 public class OrderDTO implements Serializable {
     private Long id;
+    private Long version;
+    private com.example.workflow.nume.OrderType orderType;
+    private com.example.workflow.nume.PaymentStatus paymentStatus;
+    private com.example.workflow.nume.PaymentMethod paymentMethodType;
+    private LocalDateTime productionStartedAt;
+    private Integer currentAgreementVersion;
     private String user_id;
     private String lastname;
     private String customerName;
@@ -19,7 +25,7 @@ public class OrderDTO implements Serializable {
     private List<OrderItemDTO> items;
     private double totalPrice;
     private double discountAmount;
-    private double finalPrice;
+    private Double finalPrice;
     private String voucherName;
     private LocalDateTime startOrderTime;
     private LocalDateTime endOrderTime;

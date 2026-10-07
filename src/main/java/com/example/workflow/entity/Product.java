@@ -2,6 +2,7 @@ package com.example.workflow.entity;
 
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,6 +25,10 @@ public class Product {
 
     @Column(name = "price")
     private double price;
+
+    @DecimalMin(value = "2.0", message = "Made day must be at least 2")
+    @Column(name = "made_day")
+    private Double madeDay;
 
     @Column(name = "tags")
     private String tags;

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="03-durable-requests" author="workflow">
+        <createTable tableName="workflow_requests">
+            <column name="request_key" type="varchar(64)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="payload_hash" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="result_json" type="longtext"/>
+            <column name="completed" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+    <changeSet id="03-outbox" author="workflow">
+        <createTable tableName="workflow_outbox">
+            <column name="event_id" type="varchar(36)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="event_type" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="payload" type="longtext"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="due_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="attempts" type="int" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="published_at" type="datetime"/>
+            <column name="last_error" type="varchar(255)"/>
+        </createTable>
+        <createIndex tableName="workflow_outbox" indexName="idx_outbox_pending"><column name="published_at"/><column name="due_at"/></createIndex>
+    </changeSet>
+    <changeSet id="03-transition-audit" author="workflow">
+        <createTable tableName="workflow_transition_audit">
+            <column name="id" type="varchar(36)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="old_status" type="varchar(50)"><constraints nullable="false"/></column>
+            <column name="new_status" type="varchar(50)"><constraints nullable="false"/></column>
+            <column name="actor_id" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="reason" type="text"/>
+            <column name="reference_id" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="workflow_transition_audit" baseColumnNames="order_id" referencedTableName="orders" referencedColumnNames="id" constraintName="fk_transition_audit_order"/>
+        <createIndex tableName="workflow_transition_audit" indexName="idx_transition_order"><column name="order_id"/><column name="occurred_at"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

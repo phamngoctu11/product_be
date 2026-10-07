@@ -74,6 +74,7 @@ public class ProductService {
     @Transactional
     public ProductDTO createProduct(ProductDTO dto, String userId) {
         getActor(userId);
+        validateMadeDay(dto.getMadeDay());
         Product entity = mapper.toEntity(dto);
         prepareProductForCreate(entity);
         Product savedProduct = repository.saveAndFlush(entity);
@@ -85,6 +86,7 @@ public class ProductService {
     @Transactional
     public void updateProduct(Long id, ProductDTO dto, String userId) {
         getActor(userId);
+        validateMadeDay(dto.getMadeDay());
         Product existingProduct = getActiveProduct(id);
         applyProductBasicInfo(existingProduct, dto, true);
 
@@ -186,6 +188,7 @@ public class ProductService {
         product.setTags(dto.getTags());
         product.setImageUrl(dto.getImage_url());
         if (updateHandmade) {
+            product.setMadeDay(dto.getMadeDay());
             product.setHandmade(dto.isHandmade());
             if (dto.getAvailabilityStatus() != null) {
                 product.setAvailabilityStatus(dto.getAvailabilityStatus());
@@ -202,6 +205,13 @@ public class ProductService {
             return;
         }
         product.getVariants().forEach(variant -> applyVariantOwnership(product, variant));
+    }
+
+    private void validateMadeDay(Double madeDay) {
+        if (madeDay == null || !Double.isFinite(madeDay) || madeDay < 2) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
+                    "Made day must be a finite number of at least 2.");
+        }
     }
 
     private void applyVariantOwnership(Product product, ProductVariant variant) {

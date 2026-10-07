@@ -10,6 +10,12 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Set;
+import java.time.Duration;
+import java.util.Arrays;
+import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
+import org.springframework.http.HttpStatus;
 
 @Service
 public class OrderLookupTokenService {
@@ -26,12 +32,38 @@ public class OrderLookupTokenService {
         String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         order.setOrderLookupTokenHash(hash(rawToken));
         order.setOrderLookupTokenCreatedAt(LocalDateTime.now());
+        order.setOrderLookupTokenRevokedAt(null);
+        order.setOrderLookupTokenExpiresAt(null);
+        order.setOrderLookupTokenScope(null);
         return rawToken;
+    }
+
+    public enum Scope { READ, CANCEL, CONFIRM_RECEIPT }
+
+    /** Caller must supply approved TTL policy; no silent business default. Reissue replaces the hash. */
+    public String issueFor(Order order, Set<Scope> scopes, Duration validity) {
+        if (scopes == null || scopes.isEmpty() || validity == null || validity.isNegative() || validity.isZero())
+            throw new IllegalArgumentException("Scopes and a positive validity duration are required");
+        String raw = issueFor(order);
+        order.setOrderLookupTokenScope(scopes.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(",")));
+        order.setOrderLookupTokenExpiresAt(order.getOrderLookupTokenCreatedAt().plus(validity));
+        return raw;
+    }
+
+    public void revoke(Order order) { order.setOrderLookupTokenRevokedAt(LocalDateTime.now()); }
+
+    public void authorize(Order order, String token, Scope scope) {
+        if (scope == null || !matches(order, token) || order.getOrderLookupTokenExpiresAt() == null
+                || order.getOrderLookupTokenScope() == null
+                || !Arrays.asList(order.getOrderLookupTokenScope().split(",")).contains(scope.name())) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.GUEST_TOKEN_INVALID);
+        }
     }
 
     public boolean matches(Order order, String rawToken) {
         if (order == null || rawToken == null || rawToken.isBlank()
-                || order.getOrderLookupTokenHash() == null) {
+                || order.getOrderLookupTokenHash() == null || order.getOrderLookupTokenRevokedAt() != null
+                || (order.getOrderLookupTokenExpiresAt() != null && !LocalDateTime.now().isBefore(order.getOrderLookupTokenExpiresAt()))) {
             return false;
         }
         byte[] expected = order.getOrderLookupTokenHash().getBytes(StandardCharsets.US_ASCII);

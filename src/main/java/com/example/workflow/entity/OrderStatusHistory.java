@@ -26,11 +26,11 @@ public class OrderStatusHistory {
     private Order order;
 
     @Enumerated(EnumType.STRING)
-    @Column(name="oldstatus")
+    @Column(name="oldstatus", columnDefinition="varchar(50)")
     OrderStatus oldstatus;
 
     @Enumerated(EnumType.STRING)
-    @Column(name="newstatus")
+    @Column(name="newstatus", columnDefinition="varchar(50)")
     OrderStatus newstatus;
 
     @Column(name="update_time")

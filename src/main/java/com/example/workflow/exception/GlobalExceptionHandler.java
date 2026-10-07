@@ -12,6 +12,10 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.dao.ConcurrencyFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConcurrency(org.springframework.dao.ConcurrencyFailureException ex) {
+        return buildAppExceptionResponse(new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CONCURRENT_UPDATE));
+    }
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
         return buildAppExceptionResponse(ex);
@@ -65,6 +69,7 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiResponse<Void>> buildAppExceptionResponse(AppException ex) {
         ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        response.header("X-Error-Code", ex.getErrorCode().name());
         if (ex instanceof RateLimitExceededException rateLimitExceededException) {
             String retryAfter = String.valueOf(rateLimitExceededException.getRetryAfterSeconds());
             response.header("Retry-After", retryAfter);

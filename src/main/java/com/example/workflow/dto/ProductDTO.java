@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
@@ -21,6 +22,9 @@ public class ProductDTO implements Serializable {
 
     @PositiveOrZero(message = "Price must be zero or positive")
     private double price;
+
+    @DecimalMin(value = "2.0", message = "Made day must be at least 2")
+    private Double madeDay;
 
     private String tags;
 

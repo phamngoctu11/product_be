@@ -1,5 +1,6 @@
 package com.example.workflow.dto;
 import com.example.workflow.nume.OrderItemProductionStatus;
+import com.example.workflow.nume.OrderItemSourceType;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -16,7 +17,13 @@ public class OrderItemDTO implements Serializable {
     private int quantity;
     private Integer exportedQuantity;
     private Integer receivedQuantity;
-    private double price;
+    private Double price;
+    private OrderItemSourceType sourceType;
+    private String specSnapshot;
+    private Double madeDaySnapshot;
+    private Integer productionDurationDays;
+    private String durationRuleVersion;
+    private java.time.LocalDateTime computedCompletionAt;
     private boolean handmade;
     private OrderItemProductionStatus productionStatus;
     private boolean reviewed;

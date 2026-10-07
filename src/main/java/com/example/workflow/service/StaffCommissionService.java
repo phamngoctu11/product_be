@@ -28,8 +28,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -146,6 +144,7 @@ public class StaffCommissionService {
         return refreshedDays;
     }
 
+    @Transactional
     public void refreshForAttributions(Collection<ConsultationSaleAttribution> attributions) {
         if (attributions == null || attributions.isEmpty()) {
             return;
@@ -156,20 +155,10 @@ public class StaffCommissionService {
             return;
         }
 
-        if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            Set<RefreshKey> keysAfterCommit = new HashSet<>(refreshKeys);
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    refreshKeys(keysAfterCommit);
-                }
-            });
-            return;
-        }
-
         refreshKeys(refreshKeys);
     }
 
+    @Transactional
     public void refreshSummaries(Collection<CommissionRefreshKey> commissionRefreshKeys) {
         if (commissionRefreshKeys == null || commissionRefreshKeys.isEmpty()) {
             return;
@@ -189,18 +178,6 @@ public class StaffCommissionService {
         }
 
         if (refreshKeys.isEmpty()) {
-            return;
-        }
-
-        if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            Set<RefreshKey> keysAfterCommit = new HashSet<>(refreshKeys);
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    refreshKeys(keysAfterCommit);
-                }
-            });
-            applicationCacheService.evictStaffCommissionSummariesRefreshed();
             return;
         }
 

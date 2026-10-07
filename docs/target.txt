@@ -694,6 +694,7 @@ Danh tính phiên không thay token truy cập Order.
 
 Nhóm order:
 Order(orderType, status, userId nullable, guestSessionId, assignedStaffId, managerId, timestamps, totals, paymentMethod, currentAgreementVersion).
+Quyết định kỹ thuật ngày 06/10/2026: quản lý migration bằng Liquibase; tiền tiếp tục dùng double/Double. Giá chính thức CUSTOM chưa chốt dùng Double null, phân biệt với giá đã xác nhận bằng 0.0; DTO và mapper phải bảo toàn sự phân biệt này.
 OrderContactSnapshot(fullName, email, phone, address, note).
 OrderItem(sourceType, productVariantId nullable cho custom, specSnapshot, unitPrice, quantity, exportedQuantity, receivedQuantity).
 OrderLookupToken(hash, scope, expiry/revocation theo cấu hình) hoặc trường tương đương trong Order.

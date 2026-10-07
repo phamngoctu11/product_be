@@ -29,7 +29,7 @@ class RedisStreamEventConsumerTest {
     private final ConsultationAttributionService consultationAttributionService = mock(ConsultationAttributionService.class);
     private final StaffCommissionService staffCommissionService = mock(StaffCommissionService.class);
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
-    private final RedisEventIdempotencyService eventIdempotencyService = mock(RedisEventIdempotencyService.class);
+    private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests = mock(com.example.workflow.service.consistency.DurableRequestExecutor.class);
     private final RedisStreamRetryTemplate retryTemplate = mock(RedisStreamRetryTemplate.class);
     private final RedisStreamEventConsumer consumer = new RedisStreamEventConsumer(
             redisTemplate,
@@ -40,7 +40,7 @@ class RedisStreamEventConsumerTest {
             consultationAttributionService,
             staffCommissionService,
             optionalCacheService,
-            eventIdempotencyService,
+            durableRequests,
             retryTemplate
     );
 
@@ -48,7 +48,8 @@ class RedisStreamEventConsumerTest {
     void guestOrderCreatedEventSendsGuestConfirmationEmail() throws JsonProcessingException {
         Order order = guestOrder();
         when(orderRepository.findById(200L)).thenReturn(Optional.of(order));
-        when(eventIdempotencyService.isCompleted(EventTypes.GUEST_ORDER_CREATED, 200L)).thenReturn(false);
+        when(durableRequests.execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(call -> ((java.util.function.Supplier<String>) call.getArgument(3)).get());
 
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
@@ -59,13 +60,41 @@ class RedisStreamEventConsumerTest {
                 50.0,
                 "Thanh toan khi nhan hang (COD)"
         );
-        verify(eventIdempotencyService).markCompleted(EventTypes.GUEST_ORDER_CREATED, 200L);
+        verify(durableRequests).execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void tokenizedGuestOrderCreatedEventIncludesSecureOrderLinkAndDuration() throws JsonProcessingException {
+        when(orderRepository.findById(200L)).thenReturn(Optional.of(guestOrder()));
+        when(durableRequests.execute(
+                org.mockito.ArgumentMatchers.eq("guest-order-created"),
+                org.mockito.ArgumentMatchers.eq("200"),
+                org.mockito.ArgumentMatchers.eq("200:5"),
+                org.mockito.ArgumentMatchers.any()
+        )).thenAnswer(call -> ((java.util.function.Supplier<String>) call.getArgument(3)).get());
+        ReflectionTestUtils.setField(consumer, "frontendBaseUrl", "http://localhost:4200");
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleGuestOrderCreated",
+                objectMapper.writeValueAsString(new GuestOrderCreatedEvent(200L, "raw-token", 5))
+        );
+
+        verify(emailService).sendOrderConfirmationEmailNowOrThrow(
+                "guest@example.com",
+                "Guest Customer",
+                200L,
+                50.0,
+                "Thanh toán khi nhận hàng (COD)",
+                "http://localhost:4200/guest/orders/200?token=raw-token",
+                5
+        );
     }
 
     @Test
     void guestOrderCreatedEventDoesNotSendDuplicateEmail() throws JsonProcessingException {
         when(orderRepository.findById(200L)).thenReturn(Optional.of(guestOrder()));
-        when(eventIdempotencyService.isCompleted(EventTypes.GUEST_ORDER_CREATED, 200L)).thenReturn(true);
+        when(durableRequests.execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any())).thenReturn("{}");
 
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
@@ -86,7 +115,7 @@ class RedisStreamEventConsumerTest {
 
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
-        verify(eventIdempotencyService, never()).isCompleted(EventTypes.GUEST_ORDER_CREATED, 200L);
+        org.mockito.Mockito.verifyNoInteractions(durableRequests);
         verify(emailService, never()).sendOrderConfirmationEmailNowOrThrow(
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),

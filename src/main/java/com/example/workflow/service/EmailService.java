@@ -35,6 +35,24 @@ public class EmailService {
         );
     }
 
+    public void sendGuestOrderConfirmationEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            Double totalPrice,
+            String paymentMethod,
+            String orderAccessUrl,
+            Integer productionDurationDays
+    ) {
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
+                new OrderConfirmationEmailRequestedEvent(
+                        toEmail, customerName, orderId, totalPrice, paymentMethod,
+                        orderAccessUrl, productionDurationDays
+                )
+        );
+    }
+
     public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
         try {
             sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod);
@@ -44,11 +62,25 @@ public class EmailService {
     }
 
     public void sendOrderConfirmationEmailNowOrThrow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+        sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod, null, null);
+    }
+
+    public void sendOrderConfirmationEmailNowOrThrow(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            Double totalPrice,
+            String paymentMethod,
+            String orderAccessUrl,
+            Integer productionDurationDays
+    ) {
         Context context = new Context();
         context.setVariable("customerName", customerName);
         context.setVariable("orderId", orderId);
         context.setVariable("totalPrice", totalPrice);
         context.setVariable("paymentMethod", paymentMethod);
+        context.setVariable("orderAccessUrl", orderAccessUrl);
+        context.setVariable("productionDurationDays", productionDurationDays);
 
         String htmlContent = templateEngine.process("order-confirmation", context);
         sendHtmlEmailOrThrow(toEmail, "Order confirmation #" + orderId, htmlContent);

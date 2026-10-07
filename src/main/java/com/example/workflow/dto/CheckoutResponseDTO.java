@@ -14,10 +14,12 @@ public class CheckoutResponseDTO implements Serializable {
     private String status;
     private String message;
     private Long orderId;
+    private Long version;
     private Double totalPrice;
     private Double discountAmount;
     private Double finalPrice;
     private String paymentMethod;
+    private String paymentStatus;
     private String voucherCode;
     private String voucherName;
     private String provider;
@@ -37,10 +39,12 @@ public class CheckoutResponseDTO implements Serializable {
         dto.setStatus(response.get("status"));
         dto.setMessage(response.get("message"));
         dto.setOrderId(parseLong(response.get("orderId")));
+        dto.setVersion(parseLong(response.get("version")));
         dto.setTotalPrice(parseDouble(response.get("totalPrice")));
         dto.setDiscountAmount(parseDouble(response.get("discountAmount")));
         dto.setFinalPrice(parseDouble(response.get("finalPrice")));
         dto.setPaymentMethod(response.get("paymentMethod"));
+        dto.setPaymentStatus(response.get("paymentStatus"));
         dto.setVoucherCode(response.get("voucherCode"));
         dto.setVoucherName(response.get("voucherName"));
         dto.setProvider(response.get("provider"));
