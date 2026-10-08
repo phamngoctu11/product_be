@@ -5,7 +5,7 @@ import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.service.StaffOrderService;
+import com.example.workflow.service.OrderService;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,14 +29,14 @@ import java.util.List;
 @RequiredArgsConstructor
 @Validated
 public class StaffOrderController {
-    private final StaffOrderService staffOrderService;
+    private final OrderService orderService;
 
     @GetMapping("/warehouse-pending")
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getWarehousePendingOrders(
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(staffOrderService.getWarehousePendingOrders(pageable)));
+        return ResponseEntity.ok(ApiResponse.success(orderService.getWarehousePendingOrders(pageable)));
     }
 
     @GetMapping("/my-orders")
@@ -44,7 +44,7 @@ public class StaffOrderController {
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyAssignedStaffOrders(
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(staffOrderService.getMyAssignedStaffOrders(pageable)));
+        return ResponseEntity.ok(ApiResponse.success(orderService.getMyAssignedStaffOrders(pageable)));
     }
 
     @PostMapping("/claim/{orderId}")
@@ -53,7 +53,7 @@ public class StaffOrderController {
             @Positive @PathVariable Long orderId
     ) {
         try {
-            staffOrderService.claimWarehouseOrder(orderId);
+            orderService.claimWarehouseOrder(orderId);
             return ResponseEntity.ok(ApiResponse.success("Nhan phu trach don hang thanh cong."));
         } catch (AppException e) {
             throw e;
@@ -69,7 +69,7 @@ public class StaffOrderController {
             @RequestBody List<ItemCheckRequest> exportData
     ) {
         try {
-            staffOrderService.exportOrder(orderId, exportData);
+            orderService.processStaffExport(orderId, exportData);
             return ResponseEntity.ok(ApiResponse.success("Ghi nhan xuat kho thanh cong, dang cho quan ly KCS."));
         } catch (AppException e) {
             throw e;

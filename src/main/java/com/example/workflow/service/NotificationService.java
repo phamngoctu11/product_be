@@ -12,11 +12,11 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.NotificationReadRepository;
 import com.example.workflow.repository.NotificationRepository;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -39,7 +39,7 @@ public class NotificationService {
     private final NotificationReadRepository notificationReadRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final DomainEventPublisher eventPublisher;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
 
     public void sendUserNotification(String title, String content, String targetUserId, Long consultationRequestId) {
         sendNotification(
@@ -107,15 +107,15 @@ public class NotificationService {
     }
 
     public Page<NotificationDTO> getCurrentUserNotifications(Pageable pageable) {
-        String userId = authService.getCurrentUserId();
-        return notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId, normalizePageable(pageable))
+        String userId = currentUserService.requireCurrentUserId();
+        return notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId, PageableUtils.normalize(pageable, 10, 50))
                 .map(notification -> toDto(notification, notification.isRead()));
     }
 
     public Page<NotificationDTO> getAdminNotifications(Pageable pageable) {
         User currentUser = requireAdminOrManager();
         Page<Notification> notifications = notificationRepository.findByTargetUserIdIsNullOrderByCreatedAtDesc(
-                normalizePageable(pageable)
+                PageableUtils.normalize(pageable, 10, 50)
         );
         Map<Long, NotificationRead> readByNotificationId = getReadMap(currentUser.getId(), notifications.getContent());
 
@@ -127,7 +127,7 @@ public class NotificationService {
     }
 
     public long getCurrentUserUnreadCount() {
-        return notificationRepository.countByTargetUserIdAndIsReadFalse(authService.getCurrentUserId());
+        return notificationRepository.countByTargetUserIdAndIsReadFalse(currentUserService.requireCurrentUserId());
     }
 
     public long getAdminUnreadCount() {
@@ -137,7 +137,7 @@ public class NotificationService {
 
     @Transactional
     public void markCurrentUserNotificationsAsRead() {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         List<Notification> notifications = notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId);
         notifications.forEach(notification -> notification.setRead(true));
         notificationRepository.saveAll(notifications);
@@ -168,7 +168,7 @@ public class NotificationService {
     }
 
     private User requireAdminOrManager() {
-        User currentUser = authService.getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() != Role.ADMIN && currentUser.getRole() != Role.MANAGER) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
         }
@@ -186,12 +186,6 @@ public class NotificationService {
         return notificationReadRepository.findByUserIdAndNotification_IdIn(userId, notificationIds)
                 .stream()
                 .collect(Collectors.toMap(read -> read.getNotification().getId(), Function.identity()));
-    }
-
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 10 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
     }
 
     private boolean isAdminNotificationRead(Notification notification, Map<Long, NotificationRead> readByNotificationId) {

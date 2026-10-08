@@ -13,7 +13,6 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.VoucherMapper;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.repository.VoucherTemplateRepository;
 import com.example.workflow.repository.GuestVoucherUsageRepository;
@@ -42,9 +41,9 @@ public class VoucherService {
 
     private final VoucherTemplateRepository templateRepository;
     private final UserVoucherRepository userVoucherRepository;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final VoucherMapper voucherMapper;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
     private final ReputationService reputationService;
     private final ApplicationCacheService applicationCacheService;
     private final GuestVoucherUsageRepository guestVoucherUsageRepository;
@@ -85,11 +84,11 @@ public class VoucherService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.USER_VOUCHER_WALLET,
-            key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName()",
+            key = "@currentUserService.requireCurrentUserId()",
             unless = "#result == null"
     )
     public List<UserVoucherDTO> getMyWallet() {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         return userVoucherRepository.findByUserIdAndIsUsedFalse(userId)
                 .stream()
                 .map(voucherMapper::toUserVoucherDto)
@@ -98,9 +97,9 @@ public class VoucherService {
 
     @Transactional(readOnly = true)
     public CartVoucherOptionsDTO getCartVoucherOptions(double subtotal) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         LocalDateTime now = LocalDateTime.now();
-        User user = getUserOrThrow(userId);
+        User user = userService.requireUser(userId, ConstantErrorCode.USER_NOT_FOUND);
         double safeSubtotal = Math.max(0, subtotal);
         int redeemableReputation = Math.max(0, user.getReputation() - 40);
 
@@ -143,9 +142,9 @@ public class VoucherService {
 
     @Transactional
     public UserVoucherDTO redeemVoucher(Long templateId) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         LocalDateTime now = LocalDateTime.now();
-        User user = getUserOrThrow(userId);
+        User user = userService.requireUser(userId, ConstantErrorCode.USER_NOT_FOUND);
         VoucherTemplate template = getTemplateOrThrow(templateId);
 
         validateTemplateForRedeem(template, now);
@@ -254,6 +253,22 @@ public class VoucherService {
         templateRepository.incrementGuestQuantity(template.getId());
     }
 
+    @Transactional
+    public void restoreAfterCancellation(Order order) {
+        if (order == null) {
+            return;
+        }
+        UserVoucher appliedVoucher = order.getUserVoucher();
+        if (appliedVoucher != null) {
+            appliedVoucher.setUsed(false);
+            appliedVoucher.setUsedDate(null);
+            userVoucherRepository.save(appliedVoucher);
+        }
+        if (order.getUser() == null) {
+            restoreGuestVoucher(order.getGuestVoucherTemplate());
+        }
+    }
+
     public double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
         if (voucher == null) {
             return 0.0;
@@ -268,11 +283,6 @@ public class VoucherService {
         VoucherTemplate savedTemplate = templateRepository.save(request);
         applicationCacheService.evictVoucherCampaignChanged();
         return savedTemplate;
-    }
-
-    private User getUserOrThrow(String userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
     }
 
     private VoucherTemplate getTemplateOrThrow(Long templateId) {

@@ -20,12 +20,13 @@ import com.example.workflow.repository.ConsultationSaleAttributionRepository;
 import com.example.workflow.repository.StaffCommissionDailySummaryRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.MoneyUtils;
+import com.example.workflow.util.CommissionRefreshKeys;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,6 @@ import java.util.stream.Stream;
 @Service
 @RequiredArgsConstructor
 public class StaffCommissionService {
-    private static final double MONEY_ROUNDING_FACTOR = 100.0;
     private static final long MAX_REPORT_DAYS = 370;
 
     private final ConsultationSaleAttributionRepository attributionRepository;
@@ -52,14 +52,16 @@ public class StaffCommissionService {
     private final StaffCommissionDailySummaryRepository summaryRepository;
     private final UserRepository userRepository;
     private final ApplicationCacheService applicationCacheService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
 
     @Transactional(readOnly = true)
     @Cacheable(
             value = "staffCommissionSummaries",
-            key = "'me-' + T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #period.name() + '-' + #from + '-' + #to"
+            key = "'me-' + @currentUserService.requireCurrentUserId() + '-' + #period.name() + '-' + #from + '-' + #to"
     )
     public StaffCommissionSummaryDTO getMySummary(CommissionPeriod period, LocalDate from, LocalDate to) {
-        User staff = requireStaff(getCurrentUser());
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         DateRange range = resolveDateRange(period, from, to);
         return buildStaffSummary(staff, range);
     }
@@ -67,7 +69,7 @@ public class StaffCommissionService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = "staffCommissionDetails",
-            key = "'me-' + T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #period.name() + '-' + #from + '-' + #to + '-' + #status.name() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
+            key = "'me-' + @currentUserService.requireCurrentUserId() + '-' + #period.name() + '-' + #from + '-' + #to + '-' + #status.name() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
     )
     public Page<StaffCommissionDetailDTO> getMyDetails(
             CommissionPeriod period,
@@ -76,7 +78,7 @@ public class StaffCommissionService {
             ConsultationAttributionStatus status,
             Pageable pageable
     ) {
-        User staff = requireStaff(getCurrentUser());
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         DateRange range = resolveDateRange(period, from, to);
         return toDetailPage(findDetailPage(staff.getId(), status, range, pageable));
     }
@@ -92,7 +94,7 @@ public class StaffCommissionService {
             LocalDate to,
             Pageable pageable
     ) {
-        requireManagerOrAdmin(getCurrentUser());
+        requireManagerOrAdmin();
         DateRange range = resolveDateRange(period, from, to);
         return userRepository.findByRoleAndIsDeleteFalse(Role.STAFF, pageable)
                 .map(staff -> buildStaffSummary(staff, range));
@@ -104,8 +106,8 @@ public class StaffCommissionService {
             key = "'staff-' + #staffId + '-' + #period.name() + '-' + #from + '-' + #to"
     )
     public StaffCommissionSummaryDTO getStaffSummary(String staffId, CommissionPeriod period, LocalDate from, LocalDate to) {
-        requireManagerOrAdmin(getCurrentUser());
-        User staff = getStaffOrThrow(staffId);
+        requireManagerOrAdmin();
+        User staff = userService.requireStaff(staffId);
         DateRange range = resolveDateRange(period, from, to);
         return buildStaffSummary(staff, range);
     }
@@ -123,14 +125,14 @@ public class StaffCommissionService {
             ConsultationAttributionStatus status,
             Pageable pageable
     ) {
-        requireManagerOrAdmin(getCurrentUser());
-        getStaffOrThrow(staffId);
+        requireManagerOrAdmin();
+        userService.requireStaff(staffId);
         DateRange range = resolveDateRange(period, from, to);
         return toDetailPage(findDetailPage(staffId, status, range, pageable));
     }
 
     public int rebuildSummaries(CommissionPeriod period, LocalDate from, LocalDate to) {
-        requireManagerOrAdmin(getCurrentUser());
+        requireManagerOrAdmin();
         DateRange range = resolveDateRange(period, from, to);
         List<User> staffUsers = userRepository.findByRoleAndIsDeleteFalse(Role.STAFF);
         int refreshedDays = 0;
@@ -150,12 +152,11 @@ public class StaffCommissionService {
             return;
         }
 
-        Set<RefreshKey> refreshKeys = collectRefreshKeys(attributions);
+        Set<CommissionRefreshKey> refreshKeys = CommissionRefreshKeys.fromAttributions(attributions);
         if (refreshKeys.isEmpty()) {
             return;
         }
-
-        refreshKeys(refreshKeys);
+        refreshSummaries(refreshKeys);
     }
 
     @Transactional
@@ -242,9 +243,9 @@ public class StaffCommissionService {
         return new StaffCommissionDetailDTO(
                 attribution.getId(),
                 staff.getId(),
-                buildFullName(staff),
+                userService.displayName(staff),
                 customer.getId(),
-                buildFullName(customer),
+                userService.displayName(customer),
                 attribution.getOrder().getId(),
                 orderItem.getId(),
                 product.getId(),
@@ -277,16 +278,16 @@ public class StaffCommissionService {
 
         return new StaffCommissionSummaryDTO(
                 staff.getId(),
-                buildFullName(staff),
+                userService.displayName(staff),
                 staff.getAvatarUrl(),
                 range.start(),
                 range.end(),
-                roundMoney(summaries.stream().mapToDouble(StaffCommissionDailySummary::getConfirmedCommissionAmount).sum()),
-                roundMoney(summaries.stream().mapToDouble(StaffCommissionDailySummary::getConfirmedRevenueAmount).sum()),
+                MoneyUtils.round(summaries.stream().mapToDouble(StaffCommissionDailySummary::getConfirmedCommissionAmount).sum()),
+                MoneyUtils.round(summaries.stream().mapToDouble(StaffCommissionDailySummary::getConfirmedRevenueAmount).sum()),
                 summaries.stream().mapToLong(StaffCommissionDailySummary::getConfirmedOrderCount).sum(),
                 summaries.stream().mapToLong(StaffCommissionDailySummary::getConfirmedAttributionCount).sum(),
-                roundMoney(summaries.stream().mapToDouble(StaffCommissionDailySummary::getPendingCommissionAmount).sum()),
-                roundMoney(summaries.stream().mapToDouble(StaffCommissionDailySummary::getPendingRevenueAmount).sum()),
+                MoneyUtils.round(summaries.stream().mapToDouble(StaffCommissionDailySummary::getPendingCommissionAmount).sum()),
+                MoneyUtils.round(summaries.stream().mapToDouble(StaffCommissionDailySummary::getPendingRevenueAmount).sum()),
                 summaries.stream().mapToLong(StaffCommissionDailySummary::getPendingOrderCount).sum(),
                 summaries.stream().mapToLong(StaffCommissionDailySummary::getPendingAttributionCount).sum(),
                 summaries.stream().mapToLong(StaffCommissionDailySummary::getCancelledAttributionCount).sum()
@@ -340,7 +341,7 @@ public class StaffCommissionService {
                 .orElseGet(StaffCommissionDailySummary::new);
         summary.setId(buildSummaryId(staffId, summaryDate));
         summary.setStaffId(staffId);
-        summary.setStaffName(buildFullName(staff));
+        summary.setStaffName(userService.displayName(staff));
         summary.setAvatarUrl(staff.getAvatarUrl());
         summary.setSummaryDate(summaryDate);
         summary.setConfirmedCommissionAmount(sumBonusAmount(confirmed));
@@ -354,26 +355,6 @@ public class StaffCommissionService {
         summary.setCancelledAttributionCount(cancelled.size());
         summary.setUpdatedAt(LocalDateTime.now());
         summaryRepository.save(summary);
-    }
-
-    private Set<RefreshKey> collectRefreshKeys(Collection<ConsultationSaleAttribution> attributions) {
-        Set<RefreshKey> refreshKeys = new HashSet<>();
-        for (ConsultationSaleAttribution attribution : attributions) {
-            if (attribution == null || attribution.getStaff() == null || attribution.getStaff().getId() == null) {
-                continue;
-            }
-            String staffId = attribution.getStaff().getId();
-            collectRefreshKey(refreshKeys, staffId, attribution.getOrderCreatedAt());
-            collectRefreshKey(refreshKeys, staffId, attribution.getConfirmedAt());
-            collectRefreshKey(refreshKeys, staffId, attribution.getCancelledAt());
-        }
-        return refreshKeys;
-    }
-
-    private void collectRefreshKey(Set<RefreshKey> refreshKeys, String staffId, LocalDateTime dateTime) {
-        if (dateTime != null) {
-            refreshKeys.add(new RefreshKey(staffId, dateTime.toLocalDate()));
-        }
     }
 
     private DateRange resolveDateRange(CommissionPeriod period, LocalDate from, LocalDate to) {
@@ -441,13 +422,13 @@ public class StaffCommissionService {
     }
 
     private double sumBonusAmount(List<ConsultationSaleAttribution> attributions) {
-        return roundMoney(attributions.stream()
+        return MoneyUtils.round(attributions.stream()
                 .mapToDouble(attribution -> safeAmount(attribution.getBonusAmount()))
                 .sum());
     }
 
     private double sumItemAmount(List<ConsultationSaleAttribution> attributions) {
-        return roundMoney(attributions.stream()
+        return MoneyUtils.round(attributions.stream()
                 .mapToDouble(attribution -> safeAmount(attribution.getItemAmount()))
                 .sum());
     }
@@ -459,51 +440,16 @@ public class StaffCommissionService {
         return amount;
     }
 
-    private double roundMoney(double value) {
-        return Math.round(value * MONEY_ROUNDING_FACTOR) / MONEY_ROUNDING_FACTOR;
-    }
-
     private String buildSummaryId(String staffId, LocalDate summaryDate) {
         return staffId + ":" + summaryDate;
     }
 
-    private User getCurrentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
-    }
-
-    private User getStaffOrThrow(String staffId) {
-        User staff = userRepository.findById(staffId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
-        if (staff.isDelete() || staff.getRole() != Role.STAFF) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId);
-        }
-        return staff;
-    }
-
-    private User requireStaff(User user) {
-        if (user.getRole() != Role.STAFF) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-        }
-        return user;
-    }
-
-    private void requireManagerOrAdmin(User user) {
-        if (user.getRole() != Role.MANAGER && user.getRole() != Role.ADMIN) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only manager or admin can view staff commission reports.");
-        }
-    }
-
-    private String buildFullName(User user) {
-        String fullName = Stream.of(user.getLastname(), user.getFirstname())
-                .filter(part -> part != null && !part.isBlank())
-                .reduce((left, right) -> left + " " + right)
-                .orElse("");
-        if (!fullName.isBlank()) {
-            return fullName;
-        }
-        return user.getUsername();
+    private void requireManagerOrAdmin() {
+        currentUserService.requireCurrentUser(
+                Set.of(Role.MANAGER, Role.ADMIN),
+                ConstantErrorCode.BAD_REQUEST_DETAIL,
+                "Only manager or admin can view staff commission reports."
+        );
     }
 
     private record DateRange(LocalDate start, LocalDate end) {

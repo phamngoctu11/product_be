@@ -2,56 +2,30 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.CartItemDTO;
 import com.example.workflow.dto.CartResDTO;
-import com.example.workflow.dto.CheckoutResponseDTO;
-import com.example.workflow.dto.GuestCheckoutRequest;
 import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
-import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CartMapper;
-import com.example.workflow.nume.GuestWorkflowStatus;
-import com.example.workflow.nume.OrderItemProductionStatus;
-import com.example.workflow.nume.OrderProductionStatus;
-import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.*;
-import com.example.workflow.service.redis.CheckoutConcurrencyService;
-import com.example.workflow.service.redis.CheckoutIdempotencyService;
-import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.GuestSessionUtils;
 import lombok.RequiredArgsConstructor;
-import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CartService {
-    private static final Pattern GUEST_SESSION_ID_PATTERN = Pattern.compile("^[A-Za-z0-9._:-]{16,128}$");
-
     public enum CartOwnerType {
         USER,
         GUEST
@@ -72,29 +46,14 @@ public class CartService {
     }
 
     private final CartRepository cartRepository;
-    private final UserRepository userRepository;
     private final CartMapper cartMapper;
-    private final OrderRepository orderRepository;
-    private final CartItemRepository cartItemRepository;
-    private final ProductVariantRepository productVariantRepository;
-
-    private final RuntimeService runtimeService;
-    private final DomainEventPublisher eventPublisher;
-    private final MomoService momoService;
-    private final EmailService emailService;
-    private final NotificationService notificationService;
-    private final TransactionTemplate transactionTemplate;
-    private final CheckoutConcurrencyService checkoutConcurrencyService;
-    private final CheckoutIdempotencyService checkoutIdempotencyService;
-    private final AuthService authService;
-    private final VoucherService voucherService;
+    private final ProductService productService;
+    private final CurrentUserService currentUserService;
     private final ApplicationCacheService applicationCacheService;
-    private final OrderLookupTokenService orderLookupTokenService;
-    private final GuestPurchaseWorkflowService guestPurchaseWorkflowService;
 
     public CartOwner resolveOwner(String guestSessionId) {
         Optional<String> currentCustomerId = getAuthenticatedCustomerId();
-        return currentCustomerId.map(CartOwner::user).orElseGet(() -> CartOwner.guest(normalizeGuestSessionId(guestSessionId)));
+        return currentCustomerId.map(CartOwner::user).orElseGet(() -> CartOwner.guest(GuestSessionUtils.normalize(guestSessionId)));
     }
 
     public void addToCart(CartOwner owner, Long variantId, int quantity) {
@@ -119,66 +78,6 @@ public class CartService {
     @Cacheable(value = CacheNames.CARTS, key = "#owner.cacheKey()", unless = "#result == null")
     public CartResDTO getCart(CartOwner owner) {
         return toActiveCartDto(getCartForRead(owner));
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    @Deprecated(forRemoval = true)
-    CheckoutResponseDTO checkoutGuestCart(
-            String guestSessionId,
-            GuestCheckoutRequest request,
-            String idempotencyKey
-    ) {
-        String normalizedGuestSessionId = normalizeGuestSessionId(guestSessionId);
-        List<Long> variantIdsToCheckout = normalizeCheckoutVariantIds(request.getVariantIds());
-        String ownerKey = CartOwner.guest(normalizedGuestSessionId).cacheKey();
-
-        CheckoutIdempotencyService.CheckoutIdempotencyState idempotencyState =
-                checkoutIdempotencyService.begin(ownerKey, idempotencyKey);
-        if (idempotencyState.isReplay()) {
-            return CheckoutResponseDTO.fromMap(idempotencyState.response());
-        }
-
-        try {
-            Map<String, String> response;
-            try (CheckoutConcurrencyService.CheckoutLocks ignored =
-                         checkoutConcurrencyService.acquireCheckoutLocks(ownerKey, variantIdsToCheckout)) {
-                response = checkoutGuestCartInternal(normalizedGuestSessionId, request, variantIdsToCheckout);
-            }
-            checkoutIdempotencyService.complete(idempotencyState, response);
-            applicationCacheService.evictGuestCheckout(normalizedGuestSessionId);
-            return CheckoutResponseDTO.fromMap(response);
-        } catch (AppException e) {
-            checkoutIdempotencyService.fail(idempotencyState);
-            throw e;
-        } catch (Exception e) {
-            checkoutIdempotencyService.fail(idempotencyState);
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
-    }
-
-    public void startAddToCartProcess(String userId, Long variantId, int quantity) {
-        assertCurrentUserOwnsCart(userId);
-        addVariantToCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId, quantity);
-        applicationCacheService.evictUserCartChanged(userId);
-    }
-
-    public void updateQuantity(String userId, Long variantId, int newQuantity) {
-        assertCurrentUserOwnsCart(userId);
-        updateCartQuantity(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY), variantId, newQuantity);
-        applicationCacheService.evictUserCartChanged(userId);
-    }
-
-    public void removeFromCart(String userId, Long variantId) {
-        assertCurrentUserOwnsCart(userId);
-        removeVariantFromCart(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_NOT_FOUND), variantId);
-        applicationCacheService.evictUserCartChanged(userId);
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(value = CacheNames.CARTS, key = "'user-' + #userId", unless = "#result == null")
-    public CartResDTO getCartByUserId(String userId) {
-        assertCurrentUserOwnsCart(userId);
-        return toActiveCartDto(getExistingCart(CartOwner.user(userId), ConstantErrorCode.CART_EMPTY_VI));
     }
 
     private CartResDTO toActiveCartDto(Cart cart) {
@@ -210,50 +109,6 @@ public class CartService {
                     .sum());
         }
         return dto;
-    }
-
-    // ==============================================================================
-    // ORCHESTRATOR: GỘP CHỐT ĐƠN + GỌI CAMUNDA + GỌI MOMO VÀO 1 HÀM DUY NHẤT
-    // ==============================================================================
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    @Deprecated(forRemoval = true)
-    Map<String, String> approveCart(
-            String userId,
-            List<Long> variantIdsToCheckout,
-            Long userVoucherId,
-            String paymentMethod,
-            String note,
-            String idempotencyKey
-    ) {
-        assertCurrentUserOwnsCart(userId);
-        CheckoutIdempotencyService.CheckoutIdempotencyState idempotencyState =
-                checkoutIdempotencyService.begin(userId, idempotencyKey);
-        if (idempotencyState.isReplay()) {
-            return idempotencyState.response();
-        }
-
-        try {
-            Map<String, String> response;
-            try (CheckoutConcurrencyService.CheckoutLocks ignored =
-                         checkoutConcurrencyService.acquireCheckoutLocks(userId, variantIdsToCheckout)) {
-                response = approveCartInternal(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
-            }
-            checkoutIdempotencyService.complete(idempotencyState, response);
-            applicationCacheService.evictUserCheckout(userId, userVoucherId);
-            return response;
-        } catch (AppException e) {
-            checkoutIdempotencyService.fail(idempotencyState);
-            throw e;
-        } catch (Exception e) {
-            checkoutIdempotencyService.fail(idempotencyState);
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
-    }
-
-    private void assertCurrentUserOwnsCart(String userId) {
-        if (!authService.isCurrentUserOwner(userId)) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
-        }
     }
 
     private void addVariantToCart(Cart cart, Long variantId, int quantity) {
@@ -289,93 +144,6 @@ public class CartService {
         cartRepository.save(cart);
     }
 
-    private Map<String, String> approveCartInternal(
-            String userId,
-            List<Long> variantIdsToCheckout,
-            Long userVoucherId,
-            String paymentMethod,
-            String note
-    ) throws Exception {
-        Long orderId = transactionTemplate.execute(status -> {
-            Long createdOrderId = createOrderFromCart(userId, variantIdsToCheckout, userVoucherId, paymentMethod, note);
-            startApproveCartProcess(createdOrderId, userId, paymentMethod, note);
-            return createdOrderId;
-        });
-        Order savedOrder = getOrderOrThrow(orderId);
-        User user = getUserOrThrow(userId);
-
-        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
-            return buildOnlinePaymentResponse(savedOrder);
-        }
-
-        sendCodOrderNotifications(user, savedOrder);
-        sendOrderConfirmationEmail(user, savedOrder);
-
-        return buildCheckoutResponseMap(savedOrder, "SUCCESS", "Tao don COD thanh cong! Dang cho xuat kho.");
-    }
-
-    private Map<String, String> checkoutGuestCartInternal(
-            String guestSessionId,
-            GuestCheckoutRequest request,
-            List<Long> variantIdsToCheckout
-    ) {
-        AtomicReference<String> rawLookupToken = new AtomicReference<>();
-        AtomicBoolean hasHandmadeItems = new AtomicBoolean();
-        Long orderId = transactionTemplate.execute(status -> {
-            Cart cart = getExistingCart(CartOwner.guest(guestSessionId), ConstantErrorCode.CART_EMPTY);
-            List<CartItem> itemsToCheckout = resolveCheckoutItems(cart, variantIdsToCheckout);
-
-            Order order = createGuestOrder(guestSessionId, request);
-            double totalPrice = addCheckoutItems(order, itemsToCheckout);
-            VoucherService.AppliedGuestVoucher appliedGuestVoucher =
-                    voucherService.applyGuestVoucherForCheckout(
-                            request.getVoucherCode(), totalPrice, guestSessionId, request.getEmail(), request.getPhone());
-            applyGuestOrderTotals(order, totalPrice, appliedGuestVoucher);
-            rawLookupToken.set(orderLookupTokenService.issueFor(order));
-            Order savedOrder = orderRepository.saveAndFlush(order);
-            hasHandmadeItems.set(savedOrder.getItems().stream().anyMatch(OrderItem::isHandmade));
-            voucherService.recordGuestVoucherUsage(appliedGuestVoucher, savedOrder);
-
-            cartItemRepository.deleteAll(itemsToCheckout);
-            cart.getItems().removeAll(itemsToCheckout);
-            cartRepository.save(cart);
-
-            return savedOrder.getId();
-        });
-
-        GuestPurchaseWorkflowService.StartResult workflowResult = guestPurchaseWorkflowService.startAfterOrderCreated(
-                orderId,
-                guestSessionId,
-                hasHandmadeItems.get()
-        );
-        Order savedOrder = getOrderOrThrow(orderId);
-        return buildGuestCheckoutResponseMap(savedOrder, rawLookupToken.get(), workflowResult);
-    }
-
-    private Long createOrderFromCart(String userId, List<Long> variantIdsToCheckout, Long userVoucherId, String paymentMethod, String note) {
-        User user = getUserOrThrow(userId);
-        if (user.getReputation() < 20 && "COD".equalsIgnoreCase(paymentMethod)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
-        }
-        Cart cart = getCheckoutCart(userId);
-
-        List<CartItem> itemsToCheckout = resolveCheckoutItems(cart, variantIdsToCheckout);
-        Order order = createOrder(user, paymentMethod, note);
-        double totalPrice = addCheckoutItems(order, itemsToCheckout);
-
-        UserVoucher appliedVoucher = voucherService.useVoucherForCheckout(userVoucherId, userId, totalPrice);
-        double discountAmount = voucherService.calculateDiscountAmount(appliedVoucher, totalPrice);
-        applyOrderTotals(order, totalPrice, discountAmount, appliedVoucher);
-        Order savedOrder = orderRepository.saveAndFlush(order);
-        eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(savedOrder.getId()));
-
-        cartItemRepository.deleteAll(itemsToCheckout);
-        cart.getItems().removeAll(itemsToCheckout);
-        cartRepository.save(cart);
-
-        return savedOrder.getId();
-    }
-
     private CartItem findCartItemOrThrow(Cart cart, Long variantId) {
         return cart.getItems().stream()
                 .filter(item -> item.getProductVariant().getId().equals(variantId))
@@ -391,8 +159,7 @@ public class CartService {
     }
 
     private ProductVariant getActiveVariantOrThrow(Long variantId) {
-        return productVariantRepository.findActiveById(variantId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND));
+        return productService.requireActiveVariant(variantId);
     }
 
     private CartItem createCartItem(Cart cart, ProductVariant variant, int quantity) {
@@ -401,214 +168,6 @@ public class CartService {
         item.setProductVariant(variant);
         item.setQuantity(quantity);
         return item;
-    }
-
-    private List<CartItem> resolveCheckoutItems(Cart cart, List<Long> variantIdsToCheckout) {
-        if (variantIdsToCheckout == null || variantIdsToCheckout.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
-        }
-
-        List<CartItem> itemsToCheckout = cart.getItems().stream()
-                .filter(cartItem -> variantIdsToCheckout.contains(cartItem.getProductVariant().getId()))
-                .collect(Collectors.toList());
-        if (itemsToCheckout.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.SELECTED_PRODUCTS_NOT_IN_CART);
-        }
-        return itemsToCheckout;
-    }
-
-    private Order createOrder(User user, String paymentMethod, String note) {
-        Order order = new Order();
-        order.setUser(user);
-        order.setNote(note);
-        order.setStartOrderTime(LocalDateTime.now());
-        order.setPaymentMethod(paymentMethod);
-        order.setStatus(resolveInitialOrderStatus(paymentMethod));
-        order.setItems(new ArrayList<>());
-        return order;
-    }
-
-    private Order createGuestOrder(String guestSessionId, GuestCheckoutRequest request) {
-        Order order = new Order();
-        order.setGuestSessionId(guestSessionId);
-        order.setContactSnapshot(new OrderContactSnapshot(
-                normalizeText(request.getCustomerName()),
-                normalizeText(request.getEmail()),
-                normalizeText(request.getPhone()),
-                normalizeText(request.getShippingAddress()),
-                normalizeText(request.getNote())
-        ));
-        order.setStartOrderTime(LocalDateTime.now());
-        order.setPaymentMethod("COD");
-        order.setStatus(OrderStatus.PENDING_APPROVAL);
-        order.setGuestWorkflowStatus(GuestWorkflowStatus.PENDING_START);
-        order.setItems(new ArrayList<>());
-        return order;
-    }
-
-    private double addCheckoutItems(Order order, List<CartItem> itemsToCheckout) {
-        double totalPrice = 0;
-        boolean hasHandmadeItems = false;
-        for (CartItem cartItem : itemsToCheckout) {
-            validateCheckoutItem(cartItem);
-            OrderItem orderItem = createOrderItem(order, cartItem);
-            totalPrice += calculateCartItemAmount(cartItem);
-            order.getItems().add(orderItem);
-            hasHandmadeItems = hasHandmadeItems || orderItem.isHandmade();
-        }
-        order.setProductionStatus(hasHandmadeItems
-                ? OrderProductionStatus.WAITING_PRODUCTION
-                : OrderProductionStatus.NOT_REQUIRED);
-        return totalPrice;
-    }
-
-    private void applyOrderTotals(Order order, double totalPrice, double discountAmount, UserVoucher appliedVoucher) {
-        double finalPrice = Math.max(0, totalPrice - discountAmount);
-        order.setTotalPrice(totalPrice);
-        order.setDiscountAmount(discountAmount);
-        order.setFinalPrice(finalPrice);
-        order.setUserVoucher(appliedVoucher);
-    }
-
-    private void applyGuestOrderTotals(Order order, double totalPrice, VoucherService.AppliedGuestVoucher appliedVoucher) {
-        double discountAmount = appliedVoucher == null ? 0.0 : appliedVoucher.discountAmount();
-        double finalPrice = Math.max(0, totalPrice - discountAmount);
-        order.setTotalPrice(totalPrice);
-        order.setDiscountAmount(discountAmount);
-        order.setFinalPrice(finalPrice);
-        if (appliedVoucher != null && appliedVoucher.template() != null) {
-            order.setGuestVoucherTemplate(appliedVoucher.template());
-        }
-    }
-
-    private void startApproveCartProcess(Long orderId, String userId, String paymentMethod, String note) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("orderId", orderId);
-        variables.put("userId", userId);
-        variables.put("paymentMethod", paymentMethod);
-        variables.put("note", note);
-        runtimeService.startProcessInstanceByKey("ApproveCartProcess", String.valueOf(userId), variables);
-    }
-
-    private Map<String, String> buildGuestCheckoutResponseMap(
-            Order order,
-            String lookupToken,
-            GuestPurchaseWorkflowService.StartResult workflowResult
-    ) {
-        Map<String, String> response = buildCheckoutResponseMap(
-                order,
-                order.getStatus().name(),
-                "Tao don guest COD thanh cong. Don hang dang cho quan ly duyet."
-        );
-        response.put("lookupToken", lookupToken);
-        String maskedEmail = orderLookupTokenService.maskEmail(order.getEmail());
-        if (maskedEmail != null) {
-            response.put("maskedEmail", maskedEmail);
-        }
-        response.put(
-                "guestWorkflowStatus",
-                workflowResult.started()
-                        ? GuestWorkflowStatus.STARTED.name()
-                        : GuestWorkflowStatus.START_FAILED.name()
-        );
-        return response;
-    }
-
-    private Map<String, String> buildOnlinePaymentResponse(Order savedOrder) throws Exception {
-        Long orderId = savedOrder.getId();
-        Map<String, String> momoPaymentData = momoService.createPaymentData(
-                String.valueOf(orderId),
-                savedOrder.getFinalPrice().longValue()
-        );
-        String momoPayUrl = momoPaymentData.get("payUrl");
-        if (momoPayUrl == null || momoPayUrl.isBlank()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.MOMO_PAY_URL_MISSING);
-        }
-
-        Map<String, String> response = buildCheckoutResponseMap(
-                savedOrder,
-                "REDIRECT",
-                momoService.isMockPaymentEnabled()
-                        ? "Mo URL mock de gia lap thanh toan thanh cong."
-                        : "Vui long thanh toan qua MoMo de hoan tat."
-        );
-        response.putAll(momoPaymentData);
-        response.put("url", momoPayUrl);
-        response.put("provider", momoService.isMockPaymentEnabled() ? "MOMO_MOCK" : "MOMO");
-        return response;
-    }
-
-    private Map<String, String> buildCheckoutResponseMap(Order order, String status, String message) {
-        Map<String, String> response = new HashMap<>();
-        response.put("orderId", String.valueOf(order.getId()));
-        response.put("status", status);
-        response.put("totalPrice", String.valueOf(order.getTotalPrice()));
-        response.put("discountAmount", String.valueOf(order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount()));
-        response.put("finalPrice", String.valueOf(resolveOrderFinalPrice(order)));
-        response.put("paymentMethod", order.getPaymentMethod());
-        putVoucherResponseFields(response, order);
-        response.put("message", message);
-        return response;
-    }
-
-    private void putVoucherResponseFields(Map<String, String> response, Order order) {
-        if (order.getUserVoucher() != null && order.getUserVoucher().getTemplate() != null) {
-            response.put("voucherCode", order.getUserVoucher().getTemplate().getCode());
-            response.put("voucherName", order.getUserVoucher().getTemplate().getName());
-            return;
-        }
-        if (order.getGuestVoucherTemplate() != null) {
-            response.put("voucherCode", order.getGuestVoucherTemplate().getCode());
-            response.put("voucherName", order.getGuestVoucherTemplate().getName());
-        }
-    }
-
-    private void sendCodOrderNotifications(User user, Order savedOrder) {
-        Long orderId = savedOrder.getId();
-        notificationService.sendNotification(
-                "Don hang moi tu " + user.getLastname(),
-                "Khach hang " + user.getLastname() + " vua tao don hang COD (Ma #" + orderId + ").",
-                orderId,
-                null,
-                null,
-                "/topic/admin-notifications"
-        );
-
-        notificationService.sendNotification(
-                "Dat hang thanh cong!",
-                "Don hang #" + orderId + " cua ban dang cho Admin duyet. Ban co the huy don neu muon.",
-                orderId,
-                user.getId(),
-                null,
-                "/topic/user-notifications/" + user.getId()
-        );
-    }
-
-    private void sendOrderConfirmationEmail(User user, Order savedOrder) {
-        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
-            return;
-        }
-        emailService.sendOrderConfirmationEmail(
-                user.getEmail(),
-                user.getLastname(),
-                savedOrder.getId(),
-                savedOrder.getFinalPrice(),
-                "Thanh toan khi nhan hang (COD)"
-        );
-    }
-
-    private User getUserOrThrow(String userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_VI));
-    }
-
-    private Order getOrderOrThrow(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
-    private Cart getCheckoutCart(String userId) {
-        return getCartOrThrow(userId, ConstantErrorCode.CART_NOT_FOUND_VI);
     }
 
     private Cart getCartForRead(CartOwner owner) {
@@ -641,7 +200,7 @@ public class CartService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cart owner is required.");
         }
         if (owner.type() == CartOwnerType.GUEST) {
-            return CartOwner.guest(normalizeGuestSessionId(owner.id()));
+            return CartOwner.guest(GuestSessionUtils.normalize(owner.id()));
         }
         return CartOwner.user(owner.id().trim());
     }
@@ -659,7 +218,7 @@ public class CartService {
     }
 
     private Cart getOrCreateGuestCart(String guestSessionId) {
-        String normalizedSessionId = normalizeGuestSessionId(guestSessionId);
+        String normalizedSessionId = GuestSessionUtils.normalize(guestSessionId);
         return cartRepository.findByGuestSessionId(normalizedSessionId)
                 .orElseGet(() -> {
                     Cart cart = createEmptyGuestCart(normalizedSessionId);
@@ -668,89 +227,17 @@ public class CartService {
     }
 
     private Cart getGuestCartOrThrow(String guestSessionId, ConstantErrorCode errorCode) {
-        String normalizedSessionId = normalizeGuestSessionId(guestSessionId);
+        String normalizedSessionId = GuestSessionUtils.normalize(guestSessionId);
         return cartRepository.findByGuestSessionId(normalizedSessionId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, errorCode));
     }
 
     private Optional<String> getAuthenticatedCustomerId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
-            return Optional.empty();
-        }
-
-        if (!hasAuthority(authentication)) {
+        Optional<String> userId = currentUserService.findCurrentUserId();
+        if (userId.isPresent() && !currentUserService.hasAuthority("USER")) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
         }
-
-        if (authentication.getPrincipal() instanceof Jwt jwt && StringUtils.hasText(jwt.getSubject())) {
-            return Optional.of(jwt.getSubject());
-        }
-
-        return Optional.of(userRepository.findByUsername(authentication.getName())
-                .map(User::getId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND)));
-    }
-
-    private boolean hasAuthority(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(grantedAuthority -> "USER".equals(grantedAuthority.getAuthority()));
-    }
-
-    private String normalizeGuestSessionId(String guestSessionId) {
-        if (!StringUtils.hasText(guestSessionId)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is required.");
-        }
-        String normalized = guestSessionId.trim();
-        if (!GUEST_SESSION_ID_PATTERN.matcher(normalized).matches()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is invalid.");
-        }
-        return normalized;
-    }
-
-    private List<Long> normalizeCheckoutVariantIds(List<Long> variantIds) {
-        if (variantIds == null || variantIds.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
-        }
-        List<Long> normalized = variantIds.stream()
-                .filter(id -> id != null && id > 0)
-                .distinct()
-                .toList();
-        if (normalized.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHECKOUT_ITEM_REQUIRED);
-        }
-        return normalized;
-    }
-
-    private String normalizeText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
-
-    private double resolveOrderFinalPrice(Order order) {
-        if (order.getFinalPrice() != null) {
-            return order.getFinalPrice();
-        }
-        double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
-        return Math.max(0.0, order.getTotalPrice() - discountAmount);
-    }
-
-    private OrderStatus resolveInitialOrderStatus(String paymentMethod) {
-        return "ONLINE".equalsIgnoreCase(paymentMethod)
-                ? OrderStatus.PENDING_PAYMENT
-                : OrderStatus.PENDING_APPROVAL;
-    }
-
-    private void validateCheckoutItem(CartItem cartItem) {
-        ProductVariant variant = cartItem.getProductVariant();
-        if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_DELETED, variant.getId());
-        }
-        validateProductAcceptingOrders(variant);
+        return userId;
     }
 
     private void validateProductAcceptingOrders(ProductVariant variant) {
@@ -759,25 +246,6 @@ public class CartService {
             Long productId = product == null ? null : product.getId();
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_NOT_ACCEPTING_ORDERS, productId);
         }
-    }
-
-    private OrderItem createOrderItem(Order order, CartItem cartItem) {
-        ProductVariant variant = cartItem.getProductVariant();
-        boolean handmade = variant.getProduct() != null && variant.getProduct().isHandmade();
-        OrderItem orderItem = new OrderItem();
-        orderItem.setOrder(order);
-        orderItem.setProductVariant(variant);
-        orderItem.setQuantity(cartItem.getQuantity());
-        orderItem.setPrice(variant.getPrice());
-        orderItem.setHandmade(handmade);
-        orderItem.setProductionStatus(handmade
-                ? OrderItemProductionStatus.WAITING_ASSIGNMENT
-                : OrderItemProductionStatus.NOT_REQUIRED);
-        return orderItem;
-    }
-
-    private double calculateCartItemAmount(CartItem cartItem) {
-        return cartItem.getQuantity() * cartItem.getProductVariant().getPrice();
     }
 
 }

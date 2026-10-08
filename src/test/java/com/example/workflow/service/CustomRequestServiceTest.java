@@ -22,7 +22,6 @@ import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,8 +48,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CustomRequestServiceTest {
-    @Mock private AuthService authService;
-    @Mock private UserRepository userRepository;
+    @Mock private CurrentUserService currentUserService;
+    @Mock private UserService userService;
     @Mock private CustomRequestRepository customRequestRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private DurableRequestExecutor durableRequests;
@@ -65,8 +64,8 @@ class CustomRequestServiceTest {
     void setUp() {
         objectMapper = new ObjectMapper().findAndRegisterModules();
         service = new CustomRequestService(
-                authService,
-                userRepository,
+                currentUserService,
+                userService,
                 customRequestRepository,
                 orderRepository,
                 new CustomRequestMapperImpl(),
@@ -81,7 +80,7 @@ class CustomRequestServiceTest {
     @Test
     void createDraftUsesJwtOwnerAndDoesNotEmitOrderSideEffects() {
         stubDraftSave();
-        when(authService.getCurrentUserId()).thenReturn("user-1");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
 
         CustomRequestDTO result = service.create(
                 new CreateCustomRequest("  nhẫn bạc khắc tên  ", " [\"image-1\"] ", 2),
@@ -103,7 +102,7 @@ class CustomRequestServiceTest {
     @Test
     void updateRejectsStaleVersionWithoutChangingDraft() {
         CustomRequest draft = draft();
-        when(authService.getCurrentUserId()).thenReturn("user-1");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findByIdAndOwnerId(41L, "user-1")).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> service.update(
@@ -123,9 +122,9 @@ class CustomRequestServiceTest {
         stubOrderSave();
         CustomRequest draft = draft();
         User owner = owner();
-        when(authService.getCurrentUserId()).thenReturn("user-1");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findOwnedByIdForUpdate(41L, "user-1")).thenReturn(Optional.of(draft));
-        when(userRepository.findById("user-1")).thenReturn(Optional.of(owner));
+        when(userService.requireUser("user-1", ConstantErrorCode.USER_NOT_FOUND)).thenReturn(owner);
 
         CheckoutResponseDTO result = service.submit(
                 41L,
@@ -179,7 +178,7 @@ class CustomRequestServiceTest {
         existing.setVersion(3L);
         existing.setStatus(OrderStatus.PENDING_APPROVAL);
         existing.setPaymentStatus(PaymentStatus.NOT_DUE);
-        when(authService.getCurrentUserId()).thenReturn("user-1");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findOwnedByIdForUpdate(41L, "user-1")).thenReturn(Optional.of(submitted));
         when(orderRepository.findById(900L)).thenReturn(Optional.of(existing));
 
@@ -200,7 +199,7 @@ class CustomRequestServiceTest {
     void deleteLocksOwnedDraftAndUsesExpectedVersion() {
         stubDurableExecution();
         CustomRequest draft = draft();
-        when(authService.getCurrentUserId()).thenReturn("user-1");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findOwnedByIdForUpdate(41L, "user-1")).thenReturn(Optional.of(draft));
 
         service.delete(41L, 2L, "delete-41");
@@ -211,7 +210,7 @@ class CustomRequestServiceTest {
 
     @Test
     void ownershipMismatchIsReportedAsNotFound() {
-        when(authService.getCurrentUserId()).thenReturn("user-2");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-2");
         when(customRequestRepository.findByIdAndOwnerId(41L, "user-2")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(41L))

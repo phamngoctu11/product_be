@@ -8,7 +8,6 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +23,7 @@ class ProductServiceTest {
     private final ProductRepository productRepository = mock(ProductRepository.class);
     private final ProductMapper productMapper = mock(ProductMapper.class);
     private final InventoryTransactionRepository inventoryTransactionRepository = mock(InventoryTransactionRepository.class);
-    private final UserRepository userRepository = mock(UserRepository.class);
+    private final UserService userService = mock(UserService.class);
     private final ProductVariantRepository productVariantRepository = mock(ProductVariantRepository.class);
     private final InventoryTransactionService inventoryTransactionService = mock(InventoryTransactionService.class);
     private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
@@ -32,7 +31,7 @@ class ProductServiceTest {
             productRepository,
             productMapper,
             inventoryTransactionRepository,
-            userRepository,
+            userService,
             productVariantRepository,
             inventoryTransactionService,
             applicationCacheService
@@ -40,7 +39,7 @@ class ProductServiceTest {
 
     @Test
     void managerCannotSetMissingNonFiniteOrShortDuration() {
-        when(userRepository.findById("manager-1")).thenReturn(Optional.of(new User()));
+        when(userService.requireUser("manager-1")).thenReturn(new User());
         for (Double value : new Double[]{null, Double.NaN, Double.POSITIVE_INFINITY, 1.99}) {
             ProductDTO request = new ProductDTO();
             request.setMadeDay(value);
@@ -61,7 +60,7 @@ class ProductServiceTest {
         request.setProduct_name("Updated sample");
         request.setMadeDay(3.0);
 
-        when(userRepository.findById("manager-1")).thenReturn(Optional.of(new User()));
+        when(userService.requireUser("manager-1")).thenReturn(new User());
         when(productRepository.findById(10L)).thenReturn(Optional.of(product));
 
         productService.updateProduct(10L, request, "manager-1");

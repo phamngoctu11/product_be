@@ -28,11 +28,12 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.CartItemRepository;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.GuestSessionUtils;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -48,15 +49,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class CheckoutService {
-    private static final Pattern GUEST_SESSION_ID_PATTERN = Pattern.compile("^[A-Za-z0-9._:-]{16,128}$");
-
-    private final AuthService authService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
@@ -71,11 +69,11 @@ public class CheckoutService {
     private final ObjectMapper objectMapper;
 
     public CheckoutResponseDTO checkoutCurrentUser(CheckoutRequest request, String idempotencyKey) {
-        return checkoutUser(authService.getCurrentUserId(), request, idempotencyKey);
+        return checkoutUser(currentUserService.requireCurrentUserId(), request, idempotencyKey);
     }
 
     public CheckoutResponseDTO checkoutLegacyUser(String claimedUserId, CheckoutRequest request, String idempotencyKey) {
-        String authenticatedUserId = authService.getCurrentUserId();
+        String authenticatedUserId = currentUserService.requireCurrentUserId();
         if (!authenticatedUserId.equals(claimedUserId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
         }
@@ -87,24 +85,24 @@ public class CheckoutService {
             GuestCheckoutRequest request,
             String idempotencyKey
     ) {
-        String sessionId = normalizeGuestSessionId(guestSessionId);
+        String sessionId = GuestSessionUtils.normalize(guestSessionId);
         List<Long> variantIds = normalizeVariantIds(request.getVariantIds());
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("variantIds", variantIds);
-        canonical.put("customerName", normalizeText(request.getCustomerName()));
-        canonical.put("email", normalizeEmail(request.getEmail()));
-        canonical.put("phone", normalizeText(request.getPhone()));
-        canonical.put("shippingAddress", normalizeText(request.getShippingAddress()));
-        canonical.put("note", normalizeText(request.getNote()));
+        canonical.put("customerName", TextNormalizer.optional(request.getCustomerName()));
+        canonical.put("email", TextNormalizer.email(request.getEmail()));
+        canonical.put("phone", TextNormalizer.optional(request.getPhone()));
+        canonical.put("shippingAddress", TextNormalizer.optional(request.getShippingAddress()));
+        canonical.put("note", TextNormalizer.optional(request.getNote()));
         canonical.put("voucherCode", normalizeCode(request.getVoucherCode()));
 
         String result = durableRequests.execute(
                 "checkout:guest:" + sessionId,
                 idempotencyKey,
-                writeJson(canonical),
-                () -> writeJson(createGuestOrder(sessionId, request, variantIds))
+                JsonUtils.write(objectMapper, canonical, "checkout data"),
+                () -> JsonUtils.write(objectMapper, createGuestOrder(sessionId, request, variantIds), "checkout data")
         );
-        return readResponse(result);
+        return JsonUtils.read(objectMapper, result, CheckoutResponseDTO.class, "checkout result");
     }
 
     private CheckoutResponseDTO checkoutUser(String userId, CheckoutRequest request, String idempotencyKey) {
@@ -117,15 +115,15 @@ public class CheckoutService {
         canonical.put("variantIds", variantIds);
         canonical.put("userVoucherId", request.getUserVoucherId());
         canonical.put("paymentMethod", paymentMethod.name());
-        canonical.put("note", normalizeText(request.getNote()));
+        canonical.put("note", TextNormalizer.optional(request.getNote()));
 
         String result = durableRequests.execute(
                 "checkout:user:" + userId,
                 idempotencyKey,
-                writeJson(canonical),
-                () -> writeJson(createUserOrder(userId, request, variantIds, paymentMethod))
+                JsonUtils.write(objectMapper, canonical, "checkout data"),
+                () -> JsonUtils.write(objectMapper, createUserOrder(userId, request, variantIds, paymentMethod), "checkout data")
         );
-        return readResponse(result);
+        return JsonUtils.read(objectMapper, result, CheckoutResponseDTO.class, "checkout result");
     }
 
     private CheckoutResponseDTO createUserOrder(
@@ -134,8 +132,7 @@ public class CheckoutService {
             List<Long> variantIds,
             PaymentMethod paymentMethod
     ) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
+        User user = userService.requireUser(userId, ConstantErrorCode.USER_NOT_FOUND);
         if (paymentMethod == PaymentMethod.COD && user.getReputation() < 20) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
         }
@@ -144,11 +141,11 @@ public class CheckoutService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_NOT_FOUND_VI));
         List<CartItem> selectedItems = selectItemsStrictly(cart, variantIds);
         Order order = baseCatalogOrder(paymentMethod, new OrderContactSnapshot(
-                joinName(user.getLastname(), user.getFirstname()),
-                normalizeEmail(user.getEmail()),
-                normalizeText(user.getPhone()),
-                normalizeText(user.getAddress()),
-                normalizeText(request.getNote())
+                TextNormalizer.fullName(user.getLastname(), user.getFirstname()),
+                TextNormalizer.email(user.getEmail()),
+                TextNormalizer.optional(user.getPhone()),
+                TextNormalizer.optional(user.getAddress()),
+                TextNormalizer.optional(request.getNote())
         ));
         order.setUser(user);
 
@@ -183,11 +180,11 @@ public class CheckoutService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.CART_EMPTY));
         List<CartItem> selectedItems = selectItemsStrictly(cart, variantIds);
         Order order = baseCatalogOrder(PaymentMethod.COD, new OrderContactSnapshot(
-                normalizeText(request.getCustomerName()),
-                normalizeEmail(request.getEmail()),
-                normalizeText(request.getPhone()),
-                normalizeText(request.getShippingAddress()),
-                normalizeText(request.getNote())
+                TextNormalizer.optional(request.getCustomerName()),
+                TextNormalizer.email(request.getEmail()),
+                TextNormalizer.optional(request.getPhone()),
+                TextNormalizer.optional(request.getShippingAddress()),
+                TextNormalizer.optional(request.getNote())
         ));
         order.setGuestSessionId(guestSessionId);
 
@@ -373,27 +370,8 @@ public class CheckoutService {
         }
     }
 
-    private String normalizeGuestSessionId(String value) {
-        if (!StringUtils.hasText(value) || !GUEST_SESSION_ID_PATTERN.matcher(value.trim()).matches()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Guest session id is invalid.");
-        }
-        return value.trim();
-    }
-
-    private String normalizeText(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String normalizeEmail(String value) {
-        return StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : null;
-    }
-
     private String normalizeCode(String value) {
         return StringUtils.hasText(value) ? value.trim().toUpperCase(Locale.ROOT) : null;
-    }
-
-    private String joinName(String lastName, String firstName) {
-        return ((lastName == null ? "" : lastName.trim()) + " " + (firstName == null ? "" : firstName.trim())).trim();
     }
 
     private String paymentLabel(PaymentMethod method) {
@@ -402,19 +380,4 @@ public class CheckoutService {
                 : "Thanh toán trực tuyến sau khi đơn được duyệt";
     }
 
-    private String writeJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot serialize checkout data", e);
-        }
-    }
-
-    private CheckoutResponseDTO readResponse(String value) {
-        try {
-            return objectMapper.readValue(value, CheckoutResponseDTO.class);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot deserialize checkout result", e);
-        }
-    }
 }

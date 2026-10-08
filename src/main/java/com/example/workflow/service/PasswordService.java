@@ -34,7 +34,8 @@ public class PasswordService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final KeycloakIdentityService keycloakIdentityService;
     private final EmailService emailService;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${app.frontend-base-url:http://localhost:4200}")
@@ -70,7 +71,7 @@ public class PasswordService {
 
         emailService.sendPasswordResetEmail(
                 user.getEmail(),
-                buildDisplayName(user),
+                userService.displayName(user),
                 buildResetLink(rawToken),
                 RESET_TOKEN_TTL_MINUTES
         );
@@ -100,7 +101,7 @@ public class PasswordService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PASSWORD_UNCHANGED);
         }
 
-        User currentUser = authService.getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         keycloakIdentityService.authenticate(currentUser.getUsername(), request.currentPassword());
         keycloakIdentityService.resetPassword(currentUser.getId(), request.newPassword(), false);
     }
@@ -149,9 +150,4 @@ public class PasswordService {
         return StringUtils.hasText(identifier) ? identifier.trim() : null;
     }
 
-    private String buildDisplayName(User user) {
-        String fullName = ((user.getLastname() == null ? "" : user.getLastname()) + " "
-                + (user.getFirstname() == null ? "" : user.getFirstname())).trim();
-        return StringUtils.hasText(fullName) ? fullName : user.getUsername();
-    }
 }

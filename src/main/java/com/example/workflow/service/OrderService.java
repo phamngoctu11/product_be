@@ -1,31 +1,29 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.*;
-import com.example.workflow.cache.CacheKeys;
 import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
-import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -52,78 +50,28 @@ public class OrderService {
     private final RuntimeService runtimeService;
     private final NotificationService notificationService;
     private final EmailService emailService;
-    private final UserVoucherRepository userVoucherRepository;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
     private final ReputationService reputationService;
     private final CartService cartService;
     private final ProductReviewRepository productReviewRepository;
     private final ApplicationCacheService applicationCacheService;
-
-    // Get current authenticated user.
-    private User getCurrentAuthenticatedUser() {
-        return authService.getCurrentUser();
-    }
+    private final OrderLookupService orderLookupService;
+    private final OrderStatusHistoryService orderStatusHistoryService;
+    private final OrderCancellationService orderCancellationService;
 
     private User getManagerReviewer(String changerId) {
-        User manager = userRepository.findById(changerId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.REVIEWER_NOT_FOUND, changerId));
+        User manager = userService.requireUser(changerId, ConstantErrorCode.REVIEWER_NOT_FOUND, changerId);
         if (manager.getRole() != Role.MANAGER) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.REVIEWER_MANAGER_ROLE_REQUIRED);
         }
         return manager;
     }
 
-    private User getCurrentManager() {
-        User manager = getCurrentAuthenticatedUser();
-        if (manager.getRole() != Role.MANAGER) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED);
-        }
-        return manager;
-    }
-
-    private User getCurrentStaff() {
-        User staff = getCurrentAuthenticatedUser();
-        if (staff.getRole() != Role.STAFF) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-        }
-        return staff;
-    }
-
-    private User getStaffById(String staffId) {
-        User staff = userRepository.findById(staffId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
-        if (staff.getRole() != Role.STAFF || staff.isDelete()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ACTIVE_STAFF_REQUIRED);
-        }
-        return staff;
-    }
-
-    private String buildFullName(User user) {
-        String lastname = user.getLastname() == null ? "" : user.getLastname().trim();
-        String firstname = user.getFirstname() == null ? "" : user.getFirstname().trim();
-        return (lastname + " " + firstname).trim();
-    }
-
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 100));
-    }
-
-    private Order getOrderOrThrow(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
-    private Order getOrderForUpdateOrThrow(Long orderId) {
-        return orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
     private void assertCurrentUserCanViewOrder(Order order) {
-        User currentUser = getCurrentAuthenticatedUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() == Role.USER
                 && (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId()))) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
@@ -148,25 +96,7 @@ public class OrderService {
     private void saveOrderAndAuditStatusChange(Order order, OrderStatus oldStatus, String changerId) {
         orderRepository.save(order);
         if (oldStatus != order.getStatus()) {
-            saveAuditLog(order, oldStatus, order.getStatus(), changerId);
-        }
-    }
-
-    private void restoreVoucher(UserVoucher appliedVoucher) {
-        if (appliedVoucher == null) {
-            return;
-        }
-        appliedVoucher.setUsed(false);
-        appliedVoucher.setUsedDate(null);
-        userVoucherRepository.save(appliedVoucher);
-    }
-
-    private void deleteOrderProcessIfExists(Long orderId, String reason) {
-        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                .variableValueEquals("orderId", orderId)
-                .singleResult();
-        if (processInstance != null) {
-            runtimeService.deleteProcessInstance(processInstance.getId(), reason);
+            orderStatusHistoryService.record(order, oldStatus, order.getStatus(), changerId);
         }
     }
 
@@ -192,10 +122,10 @@ public class OrderService {
 
     @Transactional
     public void claimWarehouseOrder(Long orderId) {
-        Order order = getOrderOrThrow(orderId);
-        User staff = getCurrentStaff();
+        Order order = orderLookupService.require(orderId);
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
 
-        if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE) {
+        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_WAREHOUSE_STAFF);
         }
         if (order.getWarehouseStaff() != null) {
@@ -204,7 +134,7 @@ public class OrderService {
 
         OrderStatus oldStatus = order.getStatus();
         order.setWarehouseStaff(staff);
-        order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
+        order.setStatus(OrderStatus.DISCUSSING);
         saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
 
         applicationCacheService.evictWarehouseClaimed(order, staff.getId());
@@ -212,11 +142,11 @@ public class OrderService {
 
     @Transactional
     public void assignStaffToOrder(Long orderId, String staffId) {
-        Order order = getOrderOrThrow(orderId);
-        User manager = getCurrentManager();
-        User staff = getStaffById(staffId);
+        Order order = orderLookupService.require(orderId);
+        User manager = currentUserService.requireCurrentUser(Role.MANAGER, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED);
+        User staff = userService.requireActiveStaff(staffId);
 
-        if (order.getStatus() != OrderStatus.PENDING_WAREHOUSE && order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
+        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED && order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_ASSIGNED);
         }
 
@@ -235,16 +165,16 @@ public class OrderService {
     // ==========================================
     @Transactional
     public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
         User manager = getManagerReviewer(changerId);
-        User assignedStaff = request.isApproved() && staffId != null ? getStaffById(staffId) : null;
+        User assignedStaff = request.isApproved() && staffId != null ? userService.requireActiveStaff(staffId) : null;
 
         //Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
 
         OrderStatus oldStatus = order.getStatus();
         order.setManager(manager);
         order.setApprovedById(manager.getId());
-        order.setApprovedByFullName(buildFullName(manager));
+        order.setApprovedByFullName(userService.fullName(manager));
 
         Map<String, Object> variables = new HashMap<>();
         if (request.isApproved()) {
@@ -283,8 +213,8 @@ public class OrderService {
     // ==========================================
     @Transactional
     public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
-        Order order = getOrderOrThrow(orderId);
-        User staff = getCurrentStaff();
+        Order order = orderLookupService.require(orderId);
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
 
         if (order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_STAFF_REQUIRED_BEFORE_EXPORT);
@@ -323,7 +253,7 @@ public class OrderService {
     // ==========================================
     @Transactional
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
 
         if (order.getStatus() != OrderStatus.PENDING_KCS) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_KCS);
@@ -358,7 +288,7 @@ public class OrderService {
     // ==========================================
     @Transactional
     public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
         User currentUser = validateReceiptOwner(order);
         Task task = findCustomerReceiptTask(orderId);
 
@@ -409,7 +339,7 @@ public class OrderService {
 
     @Transactional
     public ReceiptConfirmResponse sendReceiptComplaint(Long orderId, ReceiptComplaintRequest request) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
         User currentUser = validateReceiptOwner(order);
         findCustomerReceiptTask(orderId);
 
@@ -431,7 +361,7 @@ public class OrderService {
             emailService.sendReceiptComplaintEmail(
                     managerEmails,
                     orderId,
-                    buildFullName(currentUser),
+                    userService.fullName(currentUser),
                     currentUser.getEmail(),
                     request.getNote(),
                     mismatches
@@ -440,7 +370,7 @@ public class OrderService {
 
         saveAndSendNotification(
                 "Khieu nai lech so luong",
-                "Khach hang " + buildFullName(currentUser) + " khieu nai lech so luong don #" + orderId + ".",
+                "Khach hang " + userService.fullName(currentUser) + " khieu nai lech so luong don #" + orderId + ".",
                 orderId,
                 null,
                 "/topic/admin-notifications"
@@ -455,7 +385,7 @@ public class OrderService {
     }
 
     private User validateReceiptOwner(Order order) {
-        User currentUser = getCurrentAuthenticatedUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId())) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ORDER_CONFIRMATION_FORBIDDEN);
         }
@@ -593,8 +523,8 @@ public class OrderService {
 
     @Transactional
     public void cancelOrder(Long id, String reason) {
-        Order order = getOrderForUpdateOrThrow(id);
-        User user = getCurrentAuthenticatedUser();
+        Order order = orderLookupService.requireForUpdate(id);
+        User user = currentUserService.requireCurrentUser();
 
         if (!order.getUser().getId().equals(user.getId())) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CANNOT_CANCEL_ANOTHER_USERS_ORDER);
@@ -606,17 +536,19 @@ public class OrderService {
 
         OrderStatus oldStatus = order.getStatus();
         deductUserReputation(user, calculateCancellationReputationDeduction(order), id);
-        deleteOrderProcessIfExists(id, "Customer cancelled order");
-        inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN");
-        restoreVoucher(order.getUserVoucher());
-
-        order.setCancelReason("Khach hang tu huy: " + reason);
-        order.setStatus(OrderStatus.CANCELLED);
-        order.setEndOrderTime(LocalDateTime.now());
-        saveOrderAndAuditStatusChange(order, oldStatus, user.getId());
-        eventPublisher.publishAfterCommit(
-                EventTypes.ORDER_CANCELLED,
-                new OrderCancelledEvent(order.getId(), order.getCancelReason())
+        String cancelReason = "Khach hang tu huy: " + reason;
+        orderCancellationService.cancel(
+                order,
+                new OrderCancellationService.Request(
+                        cancelReason,
+                        "CANCEL_RETURN",
+                        false,
+                        user.getId(),
+                        CancellationSource.USER,
+                        "customer-cancel:" + id,
+                        true,
+                        "Customer cancelled order"
+                )
         );
 
         saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
@@ -627,9 +559,9 @@ public class OrderService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ReorderResponseDTO reorderOrder(Long orderId) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
         String ownerId = order.getUser() == null ? null : order.getUser().getId();
-        if (!authService.isCurrentUserOwner(ownerId)) {
+        if (!currentUserService.isCurrentUserOwner(ownerId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
         }
         if (order.getStatus() != OrderStatus.DELIVERED && order.getStatus() != OrderStatus.CANCELLED) {
@@ -662,7 +594,7 @@ public class OrderService {
                     );
                 }
                 validateReorderItemAvailable(item, variantId);
-                cartService.startAddToCartProcess(ownerId, variantId, quantity);
+                cartService.addToCart(CartService.CartOwner.user(ownerId), variantId, quantity);
                 addedItems.add(new ReorderItemDTO(variantId, variantName, quantity, null));
             } catch (AppException e) {
                 skippedItems.add(new ReorderItemDTO(variantId, variantName, quantity, e.getMessage()));
@@ -701,7 +633,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderDTO getOrderById(Long id) {
-        Order order = getOrderOrThrow(id);
+        Order order = orderLookupService.require(id);
         assertCurrentUserCanViewOrder(order);
         OrderDTO dto = orderMapper.toDto(order);
         injectImageUrls(order, dto);
@@ -749,20 +681,10 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderStatusHistoryDTO> getOrderHistory(Long orderId) {
-        Order order = getOrderOrThrow(orderId);
+        Order order = orderLookupService.require(orderId);
         assertCurrentUserCanViewOrder(order);
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
-    }
-
-    private void saveAuditLog(Order order, OrderStatus oldStatus, OrderStatus newStatus, String changer) {
-        OrderStatusHistory history = new OrderStatusHistory();
-        history.setOrder(order);
-        history.setOldstatus(oldStatus);
-        history.setNewstatus(newStatus);
-        history.setUpdatetime(LocalDateTime.now());
-        history.setChangerId(changer);
-        historyRepository.save(history);
     }
 
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
@@ -795,7 +717,7 @@ public class OrderService {
     }
     @Transactional
     public void processMomoCallbackResult(Long orderId, String resultCode) {
-        Order order = getOrderForUpdateOrThrow(orderId);
+        Order order = orderLookupService.requireForUpdate(orderId);
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
             System.out.println("MoMo callback skipped because order #" + orderId + " was already processed.");
             return;
@@ -837,19 +759,20 @@ public class OrderService {
 
     private void handleFailedMomoPayment(Order order, String resultCode) {
         Long orderId = order.getId();
-        OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.CANCELLED);
-        order.setCancelReason("Thanh toan MoMo that bai hoac khach huy giao dich (Ma loi MoMo: " + resultCode + ")");
-        order.setEndOrderTime(LocalDateTime.now());
-
-        inventoryReservationService.releaseReservedStock(order, "PAYMENT_FAILED_RETURN");
-        restoreVoucher(order.getUserVoucher());
-        saveOrderAndAuditStatusChange(order, oldStatus, null);
-        eventPublisher.publishAfterCommit(
-                EventTypes.ORDER_CANCELLED,
-                new OrderCancelledEvent(orderId, order.getCancelReason())
+        String cancelReason = "Thanh toan MoMo that bai hoac khach huy giao dich (Ma loi MoMo: " + resultCode + ")";
+        orderCancellationService.cancel(
+                order,
+                new OrderCancellationService.Request(
+                        cancelReason,
+                        "PAYMENT_FAILED_RETURN",
+                        false,
+                        null,
+                        CancellationSource.PAYMENT_FAILED,
+                        "momo-result:" + resultCode,
+                        true,
+                        "MoMo payment failed"
+                )
         );
-        deleteOrderProcessIfExists(orderId, "MoMo payment failed");
 
         saveAndSendNotification(
                 "Thanh toan that bai",
@@ -874,10 +797,10 @@ public class OrderService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.USER_ORDERS,
-            key = "T(com.example.workflow.cache.CacheKeys).userOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #minPrice, #maxPrice, #pageable)"
+            key = "T(com.example.workflow.cache.CacheKeys).userOrders(@currentUserService.requireCurrentUserId(), #minPrice, #maxPrice, #pageable)"
     )
     public Page<OrderListDTO> getMyOrders(Double minPrice, Double maxPrice, Pageable pageable) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         return orderRepository.findListDtoByUserId(
                 userId,
                 List.of(
@@ -892,40 +815,40 @@ public class OrderService {
                 OrderStatus.CANCELLED,
                 minPrice,
                 maxPrice,
-                normalizePageable(pageable)
+                PageableUtils.normalize(pageable, 20, 100)
         );
     }
 
     @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.USER_CANCELLED_ORDERS,
-            key = "T(com.example.workflow.cache.CacheKeys).userCancelledOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #minPrice, #maxPrice, #pageable)"
+            key = "T(com.example.workflow.cache.CacheKeys).userCancelledOrders(@currentUserService.requireCurrentUserId(), #minPrice, #maxPrice, #pageable)"
     )
     public Page<OrderListDTO> getMyCancelledOrders(Double minPrice, Double maxPrice, Pageable pageable) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         return orderRepository.findListDtoByUserIdAndStatus(
                 userId,
                 OrderStatus.CANCELLED,
                 OrderStatus.DELIVERED,
                 minPrice,
                 maxPrice,
-                normalizePageable(pageable)
+                PageableUtils.normalize(pageable, 20, 100)
         );
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = CacheNames.WAREHOUSE_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).warehousePendingOrders(#pageable)")
     public Page<OrderListDTO> getWarehousePendingOrders(Pageable pageable) {
-        return orderRepository.findUnassignedListDtoByStatus(OrderStatus.PENDING_WAREHOUSE, normalizePageable(pageable));
+        return orderRepository.findUnassignedListDtoByStatus(OrderStatus.PENDING_WAREHOUSE, PageableUtils.normalize(pageable, 20, 100));
     }
 
     @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.STAFF_ASSIGNED_ORDERS,
-            key = "T(com.example.workflow.cache.CacheKeys).staffAssignedOrders(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #pageable)"
+            key = "T(com.example.workflow.cache.CacheKeys).staffAssignedOrders(@currentUserService.requireCurrentUserId(), #pageable)"
     )
     public Page<OrderListDTO> getMyAssignedStaffOrders(Pageable pageable) {
-        User staff = getCurrentStaff();
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         return orderRepository.findListDtoByWarehouseStaffIdAndStatusIn(
                 staff.getId(),
                 List.of(OrderStatus.WAREHOUSE_ASSIGNED, OrderStatus.PENDING_KCS, OrderStatus.SHIPPING),
@@ -933,7 +856,7 @@ public class OrderService {
                 OrderStatus.WAREHOUSE_ASSIGNED,
                 OrderStatus.PENDING_KCS,
                 OrderStatus.SHIPPING,
-                normalizePageable(pageable)
+                PageableUtils.normalize(pageable, 20, 100)
         );
     }
 
@@ -942,7 +865,7 @@ public class OrderService {
     @Cacheable(value = CacheNames.MANAGER_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).managerPendingOrders(#status, #pageable)")
     public Page<OrderListDTO> getPendingOrders(OrderStatus status,Pageable pageable) {
         // Read list DTOs directly from DB.
-        return orderRepository.findListDtoByStatusOldestFirst(status, normalizePageable(pageable));
+        return orderRepository.findListDtoByStatusOldestFirst(status, PageableUtils.normalize(pageable, 20, 100));
     }
 }
 

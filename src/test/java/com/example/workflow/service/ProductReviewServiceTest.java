@@ -43,7 +43,10 @@ class ProductReviewServiceTest {
     private OrderItemRepository orderItemRepository;
 
     @Mock
-    private AuthService authService;
+    private CurrentUserService currentUserService;
+
+    @Mock
+    private UserService userService;
 
     @Mock
     private ApplicationCacheService applicationCacheService;
@@ -58,7 +61,7 @@ class ProductReviewServiceTest {
     void createForOrderItemCreatesReviewForDeliveredOwner() {
         User user = user("user-1");
         OrderItem orderItem = orderItem(40L, deliveredOrder(30L, user));
-        when(authService.getCurrentUser()).thenReturn(user);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(orderItemRepository.findReviewTargetById(40L)).thenReturn(Optional.of(orderItem));
         when(productReviewRepository.existsByOrderItem_Id(40L)).thenReturn(false);
         when(productReviewRepository.save(any(ProductReview.class))).thenAnswer(invocation -> {
@@ -66,6 +69,7 @@ class ProductReviewServiceTest {
             review.setId(50L);
             return review;
         });
+        when(userService.displayName(user)).thenReturn("Nguyen An");
 
         ProductReviewDTO result = productReviewService.createForOrderItem(
                 40L,
@@ -97,7 +101,7 @@ class ProductReviewServiceTest {
     void createForOrderItemRejectsOtherUserOrderItem() {
         User currentUser = user("user-2");
         OrderItem orderItem = orderItem(40L, deliveredOrder(30L, user("user-1")));
-        when(authService.getCurrentUser()).thenReturn(currentUser);
+        when(currentUserService.requireCurrentUser()).thenReturn(currentUser);
         when(orderItemRepository.findReviewTargetById(40L)).thenReturn(Optional.of(orderItem));
 
         assertThatThrownBy(() -> productReviewService.createForOrderItem(
@@ -114,7 +118,7 @@ class ProductReviewServiceTest {
     void createForOrderItemRejectsEmptyReviewContent() {
         User user = user("user-1");
         OrderItem orderItem = orderItem(40L, deliveredOrder(30L, user));
-        when(authService.getCurrentUser()).thenReturn(user);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(orderItemRepository.findReviewTargetById(40L)).thenReturn(Optional.of(orderItem));
 
         assertThatThrownBy(() -> productReviewService.createForOrderItem(
@@ -132,7 +136,7 @@ class ProductReviewServiceTest {
     void createForOrderItemRejectsDuplicateReview() {
         User user = user("user-1");
         OrderItem orderItem = orderItem(40L, deliveredOrder(30L, user));
-        when(authService.getCurrentUser()).thenReturn(user);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(orderItemRepository.findReviewTargetById(40L)).thenReturn(Optional.of(orderItem));
         when(productReviewRepository.existsByOrderItem_Id(40L)).thenReturn(true);
 

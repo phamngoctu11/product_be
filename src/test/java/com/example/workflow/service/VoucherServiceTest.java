@@ -5,9 +5,9 @@ import com.example.workflow.entity.GuestVoucherUsage;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.UserVoucher;
 import com.example.workflow.entity.VoucherTemplate;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.mapper.VoucherMapper;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.repository.UserVoucherRepository;
 import com.example.workflow.repository.VoucherTemplateRepository;
 import com.example.workflow.repository.GuestVoucherUsageRepository;
@@ -34,18 +34,18 @@ import static org.mockito.Mockito.when;
 class VoucherServiceTest {
     private final VoucherTemplateRepository templateRepository = mock(VoucherTemplateRepository.class);
     private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
-    private final UserRepository userRepository = mock(UserRepository.class);
+    private final UserService userService = mock(UserService.class);
     private final VoucherMapper voucherMapper = mock(VoucherMapper.class);
-    private final AuthService authService = mock(AuthService.class);
+    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final ReputationService reputationService = mock(ReputationService.class);
     private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final GuestVoucherUsageRepository guestVoucherUsageRepository = mock(GuestVoucherUsageRepository.class);
     private final VoucherService voucherService = new VoucherService(
             templateRepository,
             userVoucherRepository,
-            userRepository,
+            userService,
             voucherMapper,
-            authService,
+            currentUserService,
             reputationService,
             applicationCacheService,
             guestVoucherUsageRepository
@@ -225,8 +225,8 @@ class VoucherServiceTest {
         User user = new User();
         user.setId("user-1");
         user.setReputation(100);
-        when(authService.getCurrentUserId()).thenReturn("user-1");
-        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
+        when(userService.requireUser("user-1", ConstantErrorCode.USER_NOT_FOUND)).thenReturn(user);
         when(templateRepository.findById(7L)).thenReturn(Optional.of(guestVoucher()));
 
         assertThatThrownBy(() -> voucherService.redeemVoucher(7L))

@@ -1,25 +1,17 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
-import com.example.workflow.entity.User;
-import com.example.workflow.entity.UserVoucher;
-import com.example.workflow.entity.VoucherTemplate;
-import com.example.workflow.service.redis.DomainEventPublisher;
-import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.OrderCancelledEvent;
+import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
-import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserVoucherRepository;
-import com.example.workflow.service.InventoryReservationService;
-import com.example.workflow.service.VoucherService;
+import com.example.workflow.service.OrderCancellationService;
+import com.example.workflow.service.OrderLookupService;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,106 +22,63 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CancelOrderDelegateTest {
-    private final OrderRepository orderRepository = mock(OrderRepository.class);
-    private final UserVoucherRepository userVoucherRepository = mock(UserVoucherRepository.class);
-    private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
-    private final InventoryReservationService inventoryReservationService = mock(InventoryReservationService.class);
-    private final VoucherService voucherService = mock(VoucherService.class);
+    private final OrderLookupService orderLookupService = mock(OrderLookupService.class);
+    private final OrderCancellationService cancellationService = mock(OrderCancellationService.class);
     private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
-            orderRepository,
-            userVoucherRepository,
-            eventPublisher,
-            inventoryReservationService,
-            voucherService,
+            orderLookupService,
+            cancellationService,
             applicationCacheService
     );
 
     @Test
-    void releasesReservationAndDoesNotRestoreAgain() {
-        Order order = order();
-        when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
-        when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(true);
-
-        delegate.execute(execution);
-
-        verify(inventoryReservationService).releaseReservedStock(order, "CANCEL_RETURN");
-        verify(inventoryReservationService, never()).restoreDeductedStock(order, "CANCEL_RETURN");
-    }
-
-    @Test
-    void restoresConfirmedStockWhenThereIsNoReservation() {
-        Order order = order();
-        when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
-        when(inventoryReservationService.releaseReservedStock(order, "CANCEL_RETURN")).thenReturn(false);
-
-        delegate.execute(execution);
-
-        verify(inventoryReservationService).restoreDeductedStock(order, "CANCEL_RETURN");
-    }
-
-    @Test
-    void cancelsOrderRestoresVoucherClearsCachesAndCancelsAttributions() {
-        UserVoucher voucher = new UserVoucher();
-        voucher.setUsed(true);
-        voucher.setUsedDate(LocalDateTime.now());
-        Order order = order();
-        order.setUserVoucher(voucher);
-        when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
-
-        delegate.execute(execution);
-
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        assertThat(voucher.isUsed()).isFalse();
-        assertThat(voucher.getUsedDate()).isNull();
-        verify(userVoucherRepository).save(voucher);
-        verify(orderRepository).save(order);
-        ArgumentCaptor<OrderCancelledEvent> eventCaptor = ArgumentCaptor.forClass(OrderCancelledEvent.class);
-        verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_CANCELLED), eventCaptor.capture());
-        assertThat(eventCaptor.getValue().orderId()).isEqualTo(10L);
-        verify(applicationCacheService).evictCamundaOrderCancelled(order, null);
-    }
-
-    @Test
-    void restoresGuestVoucherForGuestOrderCancellation() {
-        VoucherTemplate guestVoucher = new VoucherTemplate();
-        guestVoucher.setId(7L);
-        guestVoucher.setGuestVoucher(true);
+    void delegatesCancellationWithCamundaContextAndClearsCaches() {
         Order order = new Order();
         order.setId(10L);
-        order.setGuestVoucherTemplate(guestVoucher);
-        order.setItems(List.of());
+        order.setStatus(OrderStatus.PENDING_APPROVAL);
         when(execution.getVariable("orderId")).thenReturn(10L);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(execution.getProcessInstanceId()).thenReturn("process-10");
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         delegate.execute(execution);
 
-        verify(voucherService).restoreGuestVoucher(guestVoucher);
+        ArgumentCaptor<OrderCancellationService.Request> requestCaptor =
+                ArgumentCaptor.forClass(OrderCancellationService.Request.class);
+        verify(cancellationService).cancel(eq(order), requestCaptor.capture());
+        assertThat(requestCaptor.getValue()).satisfies(request -> {
+            assertThat(request.inventoryReason()).isEqualTo("CANCEL_RETURN");
+            assertThat(request.restoreDeductedStockWhenNoReservation()).isTrue();
+            assertThat(request.source()).isEqualTo(CancellationSource.SYSTEM);
+            assertThat(request.reference()).isEqualTo("camunda:process-10");
+            assertThat(request.deleteWorkflow()).isFalse();
+        });
+        verify(applicationCacheService).evictCamundaOrderCancelled(order, OrderStatus.PENDING_APPROVAL);
     }
 
     @Test
-    void throwsWhenOrderDoesNotExist() {
+    void ignoresAlreadyCancelledOrder() {
+        Order order = new Order();
+        order.setId(10L);
+        order.setStatus(OrderStatus.CANCELLED);
+        when(execution.getVariable("orderId")).thenReturn(10L);
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
+
+        delegate.execute(execution);
+
+        verify(cancellationService, never()).cancel(eq(order), org.mockito.ArgumentMatchers.any());
+        verify(applicationCacheService, never()).evictCamundaOrderCancelled(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void propagatesLookupFailure() {
         when(execution.getVariable("orderId")).thenReturn(404L);
-        when(orderRepository.findByIdForUpdate(404L)).thenReturn(Optional.empty());
+        when(orderLookupService.requireForUpdate(404L))
+                .thenThrow(new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND, 404L));
 
-        assertThatThrownBy(() -> delegate.execute(execution))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("Order not found: 404");
-
-        verify(orderRepository, never()).save(org.mockito.ArgumentMatchers.any());
-    }
-
-    private Order order() {
-        User user = new User();
-        user.setId("99");
-        Order order = new Order();
-        order.setId(10L);
-        order.setUser(user);
-        order.setItems(List.of());
-        return order;
+        assertThatThrownBy(() -> delegate.execute(execution)).isInstanceOf(AppException.class);
+        verify(cancellationService, never()).cancel(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 }

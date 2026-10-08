@@ -5,6 +5,7 @@ import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.nume.OrderType;
+import com.example.workflow.util.UserDisplayNameUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -23,23 +24,14 @@ public interface OrderMapper {
 
     @Mapping(target = "customerName", expression = "java(resolveCustomerName(order))")
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
-    @Mapping(target = "staffName", expression = "java(buildFullName(order.getWarehouseStaff()))")
+    @Mapping(target = "staffName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.fullName(order.getWarehouseStaff()))")
     OrderListDTO toListDto(Order order);
-
-    default String buildFullName(User user) {
-        if (user == null) {
-            return null;
-        }
-        String lastname = user.getLastname() == null ? "" : user.getLastname().trim();
-        String firstname = user.getFirstname() == null ? "" : user.getFirstname().trim();
-        return (lastname + " " + firstname).trim();
-    }
 
     default String resolveCustomerName(Order order) {
         if (order == null) {
             return null;
         }
-        String userName = buildFullName(order.getUser());
+        String userName = UserDisplayNameUtils.fullName(order.getUser());
         if (userName != null && !userName.isBlank()) {
             return userName;
         }
@@ -64,7 +56,7 @@ public interface OrderMapper {
         if (user != null) {
             return OrderDTO.CustomerInfo.user(
                     user.getId(),
-                    buildFullName(user),
+                    UserDisplayNameUtils.fullName(user),
                     user.getEmail(),
                     user.getPhone(),
                     user.getAddress()

@@ -1,5 +1,6 @@
 package com.example.workflow.config;
 
+import com.example.workflow.service.CurrentUserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -24,13 +25,16 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     private final JwtDecoder jwtDecoder;
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
+    private final CurrentUserService currentUserService;
 
     public WebSocketAuthInterceptor(
             JwtDecoder jwtDecoder,
-            JwtAuthenticationConverter jwtAuthenticationConverter
+            JwtAuthenticationConverter jwtAuthenticationConverter,
+            CurrentUserService currentUserService
     ) {
         this.jwtDecoder = jwtDecoder;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+        this.currentUserService = currentUserService;
     }
 
     @Override
@@ -84,7 +88,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
         if (destination.startsWith(USER_NOTIFICATION_PREFIX)) {
             String targetUserId = destination.substring(USER_NOTIFICATION_PREFIX.length());
-            if (!targetUserId.equals(getSubject(authentication))) {
+            if (!targetUserId.equals(currentUserService.requireUserId(authentication))) {
                 throw new AccessDeniedException("Cannot subscribe to another user's notification topic.");
             }
             return;
@@ -93,13 +97,6 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         if (ADMIN_NOTIFICATION_TOPIC.equals(destination) && !hasAdminFeedAccess(authentication)) {
             throw new AccessDeniedException("Admin notification topic requires admin or manager role.");
         }
-    }
-
-    private String getSubject(Authentication authentication) {
-        if (authentication.getPrincipal() instanceof Jwt jwt) {
-            return jwt.getSubject();
-        }
-        return authentication.getName();
     }
 
     private boolean hasAdminFeedAccess(Authentication authentication) {

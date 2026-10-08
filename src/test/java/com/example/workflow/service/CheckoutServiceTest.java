@@ -9,6 +9,7 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
@@ -19,7 +20,6 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.CartItemRepository;
 import com.example.workflow.repository.CartRepository;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -46,8 +46,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CheckoutServiceTest {
-    @Mock private AuthService authService;
-    @Mock private UserRepository userRepository;
+    @Mock private CurrentUserService currentUserService;
+    @Mock private UserService userService;
     @Mock private CartRepository cartRepository;
     @Mock private CartItemRepository cartItemRepository;
     @Mock private OrderRepository orderRepository;
@@ -64,7 +64,7 @@ class CheckoutServiceTest {
     @BeforeEach
     void setUp() {
         checkoutService = new CheckoutService(
-                authService, userRepository, cartRepository, cartItemRepository, orderRepository,
+                currentUserService, userService, cartRepository, cartItemRepository, orderRepository,
                 voucherService, new CatalogDurationCalculator(), tokenService, durableRequests,
                 eventPublisher, emailService, notificationService, cacheService, new ObjectMapper()
         );
@@ -86,8 +86,8 @@ class CheckoutServiceTest {
         CartItem selected = cartItem(11L, 2, 150.0, 3.0);
         CartItem unselected = cartItem(12L, 1, 80.0, 2.0);
         Cart cart = cart(user, null, selected, unselected);
-        when(authService.getCurrentUserId()).thenReturn("u-1");
-        when(userRepository.findById("u-1")).thenReturn(Optional.of(user));
+        when(currentUserService.requireCurrentUserId()).thenReturn("u-1");
+        when(userService.requireUser("u-1", ConstantErrorCode.USER_NOT_FOUND)).thenReturn(user);
         when(cartRepository.findByUserIdForUpdate("u-1")).thenReturn(Optional.of(cart));
         when(voucherService.calculateDiscountAmount(null, 300.0)).thenReturn(0.0);
 

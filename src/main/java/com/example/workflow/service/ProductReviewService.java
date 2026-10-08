@@ -16,13 +16,13 @@ import com.example.workflow.nume.ProductReviewStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductReviewRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.PageableUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -40,13 +40,14 @@ public class ProductReviewService {
 
     private final ProductReviewRepository productReviewRepository;
     private final OrderItemRepository orderItemRepository;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
     private final ObjectMapper objectMapper;
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional
     public ProductReviewDTO createForOrderItem(Long orderItemId, ProductReviewRequest request) {
-        User currentUser = authService.getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         OrderItem orderItem = orderItemRepository.findReviewTargetById(orderItemId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_ITEM_NOT_FOUND));
         Order order = orderItem.getOrder();
@@ -74,7 +75,7 @@ public class ProductReviewService {
 
     @Transactional
     public ProductReviewDTO updateMyReview(Long reviewId, ProductReviewRequest request) {
-        String currentUserId = authService.getCurrentUserId();
+        String currentUserId = currentUserService.requireCurrentUserId();
         validateReviewContent(request);
         ProductReview review = productReviewRepository.findByIdAndUser_Id(reviewId, currentUserId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
@@ -110,7 +111,7 @@ public class ProductReviewService {
     @Cacheable(value = "productReviews", key = "'product-' + #productId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
     public Page<ProductReviewDTO> getProductReviews(Long productId, Pageable pageable) {
         return productReviewRepository
-                .findByProduct_IdAndStatusOrderByCreatedAtDesc(productId, ProductReviewStatus.VISIBLE, normalizePageable(pageable))
+                .findByProduct_IdAndStatusOrderByCreatedAtDesc(productId, ProductReviewStatus.VISIBLE, PageableUtils.normalize(pageable, 20, 50))
                 .map(this::toDto);
     }
 
@@ -118,14 +119,14 @@ public class ProductReviewService {
     @Cacheable(value = "productReviews", key = "'variant-' + #variantId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
     public Page<ProductReviewDTO> getVisibleVariantReviews(Long variantId, Pageable pageable) {
         return productReviewRepository
-                .findByProductVariant_IdAndStatusOrderByCreatedAtDesc(variantId, ProductReviewStatus.VISIBLE, normalizePageable(pageable))
+                .findByProductVariant_IdAndStatusOrderByCreatedAtDesc(variantId, ProductReviewStatus.VISIBLE, PageableUtils.normalize(pageable, 20, 50))
                 .map(this::toDto);
     }
 
     @Transactional(readOnly = true)
     public Page<ProductReviewDTO> getManageableVariantReviews(Long variantId, Pageable pageable) {
         return productReviewRepository
-                .findByProductVariant_IdOrderByCreatedAtDesc(variantId, normalizePageable(pageable))
+                .findByProductVariant_IdOrderByCreatedAtDesc(variantId, PageableUtils.normalize(pageable, 20, 50))
                 .map(this::toDto);
     }
 
@@ -228,7 +229,7 @@ public class ProductReviewService {
                 deserializeImageUrls(review.getImageUrls()),
                 user.getId(),
                 user.getUsername(),
-                buildDisplayName(user),
+                userService.displayName(user),
                 user.getAvatarUrl(),
                 review.getStatus(),
                 true,
@@ -271,15 +272,4 @@ public class ProductReviewService {
         }
     }
 
-    private String buildDisplayName(User user) {
-        String fullName = ((user.getLastname() == null ? "" : user.getLastname()) + " "
-                + (user.getFirstname() == null ? "" : user.getFirstname())).trim();
-        return StringUtils.hasText(fullName) ? fullName : user.getUsername();
-    }
-
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
-    }
 }

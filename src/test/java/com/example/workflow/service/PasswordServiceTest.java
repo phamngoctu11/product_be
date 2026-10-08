@@ -50,7 +50,10 @@ class PasswordServiceTest {
     private EmailService emailService;
 
     @Mock
-    private AuthService authService;
+    private CurrentUserService currentUserService;
+
+    @Mock
+    private UserService userService;
 
     @InjectMocks
     private PasswordService passwordService;
@@ -69,6 +72,7 @@ class PasswordServiceTest {
         when(passwordResetTokenRepository.findByUser_IdAndUsedAtIsNull("user-1")).thenReturn(List.of(previousToken));
         when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(userService.displayName(user)).thenReturn("Customer Nguyen");
 
         passwordService.requestPasswordReset(new ForgotPasswordRequest(" customer@example.com "));
 
@@ -148,7 +152,7 @@ class PasswordServiceTest {
     @Test
     void changeCurrentUserPasswordAuthenticatesOldPasswordBeforeResetting() {
         User currentUser = user("user-1", "customer", "customer@example.com");
-        when(authService.getCurrentUser()).thenReturn(currentUser);
+        when(currentUserService.requireCurrentUser()).thenReturn(currentUser);
 
         passwordService.changeCurrentUserPassword(
                 new ChangePasswordRequest("oldSecret", "newSecret123", "newSecret123")
@@ -167,7 +171,7 @@ class PasswordServiceTest {
                 .hasFieldOrPropertyWithValue("status", HttpStatus.BAD_REQUEST)
                 .hasMessage(ConstantErrorCode.PASSWORD_UNCHANGED.format());
 
-        verifyNoInteractions(authService);
+        verifyNoInteractions(currentUserService);
         verifyNoInteractions(keycloakIdentityService);
     }
 

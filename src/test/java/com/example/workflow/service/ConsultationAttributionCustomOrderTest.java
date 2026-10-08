@@ -6,7 +6,6 @@ import com.example.workflow.entity.User;
 import com.example.workflow.repository.ConsultationRequestRepository;
 import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
@@ -26,9 +25,10 @@ class ConsultationAttributionCustomOrderTest {
                 attributions,
                 mock(ConsultationReviewRepository.class),
                 mock(ConsultationRequestRepository.class),
-                mock(UserRepository.class),
                 mock(DomainEventPublisher.class),
-                mock(ApplicationCacheService.class)
+                mock(ApplicationCacheService.class),
+                mock(CurrentUserService.class),
+                mock(UserService.class)
         );
         OrderItem item = new OrderItem();
         item.setQuantity(2);

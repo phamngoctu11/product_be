@@ -1,6 +1,7 @@
 package com.example.workflow.ratelimit;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.service.CurrentUserService;
 import com.example.workflow.service.redis.RateLimitService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,8 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -22,6 +21,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private final RateLimitPolicyResolver policyResolver;
     private final RateLimitService rateLimitService;
     private final ObjectMapper objectMapper;
+    private final CurrentUserService currentUserService;
 
     @Value("${app.rate-limit.enabled:true}")
     private boolean enabled;
@@ -68,15 +68,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     private String authenticatedUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return null;
-        }
-        String name = authentication.getName();
-        if (name == null || name.isBlank() || "anonymousUser".equals(name)) {
-            return null;
-        }
-        return name;
+        return currentUserService.findCurrentUserId().orElse(null);
     }
 
     private String clientIp(HttpServletRequest request) {

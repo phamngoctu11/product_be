@@ -17,8 +17,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,18 +48,21 @@ public class ChatService {
     private final MongoTemplate mongoTemplate;
     private final ChatPresenceService chatPresenceService;
     private final NotificationService notificationService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
+    private final ConsultationLookupService consultationLookupService;
 
     @Transactional(readOnly = true)
     public List<ChatMessage> getChatHistory(String userId) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         validateUserChatReadAccess(userId, currentUser);
         return chatMessageRepository.findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(userId);
     }
 
     @Transactional(readOnly = true)
     public List<ChatMessage> getConsultationChatHistory(Long consultationRequestId, Long productId) {
-        ConsultationRequest consultation = getConsultationOrThrow(consultationRequestId);
-        User currentUser = getCurrentUser();
+        ConsultationRequest consultation = consultationLookupService.require(consultationRequestId);
+        User currentUser = currentUserService.requireCurrentUser();
         validateConsultationReadAccess(consultation, currentUser);
         if (productId != null) {
             if (!consultation.getProduct().getId().equals(productId)) {
@@ -74,7 +75,7 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<ChatUserDTO> getChattedUsers() {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() == Role.STAFF) {
             return getAssignedChatUsers(currentUser);
         }
@@ -204,7 +205,7 @@ public class ChatService {
     }
 
     private User resolveSender(ChatMessage chatMessage) {
-        User authenticatedUser = getCurrentAuthenticatedUserOrNull();
+        User authenticatedUser = currentUserService.findCurrentUser().orElse(null);
         if (authenticatedUser != null) {
             return authenticatedUser;
         }
@@ -222,7 +223,7 @@ public class ChatService {
 
     private ConsultationRequest resolveConsultation(ChatMessage chatMessage, User sender) {
         if (chatMessage.getConsultationRequestId() != null) {
-            return getConsultationOrThrow(chatMessage.getConsultationRequestId());
+            return consultationLookupService.require(chatMessage.getConsultationRequestId());
         }
 
         if (sender.getRole() == Role.STAFF) {
@@ -310,7 +311,7 @@ public class ChatService {
     private void applySenderMetadata(ChatMessage chatMessage, User sender) {
         chatMessage.setSenderId(sender.getId());
         chatMessage.setSenderRole(sender.getRole().name());
-        chatMessage.setSenderName(buildFullName(sender));
+        chatMessage.setSenderName(userService.displayName(sender));
         chatMessage.setShopSender(sender.getRole() == Role.STAFF);
     }
 
@@ -324,7 +325,7 @@ public class ChatService {
         chatMessage.setProductId(consultation.getProduct().getId());
         if (consultation.getAssignedStaff() != null) {
             chatMessage.setAssignedStaffId(consultation.getAssignedStaff().getId());
-            chatMessage.setAssignedStaffName(buildFullName(consultation.getAssignedStaff()));
+            chatMessage.setAssignedStaffName(userService.displayName(consultation.getAssignedStaff()));
         }
     }
 
@@ -356,7 +357,7 @@ public class ChatService {
         String productName = consultation.getProduct() == null ? "san pham" : consultation.getProduct().getProductName();
         notificationService.sendUserNotification(
                 "Nhan vien da phan hoi tu van",
-                buildFullName(sender) + " da phan hoi yeu cau tu van ve " + productName + ".",
+                userService.displayName(sender) + " da phan hoi yeu cau tu van ve " + productName + ".",
                 consultation.getUser().getId(),
                 consultation.getId()
         );
@@ -431,43 +432,8 @@ public class ChatService {
         );
     }
 
-    private User getCurrentUser() {
-        User user = getCurrentAuthenticatedUserOrNull();
-        if (user == null) {
-            throw new AppException(HttpStatus.UNAUTHORIZED, ConstantErrorCode.BAD_REQUEST_DETAIL, "Authentication is required.");
-        }
-        return user;
-    }
-
-    private ConsultationRequest getConsultationOrThrow(Long consultationRequestId) {
-        return consultationRepository.findById(consultationRequestId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Consultation request not found."));
-    }
-
-    private User getCurrentAuthenticatedUserOrNull() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null
-                || "anonymousUser".equals(authentication.getName())) {
-            return null;
-        }
-
-        return userRepository.findByUsername(authentication.getName()).orElse(null);
-    }
-
     private User getActiveUserById(String userId) {
-        return userRepository.findById(userId)
-                .filter(user -> !user.isDelete())
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, userId));
+        return userService.requireActiveUser(userId);
     }
 
-    private String buildFullName(User user) {
-        String fullName = Stream.of(user.getLastname(), user.getFirstname())
-                .filter(part -> part != null && !part.isBlank())
-                .collect(Collectors.joining(" "))
-                .trim();
-        if (!fullName.isBlank()) {
-            return fullName;
-        }
-        return user.getUsername();
-    }
 }

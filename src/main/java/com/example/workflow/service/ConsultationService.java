@@ -11,13 +11,10 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.ConsultationStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ConsultationRequestRepository;
-import com.example.workflow.repository.ProductRepository;
-import com.example.workflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,19 +31,21 @@ public class ConsultationService {
     );
 
     private final ConsultationRequestRepository consultationRepository;
-    private final UserRepository userRepository;
-    private final ProductRepository productRepository;
+    private final UserService userService;
+    private final ProductService productService;
     private final ChatService chatService;
     private final NotificationService notificationService;
+    private final CurrentUserService currentUserService;
+    private final ConsultationLookupService consultationLookupService;
 
     @Transactional
     public ConsultationRequestDTO createRequest(ConsultationCreateRequest request) {
-        User user = getCurrentUser();
+        User user = currentUserService.requireCurrentUser();
         if (user.getRole() != Role.USER) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only customers can create consultation requests.");
         }
 
-        Product product = getActiveProduct(request.getProductId());
+        Product product = productService.requireActiveProduct(request.getProductId());
 
         ConsultationRequest consultation = consultationRepository
                 .findFirstByUserIdAndProductIdAndStatusInOrderByCreatedAtDesc(user.getId(), product.getId(), OPEN_STATUSES)
@@ -66,7 +65,7 @@ public class ConsultationService {
 
     @Transactional(readOnly = true)
     public Page<ConsultationRequestDTO> getMyAssignedRequests(Pageable pageable) {
-        User staff = getCurrentStaff();
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         return consultationRepository.findDtosByAssignedStaffIdAndStatusIn(
                 staff.getId(),
                 List.of(ConsultationStatus.ASSIGNED, ConsultationStatus.IN_PROGRESS),
@@ -76,7 +75,7 @@ public class ConsultationService {
 
     @Transactional
     public ConsultationRequestDTO claimRequest(Long requestId) {
-        User staff = getCurrentStaff();
+        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         LocalDateTime now = LocalDateTime.now();
         int updatedRows = consultationRepository.claimWaitingRequest(
                 requestId,
@@ -95,8 +94,12 @@ public class ConsultationService {
 
     @Transactional
     public ConsultationRequestDTO assignRequest(Long requestId, String staffId) {
-        User manager = getCurrentAssigner();
-        User staff = getActiveStaffById(staffId);
+        User manager = currentUserService.requireCurrentUser(
+                java.util.Set.of(Role.MANAGER, Role.ADMIN),
+                ConstantErrorCode.BAD_REQUEST_DETAIL,
+                "Current user must be manager or admin to assign consultation requests."
+        );
+        User staff = userService.requireActiveStaff(staffId);
 
         int updatedRows = consultationRepository.assignWaitingRequest(
                 requestId,
@@ -116,12 +119,12 @@ public class ConsultationService {
 
     @Transactional
     public ConsultationRequestDTO closeMyRequest(Long requestId) {
-        User user = getCurrentUser();
+        User user = currentUserService.requireCurrentUser();
         if (user.getRole() != Role.USER) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only customers can close their consultation requests.");
         }
 
-        ConsultationRequest consultation = getConsultationOrThrow(requestId);
+        ConsultationRequest consultation = consultationLookupService.require(requestId);
         if (!consultation.getUser().getId().equals(user.getId())) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Customer can only close their own consultation request.");
         }
@@ -160,43 +163,6 @@ public class ConsultationService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Consultation request not found."));
     }
 
-    private ConsultationRequest getConsultationOrThrow(Long requestId) {
-        return consultationRepository.findById(requestId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Consultation request not found."));
-    }
-
-    private Product getActiveProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
-        if (product.isDelete()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_NOT_FOUND);
-        }
-        return product;
-    }
-
-    private User getActiveStaffById(String staffId) {
-        User staff = userRepository.findById(staffId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.STAFF_NOT_FOUND, staffId));
-        if (staff.getRole() != Role.STAFF || staff.isDelete()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ACTIVE_STAFF_REQUIRED);
-        }
-        return staff;
-    }
-
-    private User getCurrentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
-    }
-
-    private User getCurrentStaff() {
-        User staff = getCurrentUser();
-        if (staff.getRole() != Role.STAFF) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-        }
-        return staff;
-    }
-
     private void notifyCustomerStaffAccepted(ConsultationRequestDTO request) {
         notificationService.sendUserNotification(
                 "Nhan vien da nhan yeu cau tu van",
@@ -215,11 +181,4 @@ public class ConsultationService {
         );
     }
 
-    private User getCurrentAssigner() {
-        User manager = getCurrentUser();
-        if (manager.getRole() != Role.MANAGER && manager.getRole() != Role.ADMIN) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Current user must be manager or admin to assign consultation requests.");
-        }
-        return manager;
-    }
 }

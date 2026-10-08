@@ -14,12 +14,11 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.InventoryTransactionRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,7 +40,7 @@ public class ProductService {
     private final ProductRepository repository;
     private final ProductMapper mapper;
     private final InventoryTransactionRepository inventoryRepo;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final ProductVariantRepository variantRepository;
     private final InventoryTransactionService inventoryTransactionService;
     private final ApplicationCacheService applicationCacheService;
@@ -54,7 +53,7 @@ public class ProductService {
                 normalizePrice(minPrice),
                 normalizePrice(maxPrice),
                 ProductAvailabilityStatus.ACCEPTING_ORDERS,
-                normalizePageable(pageable)
+                PageableUtils.normalize(pageable, 20, 100)
         ).map(mapper::toDto);
     }
 
@@ -62,18 +61,18 @@ public class ProductService {
     @Cacheable(value = "bestSellingProducts", key = "#period + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<BestSellerProductDTO> getBestSellingProducts(String period, Pageable pageable) {
         BestSellerRange range = resolveBestSellerRange(period);
-        return inventoryRepo.findBestSellingProducts(range.fromTime(), range.toTime(), normalizePageable(pageable));
+        return inventoryRepo.findBestSellingProducts(range.fromTime(), range.toTime(), PageableUtils.normalize(pageable, 20, 100));
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "product", key = "#id")
     public ProductDTO getProductById(Long id) {
-        return mapper.toDto(getActiveProduct(id));
+        return mapper.toDto(requireActiveProduct(id));
     }
 
     @Transactional
     public ProductDTO createProduct(ProductDTO dto, String userId) {
-        getActor(userId);
+        userService.requireUser(userId);
         validateMadeDay(dto.getMadeDay());
         Product entity = mapper.toEntity(dto);
         prepareProductForCreate(entity);
@@ -85,9 +84,9 @@ public class ProductService {
 
     @Transactional
     public void updateProduct(Long id, ProductDTO dto, String userId) {
-        getActor(userId);
+        userService.requireUser(userId);
         validateMadeDay(dto.getMadeDay());
-        Product existingProduct = getActiveProduct(id);
+        Product existingProduct = requireActiveProduct(id);
         applyProductBasicInfo(existingProduct, dto, true);
 
         if (dto.getVariants() != null) {
@@ -124,7 +123,7 @@ public class ProductService {
 
     @Transactional
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
-        Product product = getActiveProduct(id);
+        Product product = requireActiveProduct(id);
 
         applyProductBasicInfo(product, dto, false);
 
@@ -134,7 +133,7 @@ public class ProductService {
 
     @Transactional
     public void updateAvailabilityStatus(Long id, ProductAvailabilityStatus availabilityStatus) {
-        Product product = getActiveProduct(id);
+        Product product = requireActiveProduct(id);
         product.setAvailabilityStatus(Objects.requireNonNull(availabilityStatus, "Availability status is required"));
         repository.save(product);
         applicationCacheService.evictProductBasicInfoUpdated(id);
@@ -142,8 +141,8 @@ public class ProductService {
 
     @Transactional
     public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
-        getActor(userId);
-        Product product = getActiveProduct(productId);
+        userService.requireUser(userId);
+        Product product = requireActiveProduct(productId);
 
         ProductVariant variant = createVariant(product, dto);
         ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
@@ -159,8 +158,8 @@ public class ProductService {
 
     @Transactional
     public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
-        User actor = getActor(userId);
-        ProductVariant variant = getActiveVariant(variantId);
+        User actor = userService.requireUser(userId);
+        ProductVariant variant = requireActiveVariant(variantId);
 
         variant.setQuantity(variant.getQuantity() + request.getQuantity());
         ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
@@ -172,8 +171,8 @@ public class ProductService {
 
     @Transactional
     public void deleteProduct(Long id, String userId) {
-        getActor(userId);
-        Product product = getActiveProduct(id);
+        userService.requireUser(userId);
+        Product product = requireActiveProduct(id);
         product.setDelete(true);
         if (product.getVariants() != null) {
             product.getVariants().forEach(variant -> variant.setDelete(true));
@@ -234,7 +233,8 @@ public class ProductService {
         variant.setDelete(false);
     }
 
-    private Product getActiveProduct(Long productId) {
+    @Transactional(readOnly = true)
+    public Product requireActiveProduct(Long productId) {
         Product product = repository.findById(productId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
         if (product.isDelete()) {
@@ -243,13 +243,10 @@ public class ProductService {
         return product;
     }
 
-    private ProductVariant getActiveVariant(Long variantId) {
-        ProductVariant variant = variantRepository.findById(variantId)
+    @Transactional(readOnly = true)
+    public ProductVariant requireActiveVariant(Long variantId) {
+        return variantRepository.findActiveById(variantId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND));
-        if (variant.isDelete() || variant.getProduct() == null || variant.getProduct().isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND);
-        }
-        return variant;
     }
 
     private void saveInventoryTransaction(ProductVariant variant, int changeAmount, String type, User actor) {
@@ -261,17 +258,6 @@ public class ProductService {
         }
 
         inventoryTransactionService.record(null, variant, actor, changeAmount, type);
-    }
-
-    private User getActor(String userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, userId));
-    }
-
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
     }
 
     public static String productsCacheKey(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {

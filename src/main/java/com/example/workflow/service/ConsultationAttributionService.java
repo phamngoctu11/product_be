@@ -22,16 +22,16 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ConsultationRequestRepository;
 import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.util.MoneyUtils;
+import com.example.workflow.util.CommissionRefreshKeys;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,14 +56,14 @@ public class ConsultationAttributionService {
             ConsultationStatus.IN_PROGRESS,
             ConsultationStatus.CLOSED
     );
-    private static final double MONEY_ROUNDING_FACTOR = 100.0;
 
     private final ConsultationSaleAttributionRepository attributionRepository;
     private final ConsultationReviewRepository reviewRepository;
     private final ConsultationRequestRepository consultationRepository;
-    private final UserRepository userRepository;
     private final DomainEventPublisher eventPublisher;
     private final ApplicationCacheService applicationCacheService;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
 
     @Value("${consultation.bonus.percent:5}")
     private double consultationBonusPercent;
@@ -163,10 +163,10 @@ public class ConsultationAttributionService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = "consultationAttributions",
-            key = "'me-' + T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
+            key = "'me-' + @currentUserService.requireCurrentUserId() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
     )
     public Page<ConsultationSaleAttributionDTO> getMyAttributions(Pageable pageable) {
-        User user = getCurrentUser();
+        User user = currentUserService.requireCurrentUser();
         if (user.getRole() == Role.STAFF) {
             return attributionRepository
                     .findByStaffIdAndStatusInOrderByCreatedAtDesc(user.getId(), List.of(ConsultationAttributionStatus.PENDING, ConsultationAttributionStatus.CONFIRMED), pageable)
@@ -178,7 +178,7 @@ public class ConsultationAttributionService {
     @Transactional(readOnly = true)
     @Cacheable(value = "consultationAttributions", key = "'staff-' + #staffId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<ConsultationSaleAttributionDTO> getStaffAttributions(String staffId, Pageable pageable) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() != Role.MANAGER && currentUser.getRole() != Role.ADMIN) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only manager or admin can view staff attribution reports.");
         }
@@ -189,7 +189,7 @@ public class ConsultationAttributionService {
 
     @Transactional
     public ConsultationReviewDTO createReview(Long attributionId, ConsultationReviewRequest request) {
-        User user = getCurrentUser();
+        User user = currentUserService.requireCurrentUser();
         if (user.getRole() != Role.USER) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only customers can review consultation sales.");
         }
@@ -218,7 +218,7 @@ public class ConsultationAttributionService {
     @Transactional(readOnly = true)
     @Cacheable(value = "consultationReviews", key = "'staff-' + #staffId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<ConsultationReviewDTO> getStaffReviews(String staffId, Pageable pageable) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() == Role.STAFF && !currentUser.getId().equals(staffId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Staff can only view their own reviews.");
         }
@@ -291,7 +291,7 @@ public class ConsultationAttributionService {
         if (bonusPercent <= 0 || itemAmount <= 0) {
             return 0;
         }
-        return roundMoney(itemAmount * bonusPercent / 100);
+        return MoneyUtils.round(itemAmount * bonusPercent / 100);
     }
 
     private double calculateCommissionBase(
@@ -307,12 +307,12 @@ public class ConsultationAttributionService {
 
         double discountAmount = normalizeAmount(order == null ? null : order.getDiscountAmount());
         if (discountAmount <= 0 || orderGrossAmount <= 0) {
-            return roundMoney(itemGrossAmount);
+            return MoneyUtils.round(itemGrossAmount);
         }
 
         double discountShare = discountAmount * itemGrossAmount / orderGrossAmount;
         discountShare = Math.min(itemGrossAmount, Math.max(0, discountShare));
-        return roundMoney(Math.max(0, itemGrossAmount - discountShare));
+        return MoneyUtils.round(Math.max(0, itemGrossAmount - discountShare));
     }
 
     private double calculateOrderGrossAmount(Order order, boolean preferReceivedQuantity) {
@@ -355,10 +355,6 @@ public class ConsultationAttributionService {
             return 0;
         }
         return percent;
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * MONEY_ROUNDING_FACTOR) / MONEY_ROUNDING_FACTOR;
     }
 
     private Map<Long, ConsultationRequest> loadLatestConsultationsByProduct(
@@ -425,7 +421,7 @@ public class ConsultationAttributionService {
                 attribution.getOrderItem().getId(),
                 attribution.getUser().getId(),
                 staff.getId(),
-                buildFullName(staff),
+                userService.displayName(staff),
                 product.getId(),
                 product.getProductName(),
                 variant.getId(),
@@ -456,7 +452,7 @@ public class ConsultationAttributionService {
                 review.getOrderItem().getId(),
                 review.getUser().getId(),
                 staff.getId(),
-                buildFullName(staff),
+                userService.displayName(staff),
                 product.getId(),
                 product.getProductName(),
                 review.getProductRating(),
@@ -479,16 +475,7 @@ public class ConsultationAttributionService {
             return;
         }
 
-        Set<CommissionRefreshKey> refreshKeys = new HashSet<>();
-        for (ConsultationSaleAttribution attribution : attributions) {
-            if (attribution == null || attribution.getStaff() == null || attribution.getStaff().getId() == null) {
-                continue;
-            }
-            String staffId = attribution.getStaff().getId();
-            collectRefreshKey(refreshKeys, staffId, attribution.getOrderCreatedAt());
-            collectRefreshKey(refreshKeys, staffId, attribution.getConfirmedAt());
-            collectRefreshKey(refreshKeys, staffId, attribution.getCancelledAt());
-        }
+        Set<CommissionRefreshKey> refreshKeys = CommissionRefreshKeys.fromAttributions(attributions);
 
         if (!refreshKeys.isEmpty()) {
             eventPublisher.publishAfterCommit(
@@ -498,26 +485,4 @@ public class ConsultationAttributionService {
         }
     }
 
-    private void collectRefreshKey(Set<CommissionRefreshKey> refreshKeys, String staffId, LocalDateTime dateTime) {
-        if (dateTime != null) {
-            refreshKeys.add(new CommissionRefreshKey(staffId, dateTime.toLocalDate().toString()));
-        }
-    }
-
-    private User getCurrentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
-    }
-
-    private String buildFullName(User user) {
-        String fullName = Stream.of(user.getLastname(), user.getFirstname())
-                .filter(part -> part != null && !part.isBlank())
-                .reduce((left, right) -> left + " " + right)
-                .orElse("");
-        if (!fullName.isBlank()) {
-            return fullName;
-        }
-        return user.getUsername();
-    }
 }

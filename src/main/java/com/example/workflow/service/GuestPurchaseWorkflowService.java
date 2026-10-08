@@ -3,6 +3,7 @@ package com.example.workflow.service;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.util.ThrowableUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
@@ -41,7 +42,7 @@ public class GuestPurchaseWorkflowService {
                     variables
             );
         } catch (RuntimeException ex) {
-            String errorMessage = rootCauseMessage(ex);
+            String errorMessage = ThrowableUtils.rootMessage(ex);
             log.error("Could not start guest purchase workflow for order {}: {}", orderId, errorMessage, ex);
             stateService.markStartFailed(orderId, errorMessage);
             eventPublisher.publishAfterCommit(
@@ -53,15 +54,6 @@ public class GuestPurchaseWorkflowService {
 
         stateService.markStarted(orderId, processInstance.getProcessInstanceId());
         return StartResult.started(processInstance.getProcessInstanceId());
-    }
-
-    private String rootCauseMessage(Throwable throwable) {
-        Throwable current = throwable;
-        while (current.getCause() != null) {
-            current = current.getCause();
-        }
-        String message = current.getMessage();
-        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
     }
 
     public record StartResult(boolean started, String processInstanceId, String errorMessage) {

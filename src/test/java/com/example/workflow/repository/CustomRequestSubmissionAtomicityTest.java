@@ -5,13 +5,15 @@ import com.example.workflow.dto.SubmitCustomRequest;
 import com.example.workflow.entity.CustomRequest;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
+import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.Role;
-import com.example.workflow.service.AuthService;
+import com.example.workflow.service.CurrentUserService;
 import com.example.workflow.service.CustomRequestService;
 import com.example.workflow.service.EmailService;
 import com.example.workflow.service.NotificationService;
+import com.example.workflow.service.UserService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OutboxStore;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -82,7 +84,8 @@ class CustomRequestSubmissionAtomicityTest {
     @Autowired UserRepository userRepository;
     @Autowired CustomRequestRepository customRequestRepository;
     @Autowired CustomRequestService service;
-    @MockBean AuthService authService;
+    @MockBean CurrentUserService currentUserService;
+    @MockBean UserService userService;
 
     @BeforeEach
     void setUpSchemaAndData() throws Exception {
@@ -103,7 +106,8 @@ class CustomRequestSubmissionAtomicityTest {
         user.setAddress("HCM");
         user.setRole(Role.USER);
         userRepository.saveAndFlush(user);
-        when(authService.getCurrentUserId()).thenReturn("user-atomic");
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-atomic");
+        when(userService.requireUser("user-atomic", ConstantErrorCode.USER_NOT_FOUND)).thenReturn(user);
     }
 
     @Test

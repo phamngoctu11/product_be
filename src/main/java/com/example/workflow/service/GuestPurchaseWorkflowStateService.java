@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class GuestPurchaseWorkflowStateService {
     private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markStarted(Long orderId, String processInstanceId) {
@@ -36,8 +37,7 @@ public class GuestPurchaseWorkflowStateService {
     }
 
     private Order getGuestOrderForUpdate(Long orderId) {
-        Order order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new IllegalStateException("Guest order not found: " + orderId));
+        Order order = orderLookupService.requireForUpdate(orderId);
         if (order.getUser() != null) {
             throw new IllegalArgumentException("Order " + orderId + " is not a guest order");
         }

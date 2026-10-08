@@ -10,7 +10,6 @@ import com.example.workflow.entity.OrderItemAssignment;
 import com.example.workflow.entity.ProductionCheckpoint;
 import com.example.workflow.entity.ProductionCheckpointImage;
 import com.example.workflow.entity.ProductionDecision;
-import com.example.workflow.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -18,33 +17,24 @@ import org.mapstruct.Mapping;
 public interface ProductionMapper {
     @Mapping(source = "orderItem.id", target = "orderItemId")
     @Mapping(source = "assignedStaff.id", target = "assignedStaffId")
-    @Mapping(target = "assignedStaffName", expression = "java(fullName(assignment.getAssignedStaff()))")
+    @Mapping(target = "assignedStaffName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.displayName(assignment.getAssignedStaff()))")
     @Mapping(source = "assignedBy.id", target = "assignedById")
-    @Mapping(target = "assignedByName", expression = "java(fullName(assignment.getAssignedBy()))")
+    @Mapping(target = "assignedByName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.displayName(assignment.getAssignedBy()))")
     OrderItemAssignmentDTO toDto(OrderItemAssignment assignment);
 
     @Mapping(source = "orderItem.id", target = "orderItemId")
     @Mapping(source = "submittedBy.id", target = "submittedById")
-    @Mapping(target = "submittedByName", expression = "java(fullName(checkpoint.getSubmittedBy()))")
+    @Mapping(target = "submittedByName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.displayName(checkpoint.getSubmittedBy()))")
     ProductionCheckpointDTO toDto(ProductionCheckpoint checkpoint);
 
     ProductionCheckpointImageDTO toDto(ProductionCheckpointImage image);
 
     @Mapping(source = "decidedBy.id", target = "decidedById")
-    @Mapping(target = "decidedByName", expression = "java(fullName(decision.getDecidedBy()))")
+    @Mapping(target = "decidedByName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.displayName(decision.getDecidedBy()))")
     ProductionDecisionDTO toDto(ProductionDecision decision);
 
     @Mapping(source = "id", target = "orderItemId")
     @Mapping(source = "productionCheckpoints", target = "checkpoints")
     OrderItemProductionDTO toProductionDto(OrderItem orderItem);
 
-    default String fullName(User user) {
-        if (user == null) {
-            return null;
-        }
-        String lastName = user.getLastname() == null ? "" : user.getLastname().trim();
-        String firstName = user.getFirstname() == null ? "" : user.getFirstname().trim();
-        String fullName = (lastName + " " + firstName).trim();
-        return fullName.isEmpty() ? user.getUsername() : fullName;
-    }
 }

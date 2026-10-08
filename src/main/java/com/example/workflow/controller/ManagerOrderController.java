@@ -6,7 +6,7 @@ import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.OrderStatus;
-import com.example.workflow.service.ManagerOrderService;
+import com.example.workflow.service.OrderService;
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Validated
 public class ManagerOrderController {
-    private final ManagerOrderService managerOrderService;
+    private final OrderService orderService;
 
     @PostMapping("/admin/pending")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'STAFF', 'ADMIN')")
@@ -38,7 +38,7 @@ public class ManagerOrderController {
             @RequestParam OrderStatus status,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(managerOrderService.getPendingOrders(status,pageable)));
+        return ResponseEntity.ok(ApiResponse.success(orderService.getPendingOrders(status, pageable)));
     }
 
     @PostMapping("/manager/review-order/{orderId}")
@@ -50,7 +50,7 @@ public class ManagerOrderController {
             @RequestParam(value = "staffId", required = false) String staffId
     ) {
         try {
-            managerOrderService.reviewOrder(orderId, request, changerId, staffId);
+            orderService.processAdminReview(orderId, request, changerId, staffId);
             return ResponseEntity.ok(ApiResponse.success("Duyet don thanh cong!"));
         } catch (AppException e) {
             throw e;
@@ -66,7 +66,7 @@ public class ManagerOrderController {
             @RequestParam("staffId") String staffId
     ) {
         try {
-            managerOrderService.assignStaffToOrder(orderId, staffId);
+            orderService.assignStaffToOrder(orderId, staffId);
             return ResponseEntity.ok(ApiResponse.success("Gan nhan vien phu trach don hang thanh cong."));
         } catch (AppException e) {
             throw e;
@@ -83,7 +83,7 @@ public class ManagerOrderController {
             @Nullable @RequestParam("cancelReason") String cancelReason
     ) {
         try {
-            managerOrderService.kcsCheck(orderId, isPassed,cancelReason);
+            orderService.processManagerKcsCheck(orderId, isPassed, cancelReason);
             return ResponseEntity.ok(ApiResponse.success("KCS hoan tat!"));
         } catch (AppException e) {
             throw e;

@@ -24,14 +24,14 @@ import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.PageableUtils;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,16 +41,14 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class CustomRequestService {
-    private static final int MAX_PAGE_SIZE = 50;
 
-    private final AuthService authService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
+    private final UserService userService;
     private final CustomRequestRepository customRequestRepository;
     private final OrderRepository orderRepository;
     private final CustomRequestMapper customRequestMapper;
@@ -62,27 +60,27 @@ public class CustomRequestService {
 
     public CustomRequestDTO create(CreateCustomRequest request, String idempotencyKey) {
         requireCreateRequest(request);
-        String ownerId = authService.getCurrentUserId();
+        String ownerId = currentUserService.requireCurrentUserId();
         if (!StringUtils.hasText(idempotencyKey)) {
             return createDraft(ownerId, request);
         }
 
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("spec", normalizeRequired(request.spec(), "spec"));
-        canonical.put("attachments", normalizeOptional(request.attachments()));
+        canonical.put("attachments", TextNormalizer.optional(request.attachments()));
         canonical.put("quantity", request.quantity());
         String result = durableRequests.execute(
                 "custom-request:create:" + ownerId,
                 idempotencyKey,
-                writeJson(canonical),
-                () -> writeJson(createDraft(ownerId, request))
+                JsonUtils.write(objectMapper, canonical, "custom request data"),
+                () -> JsonUtils.write(objectMapper, createDraft(ownerId, request), "custom request data")
         );
-        return readCustomRequest(result);
+        return JsonUtils.read(objectMapper, result, CustomRequestDTO.class, "custom request result");
     }
 
     @Transactional(readOnly = true)
     public Page<CustomRequestDTO> list(CustomRequestStatus status, Pageable pageable) {
-        String ownerId = authService.getCurrentUserId();
+        String ownerId = currentUserService.requireCurrentUserId();
         Pageable bounded = boundedPage(pageable);
         Page<CustomRequest> requests = status == null
                 ? customRequestRepository.findAllByOwnerIdOrderByUpdatedAtDescIdDesc(ownerId, bounded)
@@ -92,7 +90,7 @@ public class CustomRequestService {
 
     @Transactional(readOnly = true)
     public CustomRequestDTO get(Long requestId) {
-        return customRequestMapper.toDto(findOwned(requestId, authService.getCurrentUserId()));
+        return customRequestMapper.toDto(findOwned(requestId, currentUserService.requireCurrentUserId()));
     }
 
     @Transactional
@@ -100,25 +98,25 @@ public class CustomRequestService {
         if (request == null) {
             throw invalid("Update body is required.");
         }
-        String ownerId = authService.getCurrentUserId();
+        String ownerId = currentUserService.requireCurrentUserId();
         CustomRequest draft = findOwned(requestId, ownerId);
         ensureEditable(draft);
         ensureVersion(draft, request.expectedVersion());
         draft.setSpec(normalizeRequired(request.spec(), "spec"));
-        draft.setAttachments(normalizeOptional(request.attachments()));
+        draft.setAttachments(TextNormalizer.optional(request.attachments()));
         draft.setQuantity(requirePositive(request.quantity()));
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
 
     public void delete(Long requestId, Long expectedVersion, String idempotencyKey) {
-        String ownerId = authService.getCurrentUserId();
+        String ownerId = currentUserService.requireCurrentUserId();
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("requestId", requestId);
         canonical.put("expectedVersion", expectedVersion);
         durableRequests.execute(
                 "custom-request:delete:" + ownerId + ":" + requestId,
                 idempotencyKey,
-                writeJson(canonical),
+                JsonUtils.write(objectMapper, canonical, "custom request data"),
                 () -> {
                     CustomRequest draft = lockOwned(requestId, ownerId);
                     ensureEditable(draft);
@@ -134,23 +132,23 @@ public class CustomRequestService {
         if (request == null) {
             throw invalid("Submit body is required.");
         }
-        String ownerId = authService.getCurrentUserId();
+        String ownerId = currentUserService.requireCurrentUserId();
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("requestId", requestId);
         canonical.put("expectedVersion", request.expectedVersion());
-        canonical.put("fullName", normalizeOptional(request.fullName()));
-        canonical.put("email", normalizeEmail(request.email()));
-        canonical.put("phone", normalizeOptional(request.phone()));
-        canonical.put("address", normalizeOptional(request.address()));
-        canonical.put("note", normalizeOptional(request.note()));
+        canonical.put("fullName", TextNormalizer.optional(request.fullName()));
+        canonical.put("email", TextNormalizer.email(request.email()));
+        canonical.put("phone", TextNormalizer.optional(request.phone()));
+        canonical.put("address", TextNormalizer.optional(request.address()));
+        canonical.put("note", TextNormalizer.optional(request.note()));
 
         String result = durableRequests.execute(
                 "custom-request:submit:" + ownerId + ":" + requestId,
                 idempotencyKey,
-                writeJson(canonical),
-                () -> writeJson(submitDraft(requestId, ownerId, request))
+                JsonUtils.write(objectMapper, canonical, "custom request data"),
+                () -> JsonUtils.write(objectMapper, submitDraft(requestId, ownerId, request), "custom request data")
         );
-        return readCheckoutResponse(result);
+        return JsonUtils.read(objectMapper, result, CheckoutResponseDTO.class, "custom request submission");
     }
 
     private CustomRequestDTO createDraft(String ownerId, CreateCustomRequest request) {
@@ -158,7 +156,7 @@ public class CustomRequestService {
         draft.setOwnerId(ownerId);
         draft.setStatus(CustomRequestStatus.DRAFT);
         draft.setSpec(normalizeRequired(request.spec(), "spec"));
-        draft.setAttachments(normalizeOptional(request.attachments()));
+        draft.setAttachments(TextNormalizer.optional(request.attachments()));
         draft.setQuantity(requirePositive(request.quantity()));
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
@@ -176,8 +174,7 @@ public class CustomRequestService {
         ensureVersion(draft, request.expectedVersion());
         validateForSubmission(draft);
 
-        User owner = userRepository.findById(ownerId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND));
+        User owner = userService.requireUser(ownerId, ConstantErrorCode.USER_NOT_FOUND);
         OrderContactSnapshot contact = resolveContact(owner, request);
         Order order = buildCustomOrder(owner, draft, contact);
         Order saved = orderRepository.saveAndFlush(order);
@@ -228,8 +225,8 @@ public class CustomRequestService {
     }
 
     private OrderContactSnapshot resolveContact(User owner, SubmitCustomRequest request) {
-        String fullName = firstPresent(request.fullName(), joinName(owner.getLastname(), owner.getFirstname()));
-        String email = normalizeEmail(firstPresent(request.email(), owner.getEmail()));
+        String fullName = firstPresent(request.fullName(), TextNormalizer.fullName(owner.getLastname(), owner.getFirstname()));
+        String email = TextNormalizer.email(firstPresent(request.email(), owner.getEmail()));
         String phone = firstPresent(request.phone(), owner.getPhone());
         String address = firstPresent(request.address(), owner.getAddress());
         if (!StringUtils.hasText(fullName) || !StringUtils.hasText(email)
@@ -237,7 +234,7 @@ public class CustomRequestService {
             throw invalid("Full name, email, phone and shipping address are required when submitting.");
         }
         return new OrderContactSnapshot(
-                fullName.trim(), email, phone.trim(), address.trim(), normalizeOptional(request.note())
+                fullName.trim(), email, phone.trim(), address.trim(), TextNormalizer.optional(request.note())
         );
     }
 
@@ -259,7 +256,7 @@ public class CustomRequestService {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("spec", draft.getSpec());
         snapshot.put("attachments", draft.getAttachments());
-        return writeJson(snapshot);
+        return JsonUtils.write(objectMapper, snapshot, "custom request data");
     }
 
     private void validateForSubmission(CustomRequest draft) {
@@ -290,10 +287,7 @@ public class CustomRequestService {
     }
 
     private Pageable boundedPage(Pageable pageable) {
-        int page = pageable == null ? 0 : Math.max(pageable.getPageNumber(), 0);
-        int requestedSize = pageable == null ? 20 : pageable.getPageSize();
-        int size = Math.max(1, Math.min(requestedSize, MAX_PAGE_SIZE));
-        return PageRequest.of(page, size);
+        return PageableUtils.normalize(pageable, 20, 50);
     }
 
     private void requireCreateRequest(CreateCustomRequest request) {
@@ -316,48 +310,12 @@ public class CustomRequestService {
         return value;
     }
 
-    private String normalizeOptional(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String normalizeEmail(String value) {
-        return StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : null;
-    }
-
     private String firstPresent(String preferred, String fallback) {
-        return StringUtils.hasText(preferred) ? preferred.trim() : normalizeOptional(fallback);
-    }
-
-    private String joinName(String lastName, String firstName) {
-        return ((lastName == null ? "" : lastName.trim()) + " "
-                + (firstName == null ? "" : firstName.trim())).trim();
+        return StringUtils.hasText(preferred) ? preferred.trim() : TextNormalizer.optional(fallback);
     }
 
     private AppException invalid(String detail) {
         return new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CUSTOM_REQUEST_INVALID, detail);
     }
 
-    private String writeJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Cannot serialize custom request data", exception);
-        }
-    }
-
-    private CustomRequestDTO readCustomRequest(String value) {
-        try {
-            return objectMapper.readValue(value, CustomRequestDTO.class);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Cannot deserialize custom request result", exception);
-        }
-    }
-
-    private CheckoutResponseDTO readCheckoutResponse(String value) {
-        try {
-            return objectMapper.readValue(value, CheckoutResponseDTO.class);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Cannot deserialize custom request submission", exception);
-        }
-    }
 }

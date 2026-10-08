@@ -1,5 +1,6 @@
 package com.example.workflow.service.redis;
 
+import com.example.workflow.util.ThrowableUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -73,7 +74,7 @@ public class RedisStreamRetryTemplate {
             }
 
             long nextRetryAt = now + resolveBackoffMs(attempts);
-            writeMetadata(context, new RetryMetadata(attempts, nextRetryAt, rootCauseMessage(e)));
+            writeMetadata(context, new RetryMetadata(attempts, nextRetryAt, ThrowableUtils.typedRootMessage(e)));
             log.warn(
                     "Redis Stream event {} type {} failed attempt {}/{}. Next retry at {}. Error: {}",
                     context.recordId(),
@@ -81,7 +82,7 @@ public class RedisStreamRetryTemplate {
                     attempts,
                     maxAttempts,
                     Instant.ofEpochMilli(nextRetryAt),
-                    rootCauseMessage(e)
+                    ThrowableUtils.typedRootMessage(e)
             );
             return RetryDecision.NO_ACK;
         }
@@ -153,7 +154,7 @@ public class RedisStreamRetryTemplate {
         body.put("consumerGroup", nullToEmpty(context.groupName()));
         body.put("consumerName", nullToEmpty(context.consumerName()));
         body.put("attempts", String.valueOf(attempts));
-        body.put("errorMessage", rootCauseMessage(error));
+        body.put("errorMessage", ThrowableUtils.typedRootMessage(error));
         body.put("failedAt", Instant.now().toString());
 
         try {
@@ -212,15 +213,6 @@ public class RedisStreamRetryTemplate {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
-    }
-
-    private String rootCauseMessage(Throwable throwable) {
-        Throwable root = throwable;
-        while (root.getCause() != null && root.getCause() != root) {
-            root = root.getCause();
-        }
-        String message = root.getMessage();
-        return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
     }
 
     public enum RetryDecision {

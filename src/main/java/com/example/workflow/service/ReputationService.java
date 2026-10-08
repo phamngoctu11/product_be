@@ -10,10 +10,10 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.ReputationHistoryRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReputationService {
     private final ReputationHistoryRepository reputationHistoryRepository;
     private final UserRepository userRepository;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional
@@ -57,12 +57,12 @@ public class ReputationService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.REPUTATION_HISTORIES,
-            key = "T(com.example.workflow.cache.CacheKeys).reputationHistories(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName(), #pageable)",
+            key = "T(com.example.workflow.cache.CacheKeys).reputationHistories(@currentUserService.requireCurrentUserId(), #pageable)",
             unless = "#result == null"
     )
     public Page<ReputationHistoryDTO> getMyHistory(Pageable pageable) {
-        String userId = authService.getCurrentUserId();
-        return reputationHistoryRepository.findByUser_IdOrderByCreatedAtDesc(userId, normalizePageable(pageable))
+        String userId = currentUserService.requireCurrentUserId();
+        return reputationHistoryRepository.findByUser_IdOrderByCreatedAtDesc(userId, PageableUtils.normalize(pageable, 5, 50))
                 .map(this::toDto);
     }
 
@@ -78,9 +78,4 @@ public class ReputationService {
         );
     }
 
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 5 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
-    }
 }

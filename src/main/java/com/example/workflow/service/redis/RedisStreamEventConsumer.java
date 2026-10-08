@@ -16,6 +16,7 @@ import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
+import com.example.workflow.util.ThrowableUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -79,7 +80,7 @@ public class RedisStreamEventConsumer {
             redisFailureLogged = false;
         } catch (RuntimeException e) {
             groupReady = false;
-            String rootCauseMessage = rootCauseMessage(e);
+            String rootCauseMessage = ThrowableUtils.typedRootMessage(e);
             if (!redisFailureLogged) {
                 log.warn("Redis Stream consumer unavailable: {}", rootCauseMessage);
                 redisFailureLogged = true;
@@ -116,7 +117,7 @@ public class RedisStreamEventConsumer {
     }
 
     private boolean isGroupAlreadyExists(RuntimeException e) {
-        String message = rootCauseMessage(e);
+        String message = ThrowableUtils.typedRootMessage(e);
         return message != null && message.contains("BUSYGROUP");
     }
 
@@ -383,12 +384,4 @@ public class RedisStreamEventConsumer {
         return raw;
     }
 
-    private String rootCauseMessage(Throwable throwable) {
-        Throwable root = throwable;
-        while (root.getCause() != null && root.getCause() != root) {
-            root = root.getCause();
-        }
-        String message = root.getMessage();
-        return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
-    }
 }

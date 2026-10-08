@@ -4,18 +4,14 @@ import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.User;
 import com.example.workflow.entity.WishlistItem;
-import com.example.workflow.exception.AppException;
-import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
-import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.WishlistItemRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,28 +26,28 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class WishlistService {
     private final WishlistItemRepository wishlistItemRepository;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
     private final ProductMapper productMapper;
-    private final AuthService authService;
+    private final CurrentUserService currentUserService;
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
     @Cacheable(
             value = "wishlistProducts",
-            key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize",
+            key = "@currentUserService.requireCurrentUserId() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize",
             unless = "#result == null"
     )
     public Page<ProductDTO> getMyWishlist(Pageable pageable) {
-        String userId = authService.getCurrentUserId();
-        return wishlistItemRepository.findActiveByUserId(userId, normalizePageable(pageable))
+        String userId = currentUserService.requireCurrentUserId();
+        return wishlistItemRepository.findActiveByUserId(userId, PageableUtils.normalize(pageable, 20, 100))
                 .map(WishlistItem::getProduct)
                 .map(productMapper::toDto);
     }
 
     @Transactional
     public ProductDTO addToWishlist(Long productId) {
-        String userId = authService.getCurrentUserId();
-        Product product = getActiveProduct(productId);
+        String userId = currentUserService.requireCurrentUserId();
+        Product product = productService.requireActiveProduct(productId);
 
         ProductDTO response = wishlistItemRepository.findByUser_IdAndProduct_Id(userId, productId)
                 .map(WishlistItem::getProduct)
@@ -63,7 +59,7 @@ public class WishlistService {
 
     @Transactional
     public void removeFromWishlist(Long productId) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         wishlistItemRepository.deleteByUser_IdAndProduct_Id(userId, productId);
         applicationCacheService.evictWishlistChanged(userId, productId);
     }
@@ -71,17 +67,17 @@ public class WishlistService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = "wishlistStatus",
-            key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + #productId"
+            key = "@currentUserService.requireCurrentUserId() + '-' + #productId"
     )
     public boolean isInMyWishlist(Long productId) {
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         return wishlistItemRepository.findExistingProductIdsInWishlist(userId, List.of(productId)).contains(productId);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(
             value = "wishlistStatusBatch",
-            key = "T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() + '-' + T(com.example.workflow.service.WishlistService).cacheKeyForProductIds(#productIds)",
+            key = "@currentUserService.requireCurrentUserId() + '-' + T(com.example.workflow.service.WishlistService).cacheKeyForProductIds(#productIds)",
             unless = "#result == null || #result.isEmpty()"
     )
     public Map<Long, Boolean> getMyWishlistStatus(Collection<Long> productIds) {
@@ -90,7 +86,7 @@ public class WishlistService {
             return Map.of();
         }
 
-        String userId = authService.getCurrentUserId();
+        String userId = currentUserService.requireCurrentUserId();
         Set<Long> favoriteProductIds = wishlistItemRepository.findExistingProductIdsInWishlist(userId, normalizedProductIds);
 
         Map<Long, Boolean> statusByProductId = new LinkedHashMap<>();
@@ -101,7 +97,7 @@ public class WishlistService {
     }
 
     private ProductDTO createWishlistItem(Product product) {
-        User user = authService.getCurrentUser();
+        User user = currentUserService.requireCurrentUser();
         WishlistItem item = new WishlistItem();
         item.setUser(user);
         item.setProduct(product);
@@ -110,22 +106,7 @@ public class WishlistService {
         return productMapper.toDto(product);
     }
 @Transactional(readOnly = true)
-protected Product getActiveProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND));
-        if (product.isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_NOT_FOUND);
-        }
-        return product;
-    }
-
-    private Pageable normalizePageable(Pageable pageable) {
-        int page = pageable == null ? 0 : pageable.getPageNumber();
-        int size = pageable == null ? 20 : pageable.getPageSize();
-        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-    }
-
-    private List<Long> normalizeProductIds(Collection<Long> productIds) {
+protected List<Long> normalizeProductIds(Collection<Long> productIds) {
         if (productIds == null || productIds.isEmpty()) {
             return List.of();
         }

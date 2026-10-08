@@ -10,7 +10,6 @@ import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -18,15 +17,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-
-import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,9 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,13 +43,11 @@ class UserServiceTest {
     @Mock
     private ApplicationCacheService applicationCacheService;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private UserService userService;
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
-    }
 
     @Test
     void registrationCreatesUserWithDefaultUserRole() {
@@ -243,7 +229,6 @@ class UserServiceTest {
 
     @Test
     void updateMyProfileUsesJwtSubjectAndPreservesRole() {
-        mockJwtUser("42", "customer");
         User user = user("42", "customer");
         user.setRole(Role.STAFF);
         UserProfileUpdateDTO request = new UserProfileUpdateDTO();
@@ -253,7 +238,7 @@ class UserServiceTest {
         request.setPhone("0911111111");
         request.setEmail("updated@example.com");
         UserResDTO response = new UserResDTO();
-        when(userRepository.findById("42")).thenReturn(Optional.of(user));
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(userRepository.save(user)).thenReturn(user);
         when(userMapper.toResponse(user)).thenReturn(response);
 
@@ -323,28 +308,7 @@ class UserServiceTest {
     }
 
     private void mockAuthenticatedRole(String authority) {
-        Authentication authentication = mock(Authentication.class);
-        when(authentication.isAuthenticated()).thenReturn(true);
-        doReturn(List.of(new SimpleGrantedAuthority(authority))).when(authentication).getAuthorities();
-        SecurityContext context = mock(SecurityContext.class);
-        when(context.getAuthentication()).thenReturn(authentication);
-        SecurityContextHolder.setContext(context);
-    }
-
-    private void mockJwtUser(String subject, String username) {
-        Jwt jwt = Jwt.withTokenValue("token")
-                .header("alg", "none")
-                .subject(subject)
-                .claim("preferred_username", username)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(300))
-                .build();
-        SecurityContext context = mock(SecurityContext.class);
-        when(context.getAuthentication()).thenReturn(new JwtAuthenticationToken(
-                jwt,
-                List.of(new SimpleGrantedAuthority("USER")),
-                username
-        ));
-        SecurityContextHolder.setContext(context);
+        when(currentUserService.hasAuthority(anyString()))
+                .thenAnswer(invocation -> authority.equals(invocation.getArgument(0)));
     }
 }

@@ -5,8 +5,6 @@ import com.example.workflow.nume.GuestWorkflowStatus;
 import com.example.workflow.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -14,12 +12,16 @@ import static org.mockito.Mockito.when;
 
 class GuestPurchaseWorkflowStateServiceTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
-    private final GuestPurchaseWorkflowStateService service = new GuestPurchaseWorkflowStateService(orderRepository);
+    private final OrderLookupService orderLookupService = mock(OrderLookupService.class);
+    private final GuestPurchaseWorkflowStateService service = new GuestPurchaseWorkflowStateService(
+            orderRepository,
+            orderLookupService
+    );
 
     @Test
     void marksGuestOrderStarted() {
         Order order = guestOrder(200L);
-        when(orderRepository.findByIdForUpdate(200L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(200L)).thenReturn(order);
 
         service.markStarted(200L, "process-200");
 
@@ -33,7 +35,7 @@ class GuestPurchaseWorkflowStateServiceTest {
     @Test
     void marksGuestOrderStartFailureWithBoundedDiagnostic() {
         Order order = guestOrder(201L);
-        when(orderRepository.findByIdForUpdate(201L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(201L)).thenReturn(order);
 
         service.markStartFailed(201L, "x".repeat(1200));
 
