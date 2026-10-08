@@ -1,8 +1,5 @@
 package com.example.workflow.service;
 
-import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
-import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.ThrowableUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +18,6 @@ public class GuestPurchaseWorkflowService {
 
     private final RuntimeService runtimeService;
     private final GuestPurchaseWorkflowStateService stateService;
-    private final DomainEventPublisher eventPublisher;
 
     public StartResult startAfterOrderCreated(
             Long orderId,
@@ -45,10 +41,6 @@ public class GuestPurchaseWorkflowService {
             String errorMessage = ThrowableUtils.rootMessage(ex);
             log.error("Could not start guest purchase workflow for order {}: {}", orderId, errorMessage, ex);
             stateService.markStartFailed(orderId, errorMessage);
-            eventPublisher.publishAfterCommit(
-                    EventTypes.GUEST_ORDER_CREATED,
-                    new GuestOrderCreatedEvent(orderId)
-            );
             return StartResult.failed(errorMessage);
         }
 

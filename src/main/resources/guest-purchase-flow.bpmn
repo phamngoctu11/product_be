@@ -116,14 +116,7 @@
       <bpmn:incoming>Flow_CreateOrder_To_SaveSnapshot</bpmn:incoming>
       <bpmn:outgoing>Flow_SaveSnapshot_To_PublishOrderCreated</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Publish GUEST_ORDER_CREATED event" camunda:delegateExpression="${workflowTaskDelegate}">
-      <bpmn:extensionElements>
-        <camunda:inputOutput>
-          <camunda:inputParameter name="taskType">PUBLISH_WORKFLOW_EVENT</camunda:inputParameter>
-          <camunda:inputParameter name="eventType">GUEST_ORDER_CREATED</camunda:inputParameter>
-          <camunda:inputParameter name="streamName">order-events</camunda:inputParameter>
-        </camunda:inputOutput>
-      </bpmn:extensionElements>
+    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Order-created event owned by checkout" camunda:expression="${true}">
       <bpmn:incoming>Flow_SaveSnapshot_To_PublishOrderCreated</bpmn:incoming>
       <bpmn:outgoing>Flow_PublishOrderCreated_To_HandmadeGateway</bpmn:outgoing>
     </bpmn:serviceTask>

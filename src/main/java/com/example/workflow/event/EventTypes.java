@@ -12,6 +12,7 @@ public final class EventTypes {
     public static final String GUEST_ORDER_CREATED = "GUEST_ORDER_CREATED";
     public static final String ORDER_DELIVERED = "ORDER_DELIVERED";
     public static final String ORDER_CANCELLED = "ORDER_CANCELLED";
+    public static final String PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED";
     public static final String STAFF_COMMISSION_REFRESH_REQUESTED = "STAFF_COMMISSION_REFRESH_REQUESTED";
     public static final String CACHE_EVICTION_REQUESTED = "CACHE_EVICTION_REQUESTED";
 

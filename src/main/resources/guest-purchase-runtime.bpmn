@@ -13,13 +13,7 @@
       <bpmn:outgoing>Flow_Split_To_Publish</bpmn:outgoing>
       <bpmn:outgoing>Flow_Split_To_ManagerApproval</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Publish guest order confirmation event" camunda:asyncBefore="true" camunda:delegateExpression="${workflowTaskDelegate}">
-      <bpmn:extensionElements>
-        <camunda:inputOutput>
-          <camunda:inputParameter name="taskType">PUBLISH_WORKFLOW_EVENT</camunda:inputParameter>
-          <camunda:inputParameter name="eventType">GUEST_ORDER_CREATED</camunda:inputParameter>
-        </camunda:inputOutput>
-      </bpmn:extensionElements>
+    <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Order-created event already published by checkout" camunda:expression="${true}">
       <bpmn:incoming>Flow_Split_To_Publish</bpmn:incoming>
       <bpmn:outgoing>Flow_Publish_To_ApprovalJoin</bpmn:outgoing>
     </bpmn:serviceTask>

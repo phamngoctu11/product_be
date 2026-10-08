@@ -5,6 +5,7 @@ import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
+import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderMapper;
@@ -107,19 +108,6 @@ public class OrderService {
                 .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, variantId));
     }
 
-    private void sendOrderConfirmationEmailAsync(User user, Order order) {
-        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
-            return;
-        }
-        emailService.sendOrderConfirmationEmail(
-                user.getEmail(),
-                user.getLastname(),
-                order.getId(),
-                resolveFinalPrice(order),
-                "Thanh toan Online qua MoMo"
-        );
-    }
-
     @Transactional
     public void claimWarehouseOrder(Long orderId) {
         Order order = orderLookupService.require(orderId);
@@ -184,20 +172,28 @@ public class OrderService {
             if (assignedStaff != null) {
                 saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc giao cho ban phu trach xuat kho.", orderId, assignedStaff.getId(), "/topic/user-notifications/" + assignedStaff.getId());
             }
-            saveCustomerNotificationIfSystemUser(order, "Don hang da duyet", "Don #" + orderId + " dang duoc chuan bi.");
         } else {
             order.setWarehouseStaff(null);
-            order.setCancelReason("Quan ly tu choi: " + request.getCancelReason());
+            String rejectionReason = "Quan ly tu choi: " + request.getCancelReason();
+            order.setCancelReason(rejectionReason);
             variables.put("isApproved", false);
-            // Rejected orders are cancelled by the workflow delegate.
-            saveCustomerNotificationIfSystemUser(order, "Don hang bi tu choi", "Ly do: " + request.getCancelReason());
-            sendGuestCancellationEmailIfNeeded(order);
+            orderCancellationService.cancel(
+                    order,
+                    new OrderCancellationService.Request(
+                            rejectionReason,
+                            "MANAGER_REJECT_RETURN",
+                            false,
+                            manager.getId(),
+                            CancellationSource.MANAGER_REJECTED,
+                            "manager-reject:" + orderId,
+                            true,
+                            "Manager rejected order"
+                    )
+            );
         }
 
         if (request.isApproved()) {
             saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
-        } else {
-            saveOrderAndAuditStatusChange(order, oldStatus, null);
         }
         //taskService.complete(task.getId(), variables);
 
@@ -318,17 +314,8 @@ public class OrderService {
         );
         saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
         eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
-        saveAndSendNotification(
-                "Danh gia san pham",
-                "Don hang #" + orderId + " da hoan tat. Hay chia se trai nghiem cua ban cho tung san pham.",
-                orderId,
-                currentUser.getId(),
-                "/topic/user-notifications/" + currentUser.getId()
-        );
 
         taskService.complete(task.getId());
-
-        applicationCacheService.evictCustomerReceiptConfirmed(order, currentUser.getId());
 
         boolean matched = mismatches.isEmpty();
         String message = matched
@@ -534,7 +521,6 @@ public class OrderService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_CANCELLED);
         }
 
-        OrderStatus oldStatus = order.getStatus();
         deductUserReputation(user, calculateCancellationReputationDeduction(order), id);
         String cancelReason = "Khach hang tu huy: " + reason;
         orderCancellationService.cancel(
@@ -551,10 +537,6 @@ public class OrderService {
                 )
         );
 
-        saveAndSendNotification("Khach hang huy don", "Don hang #" + id + " da bi huy.", id, null, "/topic/admin-notifications");
-        saveAndSendNotification("Huy don thanh cong", "Ban da huy don hang #" + id + " thanh cong.", id, user.getId(), "/topic/user-notifications/" + user.getId());
-
-        applicationCacheService.evictCustomerCancelled(order, oldStatus, user.getId());
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -704,17 +686,6 @@ public class OrderService {
         );
     }
 
-    private void sendGuestCancellationEmailIfNeeded(Order order) {
-        if (order == null || order.getUser() != null || order.getEmail() == null || order.getEmail().isBlank()) {
-            return;
-        }
-        emailService.sendOrderCancellationEmail(
-                order.getEmail(),
-                order.getRecipientName(),
-                order.getId(),
-                order.getCancelReason()
-        );
-    }
     @Transactional
     public void processMomoCallbackResult(Long orderId, String resultCode) {
         Order order = orderLookupService.requireForUpdate(orderId);
@@ -729,7 +700,6 @@ public class OrderService {
             handleFailedMomoPayment(order, resultCode);
         }
 
-        applicationCacheService.evictMomoCallbackProcessed(order);
     }
 
     private void handleSuccessfulMomoPayment(Order order) {
@@ -740,21 +710,7 @@ public class OrderService {
 
         correlatePaymentSuccess(orderId);
 
-        saveAndSendNotification(
-                "Don Online moi da thanh toan",
-                "Don hang #" + orderId + " da thanh toan qua MoMo va dang cho duyet.",
-                orderId,
-                null,
-                "/topic/admin-notifications"
-        );
-        saveAndSendNotification(
-                "Thanh toan thanh cong",
-                "Ban da thanh toan thanh cong don hang #" + orderId + ". Cua hang dang chuan bi don.",
-                orderId,
-                order.getUser().getId(),
-                "/topic/user-notifications/" + order.getUser().getId()
-        );
-        sendOrderConfirmationEmailAsync(order.getUser(), order);
+        eventPublisher.publishAfterCommit(EventTypes.PAYMENT_CONFIRMED, new PaymentConfirmedEvent(orderId));
     }
 
     private void handleFailedMomoPayment(Order order, String resultCode) {
@@ -774,13 +730,6 @@ public class OrderService {
                 )
         );
 
-        saveAndSendNotification(
-                "Thanh toan that bai",
-                "Giao dich cho don hang #" + orderId + " khong thanh cong. Don hang da bi huy.",
-                orderId,
-                order.getUser().getId(),
-                "/topic/user-notifications/" + order.getUser().getId()
-        );
     }
 
     private void correlatePaymentSuccess(Long orderId) {
@@ -866,6 +815,10 @@ public class OrderService {
     public Page<OrderListDTO> getPendingOrders(OrderStatus status,Pageable pageable) {
         // Read list DTOs directly from DB.
         return orderRepository.findListDtoByStatusOldestFirst(status, PageableUtils.normalize(pageable, 20, 100));
+    }
+
+    public InventoryReservationService getInventoryReservationService() {
+        return inventoryReservationService;
     }
 }
 

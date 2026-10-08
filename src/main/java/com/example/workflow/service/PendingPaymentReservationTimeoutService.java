@@ -4,7 +4,6 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -26,7 +24,6 @@ public class PendingPaymentReservationTimeoutService {
 
     private final OrderRepository orderRepository;
     private final OrderCancellationService cancellationService;
-    private final ApplicationCacheService applicationCacheService;
 
     @Value("${checkout.reservation-timeout.minutes:15}")
     private long timeoutMinutes;
@@ -45,16 +42,13 @@ public class PendingPaymentReservationTimeoutService {
         }
 
         int cancelled = 0;
-        List<Order> expiredOrders = new ArrayList<>();
         for (Long orderId : orderIds) {
             Order expiredOrder = expireOrderIfStillPending(orderId);
             if (expiredOrder != null) {
                 cancelled++;
-                expiredOrders.add(expiredOrder);
             }
         }
         if (cancelled > 0) {
-            applicationCacheService.evictPendingPaymentReservationTimeout(expiredOrders);
             log.info("Cancelled {} expired pending-payment orders.", cancelled);
         }
     }

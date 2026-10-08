@@ -63,8 +63,6 @@ public class CheckoutService {
     private final OrderLookupTokenService orderLookupTokenService;
     private final DurableRequestExecutor durableRequests;
     private final DomainEventPublisher eventPublisher;
-    private final EmailService emailService;
-    private final NotificationService notificationService;
     private final ApplicationCacheService applicationCacheService;
     private final ObjectMapper objectMapper;
 
@@ -157,17 +155,7 @@ public class CheckoutService {
         Order saved = orderRepository.saveAndFlush(order);
         removeCheckedOutItems(cart, selectedItems);
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(saved.getId()));
-        if (StringUtils.hasText(saved.getEmail())) {
-            emailService.sendOrderConfirmationEmail(
-                    saved.getEmail(), saved.getRecipientName(), saved.getId(), saved.getFinalPrice(), paymentLabel(paymentMethod)
-            );
-        }
-        notificationService.sendNotification(
-                "Đặt hàng thành công",
-                "Đơn hàng #" + saved.getId() + " đã được tạo và đang chờ quản lý duyệt.",
-                saved.getId(), userId, null, "/topic/user-notifications/" + userId
-        );
-        applicationCacheService.evictUserCheckout(userId, request.getUserVoucherId());
+        applicationCacheService.evictUserCheckoutCart(userId);
         return response(saved, null);
     }
 
@@ -204,7 +192,7 @@ public class CheckoutService {
                 EventTypes.GUEST_ORDER_CREATED,
                 new GuestOrderCreatedEvent(saved.getId(), rawLookupToken, maximumDurationDays(saved))
         );
-        applicationCacheService.evictGuestCheckout(guestSessionId);
+        applicationCacheService.evictGuestCheckoutCart(guestSessionId);
         return response(saved, rawLookupToken);
     }
 
@@ -372,12 +360,6 @@ public class CheckoutService {
 
     private String normalizeCode(String value) {
         return StringUtils.hasText(value) ? value.trim().toUpperCase(Locale.ROOT) : null;
-    }
-
-    private String paymentLabel(PaymentMethod method) {
-        return method == PaymentMethod.COD
-                ? "Thanh toán khi nhận hàng (COD)"
-                : "Thanh toán trực tuyến sau khi đơn được duyệt";
     }
 
 }

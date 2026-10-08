@@ -59,8 +59,7 @@ public class OrderTransitionService {
                 CacheEvictionEntry.allEntries(CacheNames.USER_ORDERS),
                 CacheEvictionEntry.allEntries(CacheNames.USER_CANCELLED_ORDERS),
                 CacheEvictionEntry.allEntries(CacheNames.MANAGER_PENDING_ORDERS),
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_ASSIGNED_ORDERS),
-                CacheEvictionEntry.allEntries(CacheNames.DASHBOARD_STATS)));
+                CacheEvictionEntry.allEntries(CacheNames.STAFF_ASSIGNED_ORDERS)));
         return order;
     }
 }

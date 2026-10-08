@@ -1,8 +1,6 @@
 package com.example.workflow.bpmn;
 
 import com.example.workflow.delegate.WorkflowTaskDelegate;
-import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.workflow.WorkflowTaskHandlerRegistry;
 import com.example.workflow.workflow.handler.PublishWorkflowEventTaskHandler;
@@ -17,10 +15,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.ArgumentMatchers.any;
 
 class GuestPurchaseFlowBpmnTest {
@@ -33,12 +30,7 @@ class GuestPurchaseFlowBpmnTest {
             var instance = start(engine, false, 200L);
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
 
-            executePendingJob(engine, instance.getId());
-
-            verify(publisher).publishAfterCommit(
-                    EventTypes.GUEST_ORDER_CREATED,
-                    new GuestOrderCreatedEvent(200L)
-            );
+            verifyNoInteractions(publisher);
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
 
             completeManagerApproval(engine, instance.getId(), true);
@@ -56,7 +48,6 @@ class GuestPurchaseFlowBpmnTest {
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
             var instance = start(engine, true, 201L);
-            executePendingJob(engine, instance.getId());
 
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
 
@@ -89,24 +80,14 @@ class GuestPurchaseFlowBpmnTest {
     }
 
     @Test
-    void asynchronousHandlerFailureCreatesIncidentWithoutRemovingProcess() {
+    void checkoutOwnsGuestCreatedEventAndWorkflowDoesNotRepublishIt() {
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-        doThrow(new IllegalStateException("redis unavailable"))
-                .when(publisher)
-                .publishAfterCommit(EventTypes.GUEST_ORDER_CREATED, new GuestOrderCreatedEvent(202L));
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
             var instance = start(engine, false, 202L);
 
-            for (int attempt = 0; attempt < 3; attempt++) {
-                String jobId = engine.getManagementService().createJobQuery()
-                        .processInstanceId(instance.getId()).singleResult().getId();
-                assertThatThrownBy(() -> engine.getManagementService().executeJob(jobId))
-                        .isInstanceOf(RuntimeException.class);
-            }
-
-            assertThat(engine.getRuntimeService().createIncidentQuery()
-                    .processInstanceId(instance.getId()).count()).isEqualTo(1);
+            verifyNoInteractions(publisher);
+            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
             assertThat(engine.getRuntimeService().createProcessInstanceQuery()
                     .processInstanceId(instance.getId()).count()).isEqualTo(1);
         } finally {
@@ -149,14 +130,6 @@ class GuestPurchaseFlowBpmnTest {
                         "guestOrder", true
                 )
         );
-    }
-
-    private void executePendingJob(ProcessEngine engine, String processInstanceId) {
-        String jobId = engine.getManagementService().createJobQuery()
-                .processInstanceId(processInstanceId)
-                .singleResult()
-                .getId();
-        engine.getManagementService().executeJob(jobId);
     }
 
     private String activeTaskKey(ProcessEngine engine, String processInstanceId) {

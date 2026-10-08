@@ -4,7 +4,6 @@ import com.example.workflow.entity.Order;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
-import com.example.workflow.service.cache.ApplicationCacheService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -23,11 +22,9 @@ import static org.mockito.Mockito.when;
 class PendingPaymentReservationTimeoutServiceTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final OrderCancellationService cancellationService = mock(OrderCancellationService.class);
-    private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final PendingPaymentReservationTimeoutService service = new PendingPaymentReservationTimeoutService(
             orderRepository,
-            cancellationService,
-            applicationCacheService
+            cancellationService
     );
 
     @Test
@@ -51,6 +48,5 @@ class PendingPaymentReservationTimeoutServiceTest {
             assertThat(request.source()).isEqualTo(CancellationSource.PAYMENT_TIMEOUT);
             assertThat(request.deleteWorkflow()).isTrue();
         });
-        verify(applicationCacheService).evictPendingPaymentReservationTimeout(List.of(order));
     }
 }

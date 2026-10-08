@@ -7,7 +7,6 @@ import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.OrderLookupService;
-import com.example.workflow.service.cache.ApplicationCacheService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -24,12 +23,10 @@ import static org.mockito.Mockito.when;
 class CancelOrderDelegateTest {
     private final OrderLookupService orderLookupService = mock(OrderLookupService.class);
     private final OrderCancellationService cancellationService = mock(OrderCancellationService.class);
-    private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final DelegateExecution execution = mock(DelegateExecution.class);
     private final CancelOrderDelegate delegate = new CancelOrderDelegate(
             orderLookupService,
-            cancellationService,
-            applicationCacheService
+            cancellationService
     );
 
     @Test
@@ -53,7 +50,6 @@ class CancelOrderDelegateTest {
             assertThat(request.reference()).isEqualTo("camunda:process-10");
             assertThat(request.deleteWorkflow()).isFalse();
         });
-        verify(applicationCacheService).evictCamundaOrderCancelled(order, OrderStatus.PENDING_APPROVAL);
     }
 
     @Test
@@ -67,8 +63,6 @@ class CancelOrderDelegateTest {
         delegate.execute(execution);
 
         verify(cancellationService, never()).cancel(eq(order), org.mockito.ArgumentMatchers.any());
-        verify(applicationCacheService, never()).evictCamundaOrderCancelled(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

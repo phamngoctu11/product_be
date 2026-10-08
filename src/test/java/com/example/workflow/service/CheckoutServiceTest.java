@@ -40,7 +40,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,8 +54,6 @@ class CheckoutServiceTest {
     @Mock private OrderLookupTokenService tokenService;
     @Mock private DurableRequestExecutor durableRequests;
     @Mock private DomainEventPublisher eventPublisher;
-    @Mock private EmailService emailService;
-    @Mock private NotificationService notificationService;
     @Mock private ApplicationCacheService cacheService;
 
     private CheckoutService checkoutService;
@@ -66,7 +63,7 @@ class CheckoutServiceTest {
         checkoutService = new CheckoutService(
                 currentUserService, userService, cartRepository, cartItemRepository, orderRepository,
                 voucherService, new CatalogDurationCalculator(), tokenService, durableRequests,
-                eventPublisher, emailService, notificationService, cacheService, new ObjectMapper()
+                eventPublisher, cacheService, new ObjectMapper()
         );
         when(durableRequests.execute(anyString(), anyString(), anyString(), any())).thenAnswer(invocation -> {
             Supplier<String> operation = invocation.getArgument(3);
@@ -116,6 +113,7 @@ class CheckoutServiceTest {
         assertThat(response.getPayUrl()).isNull();
         assertThat(response.getStatus()).isEqualTo("PENDING_APPROVAL");
         verify(eventPublisher).publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(900L));
+        verify(cacheService).evictUserCheckoutCart("u-1");
     }
 
     @Test
@@ -142,7 +140,7 @@ class CheckoutServiceTest {
                 EventTypes.GUEST_ORDER_CREATED,
                 new GuestOrderCreatedEvent(900L, "raw-token", 5)
         );
-        verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
+        verify(cacheService).evictGuestCheckoutCart(session);
         assertThat(response.getLookupToken()).isEqualTo("raw-token");
         assertThat(response.getPaymentMethod()).isEqualTo("COD");
         assertThat(response.getPaymentStatus()).isEqualTo("NOT_DUE");

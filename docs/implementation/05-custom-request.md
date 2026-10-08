@@ -49,8 +49,7 @@ Nếu id không tồn tại hoặc thuộc user khác, API cùng trả `CUSTOM_R
 Ba event outbox là:
 
 - `ORDER_CREATED` để các consumer chung biết Order đã tồn tại.
-- `ORDER_CONFIRMATION_EMAIL_REQUESTED` với nội dung custom, quantity và trạng thái đang chờ quản lý duyệt.
-- `NOTIFICATION_REQUESTED` cho đúng user sở hữu Order.
+- Transaction submit chỉ ghi `ORDER_CREATED`. Consumer của event này đọc snapshot custom rồi route `ORDER_CONFIRMATION_EMAIL_REQUESTED` với spec/quantity và `NOTIFICATION_REQUESTED` cho đúng user.
 
 Retry cùng key/payload trả lại cùng `orderId`. Cùng key nhưng payload khác bị `REQUEST_KEY_CONFLICT`. Một key khác gửi lại draft đã submit cũng chỉ trả Order đã liên kết. Unique `custom_requests.linked_order_id`, khóa pessimistic và durable request tạo ba lớp bảo vệ chống sinh Order lặp.
 
@@ -91,7 +90,7 @@ Các tình huống mới đã được kiểm tra:
 - Draft đã submit trả Order cũ, không phát lại email/notification/event.
 - Delete dùng khóa owner + version và durable idempotency.
 - Consumer attribution bỏ qua custom item có giá null.
-- Kiểm thử transaction thật `CustomRequestSubmissionAtomicityTest`: retry cùng key chỉ có 1 Order, 1 OrderItem, 1 durable request và 3 outbox event.
+- Kiểm thử transaction thật `CustomRequestSubmissionAtomicityTest`: retry cùng key chỉ có 1 Order, 1 OrderItem, 1 durable request và 1 outbox event cha `ORDER_CREATED`; email/notification được fan-out bởi consumer sau commit.
 - Changelog chạy lặp an toàn trên H2 MySQL mode.
 
 MySQL Testcontainers chưa chạy được trong checkpoint trước do Docker daemon trên máy không khả dụng. Vì vậy trạng thái là `IMPLEMENTED`, chưa nâng thành `VERIFIED` trên MySQL thực tế.

@@ -41,7 +41,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,8 +53,6 @@ class CustomRequestServiceTest {
     @Mock private OrderRepository orderRepository;
     @Mock private DurableRequestExecutor durableRequests;
     @Mock private DomainEventPublisher eventPublisher;
-    @Mock private EmailService emailService;
-    @Mock private NotificationService notificationService;
 
     private ObjectMapper objectMapper;
     private CustomRequestService service;
@@ -71,8 +68,6 @@ class CustomRequestServiceTest {
                 new CustomRequestMapperImpl(),
                 durableRequests,
                 eventPublisher,
-                emailService,
-                notificationService,
                 objectMapper
         );
     }
@@ -96,7 +91,6 @@ class CustomRequestServiceTest {
         assertThat(result.editable()).isTrue();
         verify(orderRepository, never()).saveAndFlush(any());
         verify(eventPublisher, never()).publishAfterCommit(anyString(), any());
-        verify(emailService, never()).sendCustomOrderConfirmationEmail(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -159,13 +153,6 @@ class CustomRequestServiceTest {
         assertThat(result.getStatus()).isEqualTo("PENDING_APPROVAL");
         assertThat(result.getFinalPrice()).isNull();
         verify(eventPublisher).publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(900L));
-        verify(emailService).sendCustomOrderConfirmationEmail(
-                "an@example.com", "Nguyen An", 900L, "custom spec", 2
-        );
-        verify(notificationService).sendNotification(
-                eq("Yêu cầu custom đã được tạo"), anyString(), eq(900L), eq("user-1"), eq(null),
-                eq("/topic/user-notifications/user-1")
-        );
     }
 
     @Test
@@ -191,8 +178,6 @@ class CustomRequestServiceTest {
         assertThat(result.getOrderId()).isEqualTo(900L);
         verify(orderRepository, never()).saveAndFlush(any());
         verify(eventPublisher, never()).publishAfterCommit(anyString(), any());
-        verify(emailService, never()).sendCustomOrderConfirmationEmail(any(), any(), any(), any(), any());
-        verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any(), any());
     }
 
     @Test

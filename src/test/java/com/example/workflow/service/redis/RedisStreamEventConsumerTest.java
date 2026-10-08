@@ -1,8 +1,6 @@
 package com.example.workflow.service.redis;
 
 import com.example.workflow.entity.Order;
-import com.example.workflow.entity.User;
-import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
@@ -16,7 +14,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,7 +23,7 @@ class RedisStreamEventConsumerTest {
     private final NotificationService notificationService = mock(NotificationService.class);
     private final EmailService emailService = mock(EmailService.class);
     private final OrderRepository orderRepository = mock(OrderRepository.class);
-    private final ConsultationAttributionService consultationAttributionService = mock(ConsultationAttributionService.class);
+    private final OrderLifecycleEventHandler orderLifecycleEventHandler = mock(OrderLifecycleEventHandler.class);
     private final StaffCommissionService staffCommissionService = mock(StaffCommissionService.class);
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests = mock(com.example.workflow.service.consistency.DurableRequestExecutor.class);
@@ -37,7 +34,7 @@ class RedisStreamEventConsumerTest {
             notificationService,
             emailService,
             orderRepository,
-            consultationAttributionService,
+            orderLifecycleEventHandler,
             staffCommissionService,
             optionalCacheService,
             durableRequests,
@@ -46,83 +43,28 @@ class RedisStreamEventConsumerTest {
 
     @Test
     void guestOrderCreatedEventSendsGuestConfirmationEmail() throws JsonProcessingException {
-        Order order = guestOrder();
-        when(orderRepository.findById(200L)).thenReturn(Optional.of(order));
-        when(durableRequests.execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any()))
-                .thenAnswer(call -> ((java.util.function.Supplier<String>) call.getArgument(3)).get());
-
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
-        verify(emailService).sendOrderConfirmationEmailNowOrThrow(
-                "guest@example.com",
-                "Guest Customer",
-                200L,
-                50.0,
-                "Thanh toan khi nhan hang (COD)"
-        );
-        verify(durableRequests).execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any());
+        verify(orderLifecycleEventHandler).handleGuestOrderCreated(new GuestOrderCreatedEvent(200L));
     }
 
     @Test
     void tokenizedGuestOrderCreatedEventIncludesSecureOrderLinkAndDuration() throws JsonProcessingException {
-        when(orderRepository.findById(200L)).thenReturn(Optional.of(guestOrder()));
-        when(durableRequests.execute(
-                org.mockito.ArgumentMatchers.eq("guest-order-created"),
-                org.mockito.ArgumentMatchers.eq("200"),
-                org.mockito.ArgumentMatchers.eq("200:5"),
-                org.mockito.ArgumentMatchers.any()
-        )).thenAnswer(call -> ((java.util.function.Supplier<String>) call.getArgument(3)).get());
-        ReflectionTestUtils.setField(consumer, "frontendBaseUrl", "http://localhost:4200");
-
+        GuestOrderCreatedEvent event = new GuestOrderCreatedEvent(200L, "raw-token", 5);
         ReflectionTestUtils.invokeMethod(
                 consumer,
                 "handleGuestOrderCreated",
-                objectMapper.writeValueAsString(new GuestOrderCreatedEvent(200L, "raw-token", 5))
+                objectMapper.writeValueAsString(event)
         );
 
-        verify(emailService).sendOrderConfirmationEmailNowOrThrow(
-                "guest@example.com",
-                "Guest Customer",
-                200L,
-                50.0,
-                "Thanh toán khi nhận hàng (COD)",
-                "http://localhost:4200/guest/orders/200?token=raw-token",
-                5
-        );
+        verify(orderLifecycleEventHandler).handleGuestOrderCreated(event);
     }
 
     @Test
-    void guestOrderCreatedEventDoesNotSendDuplicateEmail() throws JsonProcessingException {
-        when(orderRepository.findById(200L)).thenReturn(Optional.of(guestOrder()));
-        when(durableRequests.execute(org.mockito.ArgumentMatchers.eq("guest-order-created"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.eq("200"), org.mockito.ArgumentMatchers.any())).thenReturn("{}");
-
+    void guestOrderCreatedEventDelegatesExactlyOnce() throws JsonProcessingException {
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
-        verify(emailService, never()).sendOrderConfirmationEmailNowOrThrow(
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any()
-        );
-    }
-
-    @Test
-    void guestOrderCreatedEventSkipsSystemUserOrder() throws JsonProcessingException {
-        Order order = guestOrder();
-        order.setUser(new User());
-        when(orderRepository.findById(200L)).thenReturn(Optional.of(order));
-
-        ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
-
-        org.mockito.Mockito.verifyNoInteractions(durableRequests);
-        verify(emailService, never()).sendOrderConfirmationEmailNowOrThrow(
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any()
-        );
+        verify(orderLifecycleEventHandler).handleGuestOrderCreated(new GuestOrderCreatedEvent(200L));
     }
 
     @Test

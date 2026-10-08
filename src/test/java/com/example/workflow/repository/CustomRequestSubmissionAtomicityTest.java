@@ -143,20 +143,8 @@ class CustomRequestSubmissionAtomicityTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_requests", Integer.class))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_outbox", Integer.class))
-                .isEqualTo(3);
+                .isEqualTo(1);
         assertThat(jdbc.queryForList("SELECT event_type FROM workflow_outbox", String.class))
-                .containsExactlyInAnyOrder(
-                        "ORDER_CREATED",
-                        "ORDER_CONFIRMATION_EMAIL_REQUESTED",
-                        "NOTIFICATION_REQUESTED"
-                );
-        String emailPayload = jdbc.queryForObject(
-                "SELECT payload FROM workflow_outbox WHERE event_type='ORDER_CONFIRMATION_EMAIL_REQUESTED'",
-                String.class
-        );
-        assertThat(emailPayload)
-                .contains("Vòng tay bạc khắc tên")
-                .contains("\"quantity\":2")
-                .doesNotContain("totalPrice\":0");
+                .containsExactly("ORDER_CREATED");
     }
 }

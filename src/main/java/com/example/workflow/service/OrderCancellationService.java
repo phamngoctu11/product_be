@@ -55,9 +55,24 @@ public class OrderCancellationService {
         historyService.record(order, oldStatus, OrderStatus.CANCELLED, request.actorId());
         eventPublisher.publishAfterCommit(
                 EventTypes.ORDER_CANCELLED,
-                new OrderCancelledEvent(order.getId(), request.reason())
+                new OrderCancelledEvent(
+                        order.getId(),
+                        oldStatus,
+                        request.reason(),
+                        request.source(),
+                        request.actorId(),
+                        assignedStaffId(order),
+                        now
+                )
         );
         return true;
+    }
+
+    private String assignedStaffId(Order order) {
+        if (order.getAssignedStaff() != null) {
+            return order.getAssignedStaff().getId();
+        }
+        return order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
     }
 
     public record Request(

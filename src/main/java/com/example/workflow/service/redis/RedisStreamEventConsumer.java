@@ -10,6 +10,7 @@ import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
+import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
@@ -50,7 +51,7 @@ public class RedisStreamEventConsumer {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final OrderRepository orderRepository;
-    private final ConsultationAttributionService consultationAttributionService;
+    private final OrderLifecycleEventHandler orderLifecycleEventHandler;
     private final StaffCommissionService staffCommissionService;
     private final OptionalCacheService optionalCacheService;
     private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests;
@@ -64,9 +65,6 @@ public class RedisStreamEventConsumer {
 
     @Value("${workflow.events.redis-stream.batch-size:20}")
     private int batchSize;
-
-    @Value("${app.frontend-base-url:http://localhost:4200}")
-    private String frontendBaseUrl;
 
     private volatile boolean groupReady;
     private boolean redisFailureLogged;
@@ -188,6 +186,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
+            case EventTypes.PAYMENT_CONFIRMED -> handlePaymentConfirmed(payload);
             case EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED -> handleStaffCommissionRefreshRequested(payload);
             case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
             default -> throw new IllegalArgumentException("Unsupported event type " + type);
@@ -254,10 +253,7 @@ public class RedisStreamEventConsumer {
     }
 
     private void handleOrderCreated(String payload) {
-        OrderCreatedEvent event = readPayload(payload, OrderCreatedEvent.class);
-        Order order = orderRepository.findById(event.orderId())
-                .orElseThrow(() -> new IllegalStateException("Order not found for ORDER_CREATED event: " + event.orderId()));
-        consultationAttributionService.recordOrderAttributions(order);
+        orderLifecycleEventHandler.handleOrderCreated(readPayload(payload, OrderCreatedEvent.class));
     }
 
     private void handleWorkflowEmailRequested(String payload) {
@@ -288,67 +284,19 @@ public class RedisStreamEventConsumer {
     }
 
     private void handleGuestOrderCreated(String payload) {
-        GuestOrderCreatedEvent event = readPayload(payload, GuestOrderCreatedEvent.class);
-        if (event.orderId() == null) {
-            throw new IllegalArgumentException("Guest order created event must contain orderId");
-        }
-
-        Order order = orderRepository.findById(event.orderId())
-                .orElseThrow(() -> new IllegalStateException("Order not found for GUEST_ORDER_CREATED event: " + event.orderId()));
-        if (order.getUser() != null) {
-            log.debug("Skipping GUEST_ORDER_CREATED email for system user order {}", event.orderId());
-            return;
-        }
-        if (!StringUtils.hasText(order.getEmail())) {
-            log.debug("Skipping guest order confirmation email for order {} because email is empty", event.orderId());
-            return;
-        }
-        String accessUrl = StringUtils.hasText(event.lookupToken())
-                ? org.springframework.web.util.UriComponentsBuilder
-                        .fromHttpUrl(frontendBaseUrl)
-                        .path("/guest/orders/")
-                        .path(event.orderId().toString())
-                        .queryParam("token", event.lookupToken())
-                        .build()
-                        .encode()
-                        .toUriString()
-                : null;
-        durableRequests.execute(
-                "guest-order-created",
-                event.orderId().toString(),
-                event.productionDurationDays() == null
-                        ? event.orderId().toString()
-                        : event.orderId() + ":" + event.productionDurationDays(),
-                () -> {
-                    if (accessUrl == null && event.productionDurationDays() == null) {
-                        emailService.sendOrderConfirmationEmailNowOrThrow(
-                                order.getEmail(), order.getRecipientName(), order.getId(), order.getFinalPrice(),
-                                "Thanh toan khi nhan hang (COD)"
-                        );
-                    } else {
-                        emailService.sendOrderConfirmationEmailNowOrThrow(
-                                order.getEmail(),
-                                order.getRecipientName(),
-                                order.getId(),
-                                order.getFinalPrice(),
-                                "Thanh toán khi nhận hàng (COD)",
-                                accessUrl,
-                                event.productionDurationDays()
-                        );
-                    }
-                    return "{}";
-                }
-        );
+        orderLifecycleEventHandler.handleGuestOrderCreated(readPayload(payload, GuestOrderCreatedEvent.class));
     }
 
     private void handleOrderDelivered(String payload) {
-        OrderDeliveredEvent event = readPayload(payload, OrderDeliveredEvent.class);
-        consultationAttributionService.confirmOrderAttributions(event.orderId());
+        orderLifecycleEventHandler.handleOrderDelivered(readPayload(payload, OrderDeliveredEvent.class));
     }
 
     private void handleOrderCancelled(String payload) {
-        OrderCancelledEvent event = readPayload(payload, OrderCancelledEvent.class);
-        consultationAttributionService.cancelOrderAttributions(event.orderId());
+        orderLifecycleEventHandler.handleOrderCancelled(readPayload(payload, OrderCancelledEvent.class));
+    }
+
+    private void handlePaymentConfirmed(String payload) {
+        orderLifecycleEventHandler.handlePaymentConfirmed(readPayload(payload, PaymentConfirmedEvent.class));
     }
 
     private void handleStaffCommissionRefreshRequested(String payload) {

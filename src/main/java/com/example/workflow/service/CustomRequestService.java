@@ -54,8 +54,6 @@ public class CustomRequestService {
     private final CustomRequestMapper customRequestMapper;
     private final DurableRequestExecutor durableRequests;
     private final DomainEventPublisher eventPublisher;
-    private final EmailService emailService;
-    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     public CustomRequestDTO create(CreateCustomRequest request, String idempotencyKey) {
@@ -182,14 +180,6 @@ public class CustomRequestService {
         customRequestRepository.saveAndFlush(draft);
 
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(saved.getId()));
-        emailService.sendCustomOrderConfirmationEmail(
-                saved.getEmail(), saved.getRecipientName(), saved.getId(), draft.getSpec(), draft.getQuantity()
-        );
-        notificationService.sendNotification(
-                "Yêu cầu custom đã được tạo",
-                "Yêu cầu custom cho đơn #" + saved.getId() + " đã được tạo và đang chờ quản lý duyệt.",
-                saved.getId(), ownerId, null, "/topic/user-notifications/" + ownerId
-        );
         return submissionResponse(saved);
     }
 

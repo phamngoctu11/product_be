@@ -5,7 +5,6 @@ import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.OrderLookupService;
-import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
@@ -18,7 +17,6 @@ public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderLookupService orderLookupService;
     private final OrderCancellationService cancellationService;
-    private final ApplicationCacheService applicationCacheService;
 
     @Override
     @Transactional
@@ -29,7 +27,6 @@ public class CancelOrderDelegate implements JavaDelegate {
             return;
         }
 
-        OrderStatus oldStatus = order.getStatus();
         cancellationService.cancel(
                 order,
                 new OrderCancellationService.Request(
@@ -43,7 +40,5 @@ public class CancelOrderDelegate implements JavaDelegate {
                         null
                 )
         );
-
-        applicationCacheService.evictCamundaOrderCancelled(order, oldStatus);
     }
 }

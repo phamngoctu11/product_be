@@ -30,7 +30,7 @@ Route `/api/cart/approve/{userId}` được đánh dấu deprecated và chuyển
 
 Trong operation của durable request: khóa cart → kiểm tra toàn bộ selection/catalog → snapshot item → consume voucher → lưu Order → xóa item đã chọn → ghi outbox email/notification/cache. Bất kỳ lỗi nào rollback cả request record, voucher, Order, cart và outbox.
 
-- USER: `ORDER_CREATED`, `ORDER_CONFIRMATION_EMAIL_REQUESTED`, `NOTIFICATION_REQUESTED`, cache eviction.
+- USER checkout chỉ ghi `ORDER_CREATED` trong transaction tạo đơn và xóa cache giỏ sau commit. Consumer của `ORDER_CREATED` mới route email, notification và cache read model Order/voucher; không invalidate catalog/dashboard.
 - Guest: `GUEST_ORDER_CREATED` chứa dữ liệu cần giao email link; consumer có milestone dedup theo orderId. Event legacy thiếu token vẫn được đọc tương thích.
 
 Không có migration schema mới ở PHẦN 04; các cột snapshot đã được tạo trong changelog PHẦN 02.

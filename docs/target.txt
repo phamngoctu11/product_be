@@ -775,6 +775,10 @@ J. YÊU CẦU PHI CHỨC NĂNG VÀ NHẤT QUÁN
 - Phân quyền cả endpoint và WebSocket; token guest có scope, không chỉ orderId.
 - Cache chỉ tối ưu đọc, database quyết định giá/quyền/trạng thái.
 - Sau thay đổi nghiệp vụ, invalidate cache đơn/danh sách/giỏ/reputation liên quan.
+- Checkout USER/Guest chỉ invalidate cache giỏ ngay sau commit; handler ORDER_CREATED/GUEST_ORDER_CREATED chỉ invalidate read model Order/voucher thực sự bị ảnh hưởng. Tạo hoặc hủy Order không invalidate PRODUCT, PRODUCTS hoặc WISHLIST_PRODUCTS vì catalog không còn biểu diễn tồn kho.
+- Staff claim, manager assign/review và manager KCS invalidate trực tiếp cache hàng công việc liên quan sau commit để màn hình vận hành không giữ kết quả cũ.
+- DASHBOARD_STATS và BEST_SELLING_PRODUCTS là dữ liệu quan sát, không invalidate theo từng thay đổi vòng đời Order; dùng TTL cố định 20 phút.
+- PRODUCT và PRODUCTS chỉ invalidate khi manager/admin làm thay đổi catalog như tạo, cập nhật, thêm variant, availability hoặc xóa Product.
 - Log có correlation orderId/processId/eventId/paymentId, không chứa token/secret.
 - Tất cả ngày giờ có timezone rõ, lưu nhất quán.
 - Có quan sát event lỗi, workflow incident, retry và trạng thái cần người xử lý.
