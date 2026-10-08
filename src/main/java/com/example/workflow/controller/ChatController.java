@@ -2,9 +2,11 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.ChatUserDTO;
-import com.example.workflow.entity.ChatMessage;
+import com.example.workflow.dto.ChatMessageDTO;
+import com.example.workflow.dto.SendChatMessageRequest;
 import com.example.workflow.service.redis.ChatRealtimePublisher;
 import com.example.workflow.service.ChatService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,14 +32,14 @@ public class ChatController {
     private final ChatRealtimePublisher chatRealtimePublisher;
 
     @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<List<ChatMessage>>> getChatHistory(
+    public ResponseEntity<ApiResponse<List<ChatMessageDTO>>> getChatHistory(
             @PathVariable("userId") String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(chatService.getChatHistory(userId)));
     }
 
     @GetMapping("/consultations/{requestId}")
-    public ResponseEntity<ApiResponse<List<ChatMessage>>> getConsultationChatHistory(
+    public ResponseEntity<ApiResponse<List<ChatMessageDTO>>> getConsultationChatHistory(
             @Positive(message = "Request id must be positive") @PathVariable("requestId") Long requestId,
             @Positive(message = "Product id must be positive") @RequestParam(required = false) Long productId
     ) {
@@ -50,22 +52,20 @@ public class ChatController {
     }
 
     @MessageMapping("/chat.send")
-    public void processMessage(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
-        applySessionSender(chatMessage, headerAccessor);
-        ChatMessage savedMessage = chatService.saveMessage(chatMessage);
+    public void processMessage(@Valid @Payload SendChatMessageRequest request, SimpMessageHeaderAccessor headerAccessor) {
+        ChatMessageDTO savedMessage = chatService.saveMessage(request, sessionUserId(headerAccessor));
 
-        if (savedMessage.isShopSender()) {
-            chatRealtimePublisher.publishMessage("/topic/chat/user/" + savedMessage.getUserId(), savedMessage);
+        if (savedMessage.shopSender()) {
+            chatRealtimePublisher.publishMessage("/topic/chat/user/" + savedMessage.userId(), savedMessage);
         }
-        if (savedMessage.getAssignedStaffId() != null) {
-            chatRealtimePublisher.publishMessage("/topic/chat/staff/" + savedMessage.getAssignedStaffId(), savedMessage);
+        if (savedMessage.assignedStaffId() != null) {
+            chatRealtimePublisher.publishMessage("/topic/chat/staff/" + savedMessage.assignedStaffId(), savedMessage);
         }
-        chatRealtimePublisher.publishMessage("/topic/chat/admin", savedMessage);
     }
 
-    private void applySessionSender(ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
+    private String sessionUserId(SimpMessageHeaderAccessor headerAccessor) {
         if (headerAccessor == null) {
-            return;
+            return null;
         }
 
         String sessionUserId = null;
@@ -75,14 +75,7 @@ public class ChatController {
         if (sessionUserId == null) {
             sessionUserId = parseString(headerAccessor.getFirstNativeHeader("userId"));
         }
-        if (sessionUserId == null) {
-            return;
-        }
-
-        chatMessage.setSenderId(sessionUserId);
-        if (!chatMessage.isShopSender() && chatMessage.getUserId() == null) {
-            chatMessage.setUserId(sessionUserId);
-        }
+        return sessionUserId;
     }
 
     private String parseString(Object value) {

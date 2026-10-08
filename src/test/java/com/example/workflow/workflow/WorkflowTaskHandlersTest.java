@@ -1,7 +1,6 @@
 package com.example.workflow.workflow;
 
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.workflow.handler.PublishWorkflowEventTaskHandler;
@@ -71,17 +70,16 @@ class WorkflowTaskHandlersTest {
     }
 
     @Test
-    void publishWorkflowEventBuildsGuestOrderPayload() {
+    void publishWorkflowEventRejectsGuestOrderCreatedBecauseCheckoutOwnsThatProducer() {
         DelegateExecution execution = mock(DelegateExecution.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         when(execution.getVariable("eventType")).thenReturn(EventTypes.GUEST_ORDER_CREATED);
         when(execution.getVariable("orderId")).thenReturn(200L);
 
-        new PublishWorkflowEventTaskHandler(publisher).handle(new WorkflowTaskContext(execution));
-
-        verify(publisher).publishAfterCommit(EventTypes.GUEST_ORDER_CREATED, new GuestOrderCreatedEvent(200L));
-        verify(execution).setVariable("workflowEventPublished", true);
-        verify(execution).setVariable("publishedEventType", EventTypes.GUEST_ORDER_CREATED);
+        assertThatThrownBy(() -> new PublishWorkflowEventTaskHandler(publisher)
+                .handle(new WorkflowTaskContext(execution)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("owned exclusively by guest checkout");
     }
 
     @Test

@@ -14,13 +14,15 @@ import com.example.workflow.nume.ProductReviewStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductReviewRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.mapper.ProductReviewImageMapper;
+import com.example.workflow.mapper.ProductReviewMapper;
+import com.example.workflow.mapper.ProductReviewMapperImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
@@ -46,16 +48,23 @@ class ProductReviewServiceTest {
     private CurrentUserService currentUserService;
 
     @Mock
-    private UserService userService;
-
-    @Mock
     private ApplicationCacheService applicationCacheService;
 
-    @Spy
-    private ObjectMapper objectMapper = new ObjectMapper();
-
-    @InjectMocks
     private ProductReviewService productReviewService;
+
+    @BeforeEach
+    void setUp() {
+        ProductReviewImageMapper imageMapper = new ProductReviewImageMapper(new ObjectMapper());
+        ProductReviewMapper reviewMapper = new ProductReviewMapperImpl(imageMapper);
+        productReviewService = new ProductReviewService(
+                productReviewRepository,
+                orderItemRepository,
+                currentUserService,
+                reviewMapper,
+                imageMapper,
+                applicationCacheService
+        );
+    }
 
     @Test
     void createForOrderItemCreatesReviewForDeliveredOwner() {
@@ -69,8 +78,6 @@ class ProductReviewServiceTest {
             review.setId(50L);
             return review;
         });
-        when(userService.displayName(user)).thenReturn("Nguyen An");
-
         ProductReviewDTO result = productReviewService.createForOrderItem(
                 40L,
                 new ProductReviewRequest(5, "  Chat luong tot  ", List.of(" image-1.jpg ", "", "image-1.jpg", "image-2.jpg"))

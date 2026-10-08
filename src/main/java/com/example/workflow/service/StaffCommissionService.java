@@ -2,11 +2,7 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.StaffCommissionDetailDTO;
 import com.example.workflow.dto.StaffCommissionSummaryDTO;
-import com.example.workflow.entity.ConsultationRequest;
 import com.example.workflow.entity.ConsultationSaleAttribution;
-import com.example.workflow.entity.OrderItem;
-import com.example.workflow.entity.Product;
-import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.StaffCommissionDailySummary;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.payload.CommissionRefreshKey;
@@ -15,6 +11,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.CommissionPeriod;
 import com.example.workflow.nume.ConsultationAttributionStatus;
 import com.example.workflow.nume.Role;
+import com.example.workflow.mapper.StaffCommissionDetailMapper;
 import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
 import com.example.workflow.repository.StaffCommissionDailySummaryRepository;
@@ -40,7 +37,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +50,7 @@ public class StaffCommissionService {
     private final ApplicationCacheService applicationCacheService;
     private final CurrentUserService currentUserService;
     private final UserService userService;
+    private final StaffCommissionDetailMapper detailMapper;
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -229,44 +226,11 @@ public class StaffCommissionService {
         Set<Long> reviewedIds = attributionIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(reviewRepository.findReviewedAttributionIds(attributionIds));
-        return attributionPage.map(attribution -> toDetailDto(attribution, reviewedIds.contains(attribution.getId())));
-    }
-
-    private StaffCommissionDetailDTO toDetailDto(ConsultationSaleAttribution attribution, boolean reviewed) {
-        User staff = attribution.getStaff();
-        User customer = attribution.getUser();
-        ConsultationRequest request = attribution.getConsultationRequest();
-        OrderItem orderItem = attribution.getOrderItem();
-        Product product = attribution.getProduct();
-        ProductVariant variant = attribution.getProductVariant();
-
-        return new StaffCommissionDetailDTO(
-                attribution.getId(),
-                staff.getId(),
-                userService.displayName(staff),
-                customer.getId(),
-                userService.displayName(customer),
-                attribution.getOrder().getId(),
-                orderItem.getId(),
-                product.getId(),
-                product.getProductName(),
-                variant.getId(),
-                variant.getVariantName(),
-                request.getId(),
-                attribution.getConsultationCreatedAt(),
-                resolveConsultationAcceptedAt(request),
-                request.getFirstStaffReplyAt(),
-                attribution.getOrderCreatedAt(),
-                attribution.getConfirmedAt(),
-                attribution.getCancelledAt(),
-                orderItem.getQuantity(),
-                orderItem.getReceivedQuantity(),
-                attribution.getItemAmount(),
-                attribution.getBonusPercent(),
-                attribution.getBonusAmount(),
-                attribution.getStatus(),
-                reviewed
-        );
+        return attributionPage.map(attribution -> detailMapper.toDto(
+                attribution,
+                resolveConsultationAcceptedAt(attribution.getConsultationRequest()),
+                reviewedIds.contains(attribution.getId())
+        ));
     }
 
     private StaffCommissionSummaryDTO buildStaffSummary(User staff, DateRange range) {
@@ -404,7 +368,7 @@ public class StaffCommissionService {
         }
     }
 
-    private LocalDateTime resolveConsultationAcceptedAt(ConsultationRequest request) {
+    private LocalDateTime resolveConsultationAcceptedAt(com.example.workflow.entity.ConsultationRequest request) {
         if (request.getClaimedAt() != null) {
             return request.getClaimedAt();
         }

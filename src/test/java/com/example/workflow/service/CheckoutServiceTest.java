@@ -23,6 +23,8 @@ import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.mapper.CheckoutResponseMapperImpl;
+import com.example.workflow.service.factory.CatalogOrderFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,11 +36,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.time.Duration;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,8 +66,8 @@ class CheckoutServiceTest {
     void setUp() {
         checkoutService = new CheckoutService(
                 currentUserService, userService, cartRepository, cartItemRepository, orderRepository,
-                voucherService, new CatalogDurationCalculator(), tokenService, durableRequests,
-                eventPublisher, cacheService, new ObjectMapper()
+                voucherService, new CatalogOrderFactory(new CatalogDurationCalculator()), tokenService, durableRequests,
+                eventPublisher, cacheService, new CheckoutResponseMapperImpl(), new ObjectMapper()
         );
         when(durableRequests.execute(anyString(), anyString(), anyString(), any())).thenAnswer(invocation -> {
             Supplier<String> operation = invocation.getArgument(3);
@@ -124,7 +128,7 @@ class CheckoutServiceTest {
         when(cartRepository.findByGuestSessionIdForUpdate(session)).thenReturn(Optional.of(cart));
         when(voucherService.applyGuestVoucherForCheckout(any(), eq(200.0), eq(session), anyString(), anyString()))
                 .thenReturn(VoucherService.AppliedGuestVoucher.none());
-        when(tokenService.issueFor(any(Order.class))).thenReturn("raw-token");
+        when(tokenService.issueFor(any(Order.class), anySet(), any(Duration.class))).thenReturn("raw-token");
         when(tokenService.maskEmail("guest@example.com")).thenReturn("g***@example.com");
 
         GuestCheckoutRequest request = new GuestCheckoutRequest();

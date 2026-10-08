@@ -8,6 +8,7 @@ import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.NotificationRequestedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.mapper.NotificationMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.NotificationReadRepository;
 import com.example.workflow.repository.NotificationRepository;
@@ -23,9 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -37,6 +36,7 @@ import java.util.stream.Collectors;
 public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationReadRepository notificationReadRepository;
+    private final NotificationMapper notificationMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final DomainEventPublisher eventPublisher;
     private final CurrentUserService currentUserService;
@@ -95,7 +95,7 @@ public class NotificationService {
 
     private void publishRealtimeNotification(String destination, Notification notification) {
         try {
-            messagingTemplate.convertAndSend(destination, toDto(notification, false));
+            messagingTemplate.convertAndSend(destination, notificationMapper.toDto(notification, false));
         } catch (RuntimeException e) {
             log.warn(
                     "Optional realtime notification publish failed for destination {} notification {}: {}",
@@ -109,7 +109,7 @@ public class NotificationService {
     public Page<NotificationDTO> getCurrentUserNotifications(Pageable pageable) {
         String userId = currentUserService.requireCurrentUserId();
         return notificationRepository.findByTargetUserIdOrderByCreatedAtDesc(userId, PageableUtils.normalize(pageable, 10, 50))
-                .map(notification -> toDto(notification, notification.isRead()));
+                .map(notification -> notificationMapper.toDto(notification, notification.isRead()));
     }
 
     public Page<NotificationDTO> getAdminNotifications(Pageable pageable) {
@@ -120,7 +120,7 @@ public class NotificationService {
         Map<Long, NotificationRead> readByNotificationId = getReadMap(currentUser.getId(), notifications.getContent());
 
         return notifications
-                .map(notification -> toDto(
+                .map(notification -> notificationMapper.toDto(
                         notification,
                         isAdminNotificationRead(notification, readByNotificationId)
                 ));
@@ -193,19 +193,4 @@ public class NotificationService {
         return read == null ? notification.isRead() : read.isRead();
     }
 
-    private NotificationDTO toDto(Notification notification, boolean read) {
-        return new NotificationDTO(
-                notification.getId(),
-                notification.getTitle(),
-                notification.getContent(),
-                notification.getOrderId(),
-                notification.getConsultationRequestId(),
-                read,
-                toInstant(notification.getCreatedAt())
-        );
-    }
-
-    private Instant toInstant(LocalDateTime value) {
-        return value == null ? null : value.atOffset(ZoneOffset.UTC).toInstant();
-    }
 }

@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -31,44 +30,4 @@ public class CheckoutResponseDTO implements Serializable {
     private String maskedEmail;
     private String guestWorkflowStatus;
 
-    public static CheckoutResponseDTO fromMap(Map<String, String> response) {
-        CheckoutResponseDTO dto = new CheckoutResponseDTO();
-        if (response == null) {
-            return dto;
-        }
-        dto.setStatus(response.get("status"));
-        dto.setMessage(response.get("message"));
-        dto.setOrderId(parseLong(response.get("orderId")));
-        dto.setVersion(parseLong(response.get("version")));
-        dto.setTotalPrice(parseDouble(response.get("totalPrice")));
-        dto.setDiscountAmount(parseDouble(response.get("discountAmount")));
-        dto.setFinalPrice(parseDouble(response.get("finalPrice")));
-        dto.setPaymentMethod(response.get("paymentMethod"));
-        dto.setPaymentStatus(response.get("paymentStatus"));
-        dto.setVoucherCode(response.get("voucherCode"));
-        dto.setVoucherName(response.get("voucherName"));
-        dto.setProvider(response.get("provider"));
-        dto.setUrl(response.get("url"));
-        dto.setPayUrl(response.get("payUrl"));
-        dto.setDeeplink(response.get("deeplink"));
-        dto.setQrCodeUrl(response.get("qrCodeUrl"));
-        dto.setLookupToken(response.get("lookupToken"));
-        dto.setMaskedEmail(response.get("maskedEmail"));
-        dto.setGuestWorkflowStatus(response.get("guestWorkflowStatus"));
-        return dto;
-    }
-
-    private static Long parseLong(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return Long.valueOf(value);
-    }
-
-    private static Double parseDouble(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return Double.valueOf(value);
-    }
 }

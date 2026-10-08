@@ -82,33 +82,25 @@ public class CartService {
 
     private CartResDTO toActiveCartDto(Cart cart) {
         CartResDTO dto = cartMapper.toDto(cart);
-
-        if (dto.getItems() != null && cart.getItems() != null) {
-            List<CartItemDTO> activeItems = new ArrayList<>();
-            for (int i = 0; i < cart.getItems().size(); i++) {
-                CartItem entityItem = cart.getItems().get(i);
-                var dtoItem = dto.getItems().get(i);
-
-                if (entityItem.getProductVariant() != null) {
-                    ProductVariant variant = entityItem.getProductVariant();
-                    if (variant.isDelete() || (variant.getProduct() != null && variant.getProduct().isDelete())) {
-                        continue;
-                    }
-                    if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) {
-                        dtoItem.setImageUrl(variant.getImageUrl());
-                    }
-                    else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) {
-                        dtoItem.setImageUrl(variant.getProduct().getImageUrl());
-                    }
-                    activeItems.add(dtoItem);
-                }
-            }
-            dto.setItems(activeItems);
-            dto.setTotalPrice(activeItems.stream()
-                    .mapToDouble(item -> item.getPrice() * item.getQuantity())
-                    .sum());
-        }
+        List<CartItem> activeEntities = cart.getItems() == null
+                ? List.of()
+                : cart.getItems().stream()
+                        .filter(this::isActiveCartItem)
+                        .toList();
+        List<CartItemDTO> activeItems = cartMapper.toItemDtos(activeEntities);
+        dto.setItems(activeItems);
+        dto.setTotalPrice(activeItems.stream()
+                .mapToDouble(item -> item.getPrice() * item.getQuantity())
+                .sum());
         return dto;
+    }
+
+    private boolean isActiveCartItem(CartItem item) {
+        if (item == null || item.getProductVariant() == null) {
+            return false;
+        }
+        ProductVariant variant = item.getProductVariant();
+        return !variant.isDelete() && variant.getProduct() != null && !variant.getProduct().isDelete();
     }
 
     private void addVariantToCart(Cart cart, Long variantId, int quantity) {

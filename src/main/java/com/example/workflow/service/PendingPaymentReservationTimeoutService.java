@@ -20,8 +20,6 @@ import java.util.List;
 @Slf4j
 @ConditionalOnProperty(name = "checkout.reservation-timeout.enabled", havingValue = "true", matchIfMissing = true)
 public class PendingPaymentReservationTimeoutService {
-    private static final String PAYMENT_TIMEOUT_RETURN = "PAYMENT_TIMEOUT_RETURN";
-
     private final OrderRepository orderRepository;
     private final OrderCancellationService cancellationService;
 
@@ -60,18 +58,13 @@ public class PendingPaymentReservationTimeoutService {
         }
 
         String reason = "Thanh toan qua han sau " + Math.max(timeoutMinutes, 1) + " phut.";
-        cancellationService.cancel(
-                order,
-                new OrderCancellationService.Request(
-                        reason,
-                        PAYMENT_TIMEOUT_RETURN,
-                        false,
-                        null,
-                        CancellationSource.PAYMENT_TIMEOUT,
-                        "payment-timeout:" + orderId,
-                        true,
-                        "Online payment timeout"
-                )
+        cancellationService.cancelBySystem(
+                orderId,
+                order.getVersion(),
+                CancellationSource.PAYMENT_TIMEOUT,
+                reason,
+                "legacy-payment-timeout:" + orderId,
+                "legacy-payment-timeout:" + orderId
         );
         return order;
     }

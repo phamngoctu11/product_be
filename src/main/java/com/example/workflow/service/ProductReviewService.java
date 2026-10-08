@@ -11,15 +11,14 @@ import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.mapper.ProductReviewImageMapper;
+import com.example.workflow.mapper.ProductReviewMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.ProductReviewStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductReviewRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.util.PageableUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -35,14 +34,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductReviewService {
     private static final int MAX_IMAGE_COUNT = 5;
-    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
-    };
 
     private final ProductReviewRepository productReviewRepository;
     private final OrderItemRepository orderItemRepository;
     private final CurrentUserService currentUserService;
-    private final UserService userService;
-    private final ObjectMapper objectMapper;
+    private final ProductReviewMapper productReviewMapper;
+    private final ProductReviewImageMapper productReviewImageMapper;
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional
@@ -68,7 +65,7 @@ public class ProductReviewService {
         review.setProductVariant(variant);
         applyRequest(review, request);
 
-        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = productReviewMapper.toDto(productReviewRepository.save(review));
         applicationCacheService.evictProductReviewChangedByUser(currentUser.getId());
         return dto;
     }
@@ -80,7 +77,7 @@ public class ProductReviewService {
         ProductReview review = productReviewRepository.findByIdAndUser_Id(reviewId, currentUserId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         applyRequest(review, request);
-        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = productReviewMapper.toDto(productReviewRepository.save(review));
         applicationCacheService.evictProductReviewChangedByUser(currentUserId);
         return dto;
     }
@@ -91,7 +88,7 @@ public class ProductReviewService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         review.setStatus(ProductReviewStatus.HIDDEN);
         review.setHiddenReason(StringUtils.hasText(reason) ? reason.trim() : null);
-        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = productReviewMapper.toDto(productReviewRepository.save(review));
         applicationCacheService.evictProductReviewChanged();
         return dto;
     }
@@ -102,7 +99,7 @@ public class ProductReviewService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_REVIEW_NOT_FOUND));
         review.setStatus(ProductReviewStatus.VISIBLE);
         review.setHiddenReason(null);
-        ProductReviewDTO dto = toDto(productReviewRepository.save(review));
+        ProductReviewDTO dto = productReviewMapper.toDto(productReviewRepository.save(review));
         applicationCacheService.evictProductReviewChanged();
         return dto;
     }
@@ -112,7 +109,7 @@ public class ProductReviewService {
     public Page<ProductReviewDTO> getProductReviews(Long productId, Pageable pageable) {
         return productReviewRepository
                 .findByProduct_IdAndStatusOrderByCreatedAtDesc(productId, ProductReviewStatus.VISIBLE, PageableUtils.normalize(pageable, 20, 50))
-                .map(this::toDto);
+                .map(productReviewMapper::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -120,14 +117,14 @@ public class ProductReviewService {
     public Page<ProductReviewDTO> getVisibleVariantReviews(Long variantId, Pageable pageable) {
         return productReviewRepository
                 .findByProductVariant_IdAndStatusOrderByCreatedAtDesc(variantId, ProductReviewStatus.VISIBLE, PageableUtils.normalize(pageable, 20, 50))
-                .map(this::toDto);
+                .map(productReviewMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public Page<ProductReviewDTO> getManageableVariantReviews(Long variantId, Pageable pageable) {
         return productReviewRepository
                 .findByProductVariant_IdOrderByCreatedAtDesc(variantId, PageableUtils.normalize(pageable, 20, 50))
-                .map(this::toDto);
+                .map(productReviewMapper::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -165,7 +162,8 @@ public class ProductReviewService {
     private void applyRequest(ProductReview review, ProductReviewRequest request) {
         review.setRating(request.rating());
         review.setComment(StringUtils.hasText(request.comment()) ? request.comment().trim() : null);
-        review.setImageUrls(serializeImageUrls(normalizeImageUrls(request.imageUrls())));
+        List<String> images = normalizeImageUrls(request.imageUrls());
+        review.setImageUrls(images.isEmpty() ? null : productReviewImageMapper.toJson(images));
     }
 
     private ProductReviewSummaryDTO buildSummary(Long productId, Long variantId) {
@@ -212,32 +210,6 @@ public class ProductReviewService {
         );
     }
 
-    private ProductReviewDTO toDto(ProductReview review) {
-        User user = review.getUser();
-        Product product = review.getProduct();
-        ProductVariant variant = review.getProductVariant();
-        return new ProductReviewDTO(
-                review.getId(),
-                review.getOrder().getId(),
-                review.getOrderItem().getId(),
-                product.getId(),
-                variant.getId(),
-                product.getProductName(),
-                variant.getVariantName(),
-                review.getRating(),
-                review.getComment(),
-                deserializeImageUrls(review.getImageUrls()),
-                user.getId(),
-                user.getUsername(),
-                userService.displayName(user),
-                user.getAvatarUrl(),
-                review.getStatus(),
-                true,
-                review.getCreatedAt(),
-                review.getUpdatedAt()
-        );
-    }
-
     private List<String> normalizeImageUrls(List<String> imageUrls) {
         if (imageUrls == null || imageUrls.isEmpty()) {
             return List.of();
@@ -248,28 +220,6 @@ public class ProductReviewService {
                 .distinct()
                 .limit(MAX_IMAGE_COUNT)
                 .toList();
-    }
-
-    private String serializeImageUrls(List<String> imageUrls) {
-        if (imageUrls == null || imageUrls.isEmpty()) {
-            return null;
-        }
-        try {
-            return objectMapper.writeValueAsString(imageUrls);
-        } catch (JsonProcessingException e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.SYSTEM_ERROR, e.getMessage());
-        }
-    }
-
-    private List<String> deserializeImageUrls(String imageUrls) {
-        if (!StringUtils.hasText(imageUrls)) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(imageUrls, STRING_LIST);
-        } catch (JsonProcessingException e) {
-            return List.of();
-        }
     }
 
 }

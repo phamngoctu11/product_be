@@ -13,7 +13,7 @@ import com.example.workflow.entity.ProductionDecision;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = CentralMapperConfig.class)
 public interface ProductionMapper {
     @Mapping(source = "orderItem.id", target = "orderItemId")
     @Mapping(source = "assignedStaff.id", target = "assignedStaffId")

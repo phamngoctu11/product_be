@@ -524,7 +524,7 @@ sequenceDiagram
     Note over W,N: Retry có trạng thái, không tạo lại Order khi dịch vụ phụ lỗi
 ```
 
-Đề xuất chỉ định một nơi chịu trách nhiệm phát sự kiện tạo đơn. Nếu giữ Camunda phát GUEST_ORDER_CREATED như hiện tại thì WorkflowStarter/process phát sự kiện đó; không đồng thời phát thêm ở CheckoutService. Cần thiết kế outbox hoặc cơ chế retry tương đương nếu yêu cầu không mất event giữa commit và publish; báo cáo không coi publish-after-commit tự nó bảo đảm điều này.
+Quyết định triển khai: `CheckoutService` là producer duy nhất của `ORDER_CREATED/GUEST_ORDER_CREATED` sau khi Order đã được lưu thành công. Camunda không phát lại hai sự kiện tạo đơn này; generic workflow event handler chủ động từ chối `GUEST_ORDER_CREATED` để ngăn hai producer cho cùng milestone. Event được ghi qua cơ chế outbox/retry hiện có; consumer email/notification phải idempotent theo orderId và eventType.
 
 ### SD02 — Custom request đến Order
 

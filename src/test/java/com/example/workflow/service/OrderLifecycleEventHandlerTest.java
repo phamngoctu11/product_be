@@ -39,6 +39,7 @@ class OrderLifecycleEventHandlerTest {
     @Mock private EmailService emailService;
     @Mock private NotificationService notificationService;
     @Mock private ApplicationCacheService applicationCacheService;
+    @Mock private OrderWorkflowService orderWorkflowService;
 
     private OrderLifecycleEventHandler handler;
 
@@ -50,6 +51,7 @@ class OrderLifecycleEventHandlerTest {
                 emailService,
                 notificationService,
                 applicationCacheService,
+                orderWorkflowService,
                 new ObjectMapper()
         );
         ReflectionTestUtils.setField(handler, "frontendBaseUrl", "http://localhost:4200");
@@ -135,6 +137,7 @@ class OrderLifecycleEventHandlerTest {
 
         handler.handleOrderCancelled(event);
 
+        verify(orderWorkflowService).correlateOrderCancelled(10L);
         verify(consultationAttributionService).cancelOrderAttributions(10L);
         verify(applicationCacheService).evictOrderCancelled(order, OrderStatus.PENDING_APPROVAL);
         verify(emailService).sendOrderCancellationEmail(

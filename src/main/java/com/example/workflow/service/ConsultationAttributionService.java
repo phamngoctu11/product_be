@@ -16,6 +16,7 @@ import com.example.workflow.event.payload.CommissionRefreshKey;
 import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.mapper.ConsultationMapper;
 import com.example.workflow.nume.ConsultationAttributionStatus;
 import com.example.workflow.nume.ConsultationStatus;
 import com.example.workflow.nume.Role;
@@ -63,7 +64,7 @@ public class ConsultationAttributionService {
     private final DomainEventPublisher eventPublisher;
     private final ApplicationCacheService applicationCacheService;
     private final CurrentUserService currentUserService;
-    private final UserService userService;
+    private final ConsultationMapper consultationMapper;
 
     @Value("${consultation.bonus.percent:5}")
     private double consultationBonusPercent;
@@ -168,11 +169,10 @@ public class ConsultationAttributionService {
     public Page<ConsultationSaleAttributionDTO> getMyAttributions(Pageable pageable) {
         User user = currentUserService.requireCurrentUser();
         if (user.getRole() == Role.STAFF) {
-            return attributionRepository
-                    .findByStaffIdAndStatusInOrderByCreatedAtDesc(user.getId(), List.of(ConsultationAttributionStatus.PENDING, ConsultationAttributionStatus.CONFIRMED), pageable)
-                    .map(this::toDto);
+            return mapAttributions(attributionRepository
+                    .findByStaffIdAndStatusInOrderByCreatedAtDesc(user.getId(), List.of(ConsultationAttributionStatus.PENDING, ConsultationAttributionStatus.CONFIRMED), pageable));
         }
-        return attributionRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageable).map(this::toDto);
+        return mapAttributions(attributionRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageable));
     }
 
     @Transactional(readOnly = true)
@@ -182,9 +182,8 @@ public class ConsultationAttributionService {
         if (currentUser.getRole() != Role.MANAGER && currentUser.getRole() != Role.ADMIN) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Only manager or admin can view staff attribution reports.");
         }
-        return attributionRepository
-                .findByStaffIdAndStatusInOrderByCreatedAtDesc(staffId, List.of(ConsultationAttributionStatus.PENDING, ConsultationAttributionStatus.CONFIRMED), pageable)
-                .map(this::toDto);
+        return mapAttributions(attributionRepository
+                .findByStaffIdAndStatusInOrderByCreatedAtDesc(staffId, List.of(ConsultationAttributionStatus.PENDING, ConsultationAttributionStatus.CONFIRMED), pageable));
     }
 
     @Transactional
@@ -204,7 +203,7 @@ public class ConsultationAttributionService {
         }
 
         ConsultationReview review = toReview(attribution, request);
-        ConsultationReviewDTO response = toReviewDto(reviewRepository.save(review));
+        ConsultationReviewDTO response = consultationMapper.toDto(reviewRepository.save(review));
         applicationCacheService.evictConsultationReviewCreated();
         return response;
     }
@@ -212,7 +211,7 @@ public class ConsultationAttributionService {
     @Transactional(readOnly = true)
     @Cacheable(value = "consultationReviews", key = "'product-' + #productId + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<ConsultationReviewDTO> getProductReviews(Long productId, Pageable pageable) {
-        return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable).map(this::toReviewDto);
+        return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable).map(consultationMapper::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -222,7 +221,7 @@ public class ConsultationAttributionService {
         if (currentUser.getRole() == Role.STAFF && !currentUser.getId().equals(staffId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL, "Staff can only view their own reviews.");
         }
-        return reviewRepository.findByStaffIdOrderByCreatedAtDesc(staffId, pageable).map(this::toReviewDto);
+        return reviewRepository.findByStaffIdOrderByCreatedAtDesc(staffId, pageable).map(consultationMapper::toDto);
     }
 
     private ConsultationSaleAttribution toAttribution(
@@ -410,57 +409,18 @@ public class ConsultationAttributionService {
                 && isWithinAttributionWindow(request.getCreatedAt(), orderCreatedAt);
     }
 
-    private ConsultationSaleAttributionDTO toDto(ConsultationSaleAttribution attribution) {
-        Product product = attribution.getProduct();
-        ProductVariant variant = attribution.getProductVariant();
-        User staff = attribution.getStaff();
-        return new ConsultationSaleAttributionDTO(
-                attribution.getId(),
-                attribution.getConsultationRequest().getId(),
-                attribution.getOrder().getId(),
-                attribution.getOrderItem().getId(),
-                attribution.getUser().getId(),
-                staff.getId(),
-                userService.displayName(staff),
-                product.getId(),
-                product.getProductName(),
-                variant.getId(),
-                variant.getVariantName(),
-                attribution.getConsultationCreatedAt(),
-                attribution.getOrderCreatedAt(),
-                attribution.getMinutesFromConsultationToOrder(),
-                attribution.getItemAmount(),
-                attribution.isBonusEligible(),
-                attribution.getBonusPercent(),
-                attribution.getBonusAmount(),
-                attribution.getStatus(),
-                attribution.getCreatedAt(),
-                attribution.getConfirmedAt(),
-                attribution.getCancelledAt(),
-                reviewRepository.existsByAttributionId(attribution.getId())
-        );
-    }
-
-    private ConsultationReviewDTO toReviewDto(ConsultationReview review) {
-        User staff = review.getStaff();
-        Product product = review.getProduct();
-        return new ConsultationReviewDTO(
-                review.getId(),
-                review.getAttribution().getId(),
-                review.getConsultationRequest().getId(),
-                review.getOrder().getId(),
-                review.getOrderItem().getId(),
-                review.getUser().getId(),
-                staff.getId(),
-                userService.displayName(staff),
-                product.getId(),
-                product.getProductName(),
-                review.getProductRating(),
-                review.getStaffRating(),
-                review.getComment(),
-                review.getCreatedAt(),
-                review.getUpdatedAt()
-        );
+    private Page<ConsultationSaleAttributionDTO> mapAttributions(Page<ConsultationSaleAttribution> page) {
+        List<Long> ids = page.getContent().stream()
+                .map(ConsultationSaleAttribution::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        Set<Long> reviewedIds = ids.isEmpty()
+                ? Set.of()
+                : new HashSet<>(reviewRepository.findReviewedAttributionIds(ids));
+        return page.map(attribution -> consultationMapper.toDto(
+                attribution,
+                reviewedIds.contains(attribution.getId())
+        ));
     }
 
     private String normalizeComment(String comment) {

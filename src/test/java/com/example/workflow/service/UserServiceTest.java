@@ -10,11 +10,14 @@ import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.service.factory.UserFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import java.util.Optional;
@@ -28,6 +31,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -46,8 +50,17 @@ class UserServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
+    @Spy
+    private UserFactory userFactory = new UserFactory();
+
     @InjectMocks
     private UserService userService;
+
+    @BeforeEach
+    void setUpMapperDefaults() {
+        lenient().when(userMapper.toKeycloakCreateRequest(any(UserCreDTO.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
 
     @Test
     void registrationCreatesUserWithDefaultUserRole() {

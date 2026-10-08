@@ -1,7 +1,6 @@
 package com.example.workflow.workflow.handler;
 
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.WorkflowEventPayload;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.workflow.WorkflowTaskContext;
@@ -23,6 +22,9 @@ public class PublishWorkflowEventTaskHandler implements WorkflowTaskHandler {
     @Override
     public void handle(WorkflowTaskContext context) {
         String eventType = context.requireString("eventType");
+        if (EventTypes.GUEST_ORDER_CREATED.equals(eventType)) {
+            throw new IllegalArgumentException("GUEST_ORDER_CREATED is owned exclusively by guest checkout");
+        }
         Object payload = resolvePayload(eventType, context);
         eventPublisher.publishAfterCommit(eventType, payload);
         context.setVariable("workflowEventPublished", true);
@@ -33,9 +35,6 @@ public class PublishWorkflowEventTaskHandler implements WorkflowTaskHandler {
         Object explicitPayload = context.getVariable("eventPayload");
         if (explicitPayload != null) {
             return explicitPayload;
-        }
-        if (EventTypes.GUEST_ORDER_CREATED.equals(eventType)) {
-            return new GuestOrderCreatedEvent(context.requireLong("orderId"));
         }
         return new WorkflowEventPayload(
                 context.processInstanceId(),

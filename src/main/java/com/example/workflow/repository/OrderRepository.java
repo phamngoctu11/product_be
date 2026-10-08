@@ -80,10 +80,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             Pageable pageable
     );
 
-    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
-            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, COALESCE(o.contactSnapshot.fullName, CONCAT(CONCAT(u.lastname, ' '), u.firstname)), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN assigned.id IS NOT NULL THEN CONCAT(CONCAT(assigned.lastname, ' '), assigned.firstname) WHEN legacy.id IS NOT NULL THEN CONCAT(CONCAT(legacy.lastname, ' '), legacy.firstname) ELSE null END) " +
             "FROM Order o JOIN o.user u " +
-            "LEFT JOIN o.warehouseStaff staff " +
+            "LEFT JOIN o.assignedStaff assigned " +
+            "LEFT JOIN o.warehouseStaff legacy " +
             "WHERE u.id = :userId " +
             "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
             "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice) " +
@@ -111,10 +112,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             Pageable pageable
     );
 
-    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, CONCAT(CONCAT(u.lastname, ' '), u.firstname), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
-            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+    @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, COALESCE(o.contactSnapshot.fullName, CONCAT(CONCAT(u.lastname, ' '), u.firstname)), o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN assigned.id IS NOT NULL THEN CONCAT(CONCAT(assigned.lastname, ' '), assigned.firstname) WHEN legacy.id IS NOT NULL THEN CONCAT(CONCAT(legacy.lastname, ' '), legacy.firstname) ELSE null END) " +
             "FROM Order o JOIN o.user u " +
-            "LEFT JOIN o.warehouseStaff staff " +
+            "LEFT JOIN o.assignedStaff assigned " +
+            "LEFT JOIN o.warehouseStaff legacy " +
             "WHERE u.id = :userId AND o.status = :status " +
             "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
             "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice) " +
@@ -145,32 +147,35 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findFullOrdersByIds(@Param("orderIds") List<Long> orderIds);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
+            "CASE WHEN o.contactSnapshot.fullName IS NOT NULL THEN o.contactSnapshot.fullName WHEN u.id IS NOT NULL THEN CONCAT(CONCAT(u.lastname, ' '), u.firstname) ELSE 'Khach vang lai' END, " +
             "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
-            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+            "CASE WHEN assigned.id IS NOT NULL THEN CONCAT(CONCAT(assigned.lastname, ' '), assigned.firstname) WHEN legacy.id IS NOT NULL THEN CONCAT(CONCAT(legacy.lastname, ' '), legacy.firstname) ELSE null END) " +
             "FROM Order o LEFT JOIN o.user u " +
-            "LEFT JOIN o.warehouseStaff staff " +
+            "LEFT JOIN o.assignedStaff assigned " +
+            "LEFT JOIN o.warehouseStaff legacy " +
             "WHERE o.status = :status " +
             "ORDER BY o.startOrderTime ASC",
             countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status")
     Page<OrderListDTO> findListDtoByStatusOldestFirst(@Param("status") OrderStatus status, Pageable pageable);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
+            "CASE WHEN o.contactSnapshot.fullName IS NOT NULL THEN o.contactSnapshot.fullName WHEN u.id IS NOT NULL THEN CONCAT(CONCAT(u.lastname, ' '), u.firstname) ELSE 'Khach vang lai' END, " +
             "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
-            "CASE WHEN staff.id IS NULL THEN null ELSE CONCAT(CONCAT(staff.lastname, ' '), staff.firstname) END) " +
+            "CASE WHEN assigned.id IS NOT NULL THEN CONCAT(CONCAT(assigned.lastname, ' '), assigned.firstname) WHEN legacy.id IS NOT NULL THEN CONCAT(CONCAT(legacy.lastname, ' '), legacy.firstname) ELSE null END) " +
             "FROM Order o LEFT JOIN o.user u " +
-            "LEFT JOIN o.warehouseStaff staff " +
-            "WHERE o.status = :status AND staff.id IS NULL " +
+            "LEFT JOIN o.assignedStaff assigned " +
+            "LEFT JOIN o.warehouseStaff legacy " +
+            "WHERE o.status = :status AND assigned.id IS NULL AND legacy.id IS NULL " +
             "ORDER BY o.startOrderTime ASC",
-            countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.warehouseStaff IS NULL")
+            countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.assignedStaff IS NULL AND o.warehouseStaff IS NULL")
     Page<OrderListDTO> findUnassignedListDtoByStatus(@Param("status") OrderStatus status, Pageable pageable);
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
-            "CASE WHEN u.id IS NULL THEN COALESCE(o.contactSnapshot.fullName, 'Khach vang lai') ELSE CONCAT(CONCAT(u.lastname, ' '), u.firstname) END, " +
-            "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, CONCAT(CONCAT(staff.lastname, ' '), staff.firstname)) " +
-            "FROM Order o LEFT JOIN o.user u JOIN o.warehouseStaff staff " +
-            "WHERE staff.id = :staffId AND o.status IN :statuses " +
+            "CASE WHEN o.contactSnapshot.fullName IS NOT NULL THEN o.contactSnapshot.fullName WHEN u.id IS NOT NULL THEN CONCAT(CONCAT(u.lastname, ' '), u.firstname) ELSE 'Khach vang lai' END, " +
+            "o.finalPrice, o.status, o.startOrderTime, o.paymentMethod, " +
+            "CASE WHEN assigned.id IS NOT NULL THEN CONCAT(CONCAT(assigned.lastname, ' '), assigned.firstname) ELSE CONCAT(CONCAT(legacy.lastname, ' '), legacy.firstname) END) " +
+            "FROM Order o LEFT JOIN o.user u LEFT JOIN o.assignedStaff assigned LEFT JOIN o.warehouseStaff legacy " +
+            "WHERE (assigned.id = :staffId OR (assigned.id IS NULL AND legacy.id = :staffId)) AND o.status IN :statuses " +
             "ORDER BY " +
             "CASE " +
             "WHEN o.status = :assignedStatus THEN 0 " +
@@ -179,7 +184,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "ELSE 3 END ASC, " +
             "CASE WHEN o.status IN :oldestFirstStatuses THEN o.startOrderTime ELSE NULL END ASC, " +
             "o.startOrderTime DESC",
-            countQuery = "SELECT COUNT(o) FROM Order o JOIN o.warehouseStaff staff WHERE staff.id = :staffId AND o.status IN :statuses")
+            countQuery = "SELECT COUNT(o) FROM Order o LEFT JOIN o.assignedStaff assigned LEFT JOIN o.warehouseStaff legacy WHERE (assigned.id = :staffId OR (assigned.id IS NULL AND legacy.id = :staffId)) AND o.status IN :statuses")
     Page<OrderListDTO> findListDtoByWarehouseStaffIdAndStatusIn(
             @Param("staffId") String staffId,
             @Param("statuses") List<OrderStatus> statuses,

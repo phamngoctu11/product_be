@@ -2,10 +2,10 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CartVoucherOptionsDTO;
+import com.example.workflow.dto.CreateVoucherTemplateRequest;
 import com.example.workflow.dto.UserVoucherDTO;
 import com.example.workflow.dto.VoucherCartOptionDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
-import com.example.workflow.entity.VoucherTemplate;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.VoucherService;
@@ -79,8 +79,8 @@ public class VoucherController {
 
     @PostMapping("/admin/campaigns")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
-    public ResponseEntity<ApiResponse<VoucherTemplate>> createCampaign(@Valid @RequestBody VoucherTemplate template) {
-        VoucherTemplate newCampaign = voucherService.createNewVoucherCampaign(template);
+    public ResponseEntity<ApiResponse<VoucherTemplateDTO>> createCampaign(@Valid @RequestBody CreateVoucherTemplateRequest template) {
+        VoucherTemplateDTO newCampaign = voucherService.createNewVoucherCampaign(template);
         return ResponseEntity.ok(ApiResponse.success(newCampaign));
     }
 }

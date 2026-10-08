@@ -13,6 +13,7 @@ import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapperImpl;
+import com.example.workflow.mapper.CheckoutResponseMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.OrderItemProductionStatus;
 import com.example.workflow.nume.OrderItemSourceType;
@@ -24,6 +25,7 @@ import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.factory.CustomOrderFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,6 +68,8 @@ class CustomRequestServiceTest {
                 customRequestRepository,
                 orderRepository,
                 new CustomRequestMapperImpl(),
+                new CheckoutResponseMapperImpl(),
+                new CustomOrderFactory(objectMapper),
                 durableRequests,
                 eventPublisher,
                 objectMapper

@@ -4,7 +4,6 @@ import com.example.workflow.dto.UserCreDTO;
 import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.dto.UserProfileUpdateDTO;
 import com.example.workflow.dto.UserResDTO;
-import com.example.workflow.entity.Cart;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -12,6 +11,7 @@ import com.example.workflow.mapper.UserMapper;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.service.factory.UserFactory;
 import com.example.workflow.util.UserDisplayNameUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -34,17 +34,18 @@ public class UserService {
     private final KeycloakIdentityService keycloakIdentityService;
     private final ApplicationCacheService applicationCacheService;
     private final CurrentUserService currentUserService;
+    private final UserFactory userFactory;
 
     public void startUserRegistrationProcess(UserCreDTO dto) {
         normalizeRegistrationData(dto);
         validateRegistrationRequest(dto);
         Role role = resolveRegistrationRole(dto);
 
-        UserCreDTO keycloakUser = createKeycloakUser(dto);
+        UserCreDTO keycloakUser = userMapper.toKeycloakCreateRequest(dto);
         String userId = extractSubFromToken(keycloakIdentityService.createUser(keycloakUser, role));
 
         try {
-            userRepository.saveAndFlush(createUser(dto, userId, role));
+            userRepository.saveAndFlush(userFactory.create(dto, userId, role));
             applicationCacheService.evictUserRegistered();
         } catch (RuntimeException ex) {
             keycloakIdentityService.deleteUserById(userId);
@@ -100,41 +101,6 @@ public class UserService {
         } catch (IllegalArgumentException ex) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.INVALID_ROLE);
         }
-    }
-
-    private UserCreDTO createKeycloakUser(UserCreDTO dto) {
-        UserCreDTO keycloakUser = new UserCreDTO();
-        keycloakUser.setUsername(dto.getUsername());
-        keycloakUser.setPassword(dto.getPassword());
-        keycloakUser.setFirstname(dto.getFirstname());
-        keycloakUser.setLastname(dto.getLastname());
-        keycloakUser.setEmail(dto.getEmail());
-        return keycloakUser;
-    }
-
-    private User createUser(UserCreDTO dto, String id, Role role) {
-        User user = new User();
-        user.setId(id);
-        user.setUsername(dto.getUsername());
-        user.setFirstname(dto.getFirstname());
-        user.setLastname(dto.getLastname());
-        user.setGender(dto.getGender());
-        user.setAddress(dto.getAddress());
-        user.setPhone(dto.getPhone());
-        user.setBirth(dto.getBirth());
-        user.setEmail(dto.getEmail());
-        user.setRole(role);
-        user.setAvatarUrl(dto.getAvatarUrl());
-        user.setReputation(50);
-        user.setDelete(false);
-        user.setCart(createCartFor(user));
-        return user;
-    }
-
-    private Cart createCartFor(User user) {
-        Cart cart = new Cart();
-        cart.setUser(user);
-        return cart;
     }
 
     private String extractSubFromToken(String tokenOrId) {

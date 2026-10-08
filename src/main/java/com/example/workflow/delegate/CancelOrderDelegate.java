@@ -1,9 +1,7 @@
 package com.example.workflow.delegate;
 
 import com.example.workflow.entity.Order;
-import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
-import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.OrderLookupService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
@@ -16,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class CancelOrderDelegate implements JavaDelegate {
 
     private final OrderLookupService orderLookupService;
-    private final OrderCancellationService cancellationService;
 
     @Override
     @Transactional
@@ -27,18 +24,10 @@ public class CancelOrderDelegate implements JavaDelegate {
             return;
         }
 
-        cancellationService.cancel(
-                order,
-                new OrderCancellationService.Request(
-                        order.getCancelReason(),
-                        "CANCEL_RETURN",
-                        true,
-                        null,
-                        CancellationSource.SYSTEM,
-                        "camunda:" + execution.getProcessInstanceId(),
-                        false,
-                        null
-                )
+        throw new IllegalStateException(
+                "Camunda cannot cancel Order directly. The authenticated manager/system application service "
+                        + "must commit cancellation before this legacy task is reached. Process="
+                        + execution.getProcessInstanceId()
         );
     }
 }

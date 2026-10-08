@@ -87,7 +87,10 @@ public class ProductService {
         userService.requireUser(userId);
         validateMadeDay(dto.getMadeDay());
         Product existingProduct = requireActiveProduct(id);
-        applyProductBasicInfo(existingProduct, dto, true);
+        mapper.updateCatalogInfo(dto, existingProduct);
+        if (dto.getAvailabilityStatus() != null) {
+            existingProduct.setAvailabilityStatus(dto.getAvailabilityStatus());
+        }
 
         if (dto.getVariants() != null) {
             List<Long> incomingVariantIds = dto.getVariants().stream()
@@ -106,7 +109,8 @@ public class ProductService {
                             .findFirst()
                             .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_PRODUCT, variantDto.getId()));
 
-                    applyVariantInfo(existingVariant, variantDto, existingProduct);
+                    mapper.updateVariant(variantDto, existingVariant);
+                    applyVariantOwnership(existingProduct, existingVariant);
                 } else {
                     ProductVariant newVariant = createVariant(existingProduct, variantDto);
                     ProductVariant savedVariant = variantRepository.saveAndFlush(newVariant);
@@ -125,7 +129,7 @@ public class ProductService {
     public void updateProductBasicInfo(Long id, ProductDTO dto) {
         Product product = requireActiveProduct(id);
 
-        applyProductBasicInfo(product, dto, false);
+        mapper.updateBasicInfo(dto, product);
 
         repository.save(product);
         applicationCacheService.evictProductBasicInfoUpdated(id);
@@ -181,20 +185,6 @@ public class ProductService {
         applicationCacheService.evictProductDeleted(id);
     }
 
-    private void applyProductBasicInfo(Product product, ProductDTO dto, boolean updateHandmade) {
-        product.setProductName(dto.getProduct_name());
-        product.setPrice(dto.getPrice());
-        product.setTags(dto.getTags());
-        product.setImageUrl(dto.getImage_url());
-        if (updateHandmade) {
-            product.setMadeDay(dto.getMadeDay());
-            product.setHandmade(dto.isHandmade());
-            if (dto.getAvailabilityStatus() != null) {
-                product.setAvailabilityStatus(dto.getAvailabilityStatus());
-            }
-        }
-    }
-
     private void prepareProductForCreate(Product product) {
         product.setDelete(false);
         if (product.getAvailabilityStatus() == null) {
@@ -219,18 +209,9 @@ public class ProductService {
     }
 
     private ProductVariant createVariant(Product product, ProductVariantDTO dto) {
-        ProductVariant variant = new ProductVariant();
-        applyVariantInfo(variant, dto, product);
+        ProductVariant variant = mapper.variantToEntity(dto);
+        applyVariantOwnership(product, variant);
         return variant;
-    }
-
-    private void applyVariantInfo(ProductVariant variant, ProductVariantDTO dto, Product product) {
-        variant.setProduct(product);
-        variant.setVariantName(dto.getVariantName());
-        variant.setPrice(dto.getPrice());
-        variant.setAttributes(dto.getAttributes());
-        variant.setImageUrl(dto.getImageUrl());
-        variant.setDelete(false);
     }
 
     @Transactional(readOnly = true)

@@ -1,12 +1,12 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.ReputationHistoryDTO;
-import com.example.workflow.cache.CacheKeys;
 import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.ReputationHistory;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.mapper.ReputationHistoryMapper;
 import com.example.workflow.repository.ReputationHistoryRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
@@ -26,6 +26,7 @@ public class ReputationService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final ApplicationCacheService applicationCacheService;
+    private final ReputationHistoryMapper reputationHistoryMapper;
 
     @Transactional
     public User changeReputation(User user, int delta, String reason, String referenceType, String referenceId) {
@@ -63,19 +64,7 @@ public class ReputationService {
     public Page<ReputationHistoryDTO> getMyHistory(Pageable pageable) {
         String userId = currentUserService.requireCurrentUserId();
         return reputationHistoryRepository.findByUser_IdOrderByCreatedAtDesc(userId, PageableUtils.normalize(pageable, 5, 50))
-                .map(this::toDto);
-    }
-
-    private ReputationHistoryDTO toDto(ReputationHistory history) {
-        return new ReputationHistoryDTO(
-                history.getId(),
-                history.getDelta(),
-                history.getBalanceAfter(),
-                history.getReason(),
-                history.getReferenceType(),
-                history.getReferenceId(),
-                history.getCreatedAt()
-        );
+                .map(reputationHistoryMapper::toDto);
     }
 
 }

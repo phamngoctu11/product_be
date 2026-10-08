@@ -8,23 +8,18 @@ import com.example.workflow.dto.UpdateCustomRequest;
 import com.example.workflow.entity.CustomRequest;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderContactSnapshot;
-import com.example.workflow.entity.OrderItem;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapper;
+import com.example.workflow.mapper.CheckoutResponseMapper;
 import com.example.workflow.nume.CustomRequestStatus;
-import com.example.workflow.nume.OrderItemProductionStatus;
-import com.example.workflow.nume.OrderItemSourceType;
-import com.example.workflow.nume.OrderProductionStatus;
-import com.example.workflow.nume.OrderStatus;
-import com.example.workflow.nume.OrderType;
-import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
+import com.example.workflow.service.factory.CustomOrderFactory;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
 import com.example.workflow.util.PageableUtils;
@@ -39,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -52,6 +46,8 @@ public class CustomRequestService {
     private final CustomRequestRepository customRequestRepository;
     private final OrderRepository orderRepository;
     private final CustomRequestMapper customRequestMapper;
+    private final CheckoutResponseMapper checkoutResponseMapper;
+    private final CustomOrderFactory customOrderFactory;
     private final DurableRequestExecutor durableRequests;
     private final DomainEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
@@ -174,44 +170,13 @@ public class CustomRequestService {
 
         User owner = userService.requireUser(ownerId, ConstantErrorCode.USER_NOT_FOUND);
         OrderContactSnapshot contact = resolveContact(owner, request);
-        Order order = buildCustomOrder(owner, draft, contact);
+        Order order = customOrderFactory.create(owner, draft, contact);
         Order saved = orderRepository.saveAndFlush(order);
         draft.markSubmitted(saved.getId(), LocalDateTime.now());
         customRequestRepository.saveAndFlush(draft);
 
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(saved.getId()));
         return submissionResponse(saved);
-    }
-
-    private Order buildCustomOrder(User owner, CustomRequest draft, OrderContactSnapshot contact) {
-        Order order = new Order();
-        order.setUser(owner);
-        order.setOrderType(OrderType.CUSTOM);
-        order.setStatus(OrderStatus.PENDING_APPROVAL);
-        order.setPaymentStatus(PaymentStatus.NOT_DUE);
-        order.setPaymentMethod(null);
-        order.setPaymentMethodType(null);
-        order.setProductionStatus(OrderProductionStatus.WAITING_PRODUCTION);
-        order.setStartOrderTime(LocalDateTime.now());
-        order.setTotalPrice(0.0);
-        order.setDiscountAmount(0.0);
-        order.setFinalPrice(null);
-        order.setContactSnapshot(contact);
-        order.setItems(new ArrayList<>());
-
-        OrderItem item = new OrderItem();
-        item.setOrder(order);
-        item.setProductVariant(null);
-        item.setSourceType(OrderItemSourceType.CUSTOM);
-        item.setProductNameSnapshot("Sản phẩm custom #" + draft.getId());
-        item.setVariantNameSnapshot(null);
-        item.setSpecSnapshot(customSnapshot(draft));
-        item.setQuantity(draft.getQuantity());
-        item.setPrice(null);
-        item.setHandmade(true);
-        item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
-        order.getItems().add(item);
-        return order;
     }
 
     private OrderContactSnapshot resolveContact(User owner, SubmitCustomRequest request) {
@@ -229,24 +194,7 @@ public class CustomRequestService {
     }
 
     private CheckoutResponseDTO submissionResponse(Order order) {
-        CheckoutResponseDTO response = new CheckoutResponseDTO();
-        response.setStatus(order.getStatus().name());
-        response.setMessage("Đơn custom đã được tạo và đang chờ quản lý duyệt.");
-        response.setOrderId(order.getId());
-        response.setVersion(order.getVersion());
-        response.setPaymentStatus(order.getPaymentStatus() == null ? null : order.getPaymentStatus().name());
-        response.setPaymentMethod(order.getPaymentMethodType() == null ? null : order.getPaymentMethodType().name());
-        response.setTotalPrice(null);
-        response.setDiscountAmount(null);
-        response.setFinalPrice(null);
-        return response;
-    }
-
-    private String customSnapshot(CustomRequest draft) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("spec", draft.getSpec());
-        snapshot.put("attachments", draft.getAttachments());
-        return JsonUtils.write(objectMapper, snapshot, "custom request data");
+        return checkoutResponseMapper.toCustomResponse(order);
     }
 
     private void validateForSubmission(CustomRequest draft) {

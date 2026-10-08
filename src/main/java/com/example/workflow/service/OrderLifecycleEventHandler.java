@@ -28,6 +28,7 @@ public class OrderLifecycleEventHandler {
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final ApplicationCacheService applicationCacheService;
+    private final OrderWorkflowService orderWorkflowService;
     private final ObjectMapper objectMapper;
 
     @Value("${app.frontend-base-url:http://localhost:4200}")
@@ -127,6 +128,7 @@ public class OrderLifecycleEventHandler {
 
     public void handleOrderCancelled(OrderCancelledEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CANCELLED");
+        orderWorkflowService.correlateOrderCancelled(order.getId());
         consultationAttributionService.cancelOrderAttributions(order.getId());
         applicationCacheService.evictOrderCancelled(order, event.oldStatus());
 

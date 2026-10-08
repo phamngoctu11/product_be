@@ -1,6 +1,8 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
+import com.example.workflow.dto.CancelOrderRequest;
+import com.example.workflow.dto.OrderCancellationResultDTO;
 import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
@@ -11,6 +13,7 @@ import com.example.workflow.dto.ReorderResponseDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
+import com.example.workflow.service.OrderCancellationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.DecimalMin;
@@ -27,8 +30,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,6 +44,7 @@ import java.util.List;
 @Validated
 public class OrderController {
     private final OrderService orderService;
+    private final OrderCancellationService orderCancellationService;
 
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('USER')")
@@ -85,20 +89,15 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(orderService.getOrderHistory(orderId)));
     }
 
-    @PutMapping("/{order_id}/cancel")
+    @PostMapping("/{order_id}/cancellation")
     @PreAuthorize("hasAuthority('USER')")
-    public ResponseEntity<ApiResponse<Void>> cancelOrder(
+    public ResponseEntity<ApiResponse<OrderCancellationResultDTO>> cancelOrder(
             @Positive @PathVariable("order_id") Long orderId,
-            @NotBlank @Size(max = 500) @RequestParam("reason") String reason
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody CancelOrderRequest request
     ) {
-        try {
-            orderService.cancelOrder(orderId, reason);
-            return ResponseEntity.ok(ApiResponse.success("Ban da huy don hang thanh cong."));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        OrderCancellationResultDTO result = orderCancellationService.cancelByCurrentUser(orderId, request, idempotencyKey);
+        return ResponseEntity.ok(ApiResponse.success("Ban da huy don hang thanh cong.", result));
     }
 
     @PostMapping("/{order_id}/reorder")

@@ -8,6 +8,7 @@ import com.example.workflow.repository.ConsultationReviewRepository;
 import com.example.workflow.repository.ConsultationSaleAttributionRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.mapper.ConsultationMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ class ConsultationAttributionCustomOrderTest {
                 mock(DomainEventPublisher.class),
                 mock(ApplicationCacheService.class),
                 mock(CurrentUserService.class),
-                mock(UserService.class)
+                mock(ConsultationMapper.class)
         );
         OrderItem item = new OrderItem();
         item.setQuantity(2);

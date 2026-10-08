@@ -1,7 +1,6 @@
 package com.example.workflow.mapper;
 
 import com.example.workflow.dto.OrderDTO;
-import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.nume.OrderType;
@@ -9,7 +8,7 @@ import com.example.workflow.util.UserDisplayNameUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = OrderItemMapper.class)
+@Mapper(config = CentralMapperConfig.class, uses = OrderItemMapper.class)
 public interface OrderMapper {
 
     @Mapping(source = "user.id", target = "user_id")
@@ -22,30 +21,21 @@ public interface OrderMapper {
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
     OrderDTO toDto(Order order);
 
-    @Mapping(target = "customerName", expression = "java(resolveCustomerName(order))")
-    @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
-    @Mapping(target = "staffName", expression = "java(com.example.workflow.util.UserDisplayNameUtils.fullName(order.getWarehouseStaff()))")
-    OrderListDTO toListDto(Order order);
-
     default String resolveCustomerName(Order order) {
         if (order == null) {
             return null;
         }
-        String userName = UserDisplayNameUtils.fullName(order.getUser());
-        if (userName != null && !userName.isBlank()) {
-            return userName;
+        if (order.getRecipientName() != null && !order.getRecipientName().isBlank()) {
+            return order.getRecipientName();
         }
-        return order.getRecipientName();
+        return UserDisplayNameUtils.fullName(order.getUser());
     }
 
     default String resolveLastname(Order order) {
         if (order == null) {
             return null;
         }
-        if (order.getUser() != null) {
-            return order.getUser().getLastname();
-        }
-        return order.getRecipientName();
+        return resolveCustomerName(order);
     }
 
     default OrderDTO.CustomerInfo resolveCustomerInfo(Order order) {
@@ -56,10 +46,10 @@ public interface OrderMapper {
         if (user != null) {
             return OrderDTO.CustomerInfo.user(
                     user.getId(),
-                    UserDisplayNameUtils.fullName(user),
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getAddress()
+                    firstPresent(order.getRecipientName(), UserDisplayNameUtils.fullName(user)),
+                    firstPresent(order.getEmail(), user.getEmail()),
+                    firstPresent(order.getRecipientPhone(), user.getPhone()),
+                    firstPresent(order.getShippingAddress(), user.getAddress())
             );
         }
         return OrderDTO.CustomerInfo.guest(
@@ -75,10 +65,7 @@ public interface OrderMapper {
         if (order == null) {
             return null;
         }
-        if (order.getUser() != null) {
-            return order.getUser().getEmail();
-        }
-        return order.getEmail();
+        return firstPresent(order.getEmail(), order.getUser() == null ? null : order.getUser().getEmail());
     }
 
     default double resolveTotalPrice(Order order) {
@@ -113,5 +100,9 @@ public interface OrderMapper {
             return order.getGuestVoucherTemplate().getName();
         }
         return null;
+    }
+
+    default String firstPresent(String primary, String fallback) {
+        return primary != null && !primary.isBlank() ? primary : fallback;
     }
 }

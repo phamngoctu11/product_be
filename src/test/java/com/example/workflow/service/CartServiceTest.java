@@ -143,6 +143,9 @@ class CartServiceTest {
         );
         when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(cartMapper.toDto(cart)).thenReturn(mappedCart);
+        when(cartMapper.toItemDtos(any())).thenReturn(List.of(
+                new CartItemDTO(1L, "Variant 1", 2, 25.0, "variant-image.jpg")
+        ));
 
         CartResDTO result = cartService.getCart(CartService.CartOwner.user("1"));
 
@@ -166,6 +169,9 @@ class CartServiceTest {
         );
         when(cartRepository.findByUserId("1")).thenReturn(Optional.of(cart));
         when(cartMapper.toDto(cart)).thenReturn(mappedCart);
+        when(cartMapper.toItemDtos(any())).thenReturn(List.of(
+                new CartItemDTO(1L, "Variant 1", 2, 25.0, "product-image.jpg")
+        ));
 
         CartResDTO result = cartService.getCart(CartService.CartOwner.user("1"));
 

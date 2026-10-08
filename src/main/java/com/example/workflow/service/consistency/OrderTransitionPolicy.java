@@ -27,7 +27,9 @@ public final class OrderTransitionPolicy {
             case USER, GUEST -> BEFORE_ACCEPTED.contains(from);
             case MANAGER_REJECTED -> from == PENDING_APPROVAL;
             case CUSTOM_CONFIRMATION_TIMEOUT -> from == PENDING_ASSIGNMENT || from == DISCUSSING;
-            case PAYMENT_FAILED, PAYMENT_TIMEOUT -> from == ORDER_ACCEPTED;
+            // PENDING_PAYMENT is a temporary compatibility bridge for legacy orders only.
+            // New payment flows must wait in ORDER_ACCEPTED and must never create this state.
+            case PAYMENT_FAILED, PAYMENT_TIMEOUT -> from == ORDER_ACCEPTED || from == PENDING_PAYMENT;
             case SYSTEM -> false; // New system cancellation reasons require explicit policy, not an unrestricted bypass.
         };
     }

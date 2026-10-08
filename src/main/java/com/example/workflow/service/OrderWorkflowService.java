@@ -1,30 +1,33 @@
 package com.example.workflow.service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
-import org.camunda.bpm.engine.runtime.ProcessInstance;
+import org.camunda.bpm.engine.runtime.Execution;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class OrderWorkflowService {
     private final RuntimeService runtimeService;
 
-    public boolean deleteProcessIfExists(Long orderId, String reason) {
+    /**
+     * Completes an explicit cancellation catch event after the database/outbox commit.
+     * A process without that subscription is left untouched for reconciliation; it is
+     * never deleted as a substitute for the audited Order cancellation.
+     */
+    public boolean correlateOrderCancelled(Long orderId) {
         try {
-            ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                    .variableValueEquals("orderId", orderId)
+            Execution execution = runtimeService.createExecutionQuery()
+                    .messageEventSubscriptionName("ORDER_CANCELLED")
+                    .processVariableValueEquals("orderId", orderId)
                     .singleResult();
-            if (processInstance == null) {
+            if (execution == null) {
                 return false;
             }
-            runtimeService.deleteProcessInstance(processInstance.getId(), reason);
+            runtimeService.messageEventReceived("ORDER_CANCELLED", execution.getId());
             return true;
         } catch (RuntimeException ex) {
-            log.warn("Could not delete workflow process for order {}: {}", orderId, ex.getMessage());
-            return false;
+            throw new IllegalStateException("Could not correlate cancellation for order " + orderId, ex);
         }
     }
 }

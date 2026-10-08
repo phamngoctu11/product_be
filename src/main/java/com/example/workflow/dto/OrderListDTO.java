@@ -19,13 +19,4 @@ public class OrderListDTO implements Serializable {
     private LocalDateTime startOrderTime;
     private String paymentMethod;
     private String staffName;
-    public OrderListDTO(Long id, String customerName, Double finalPrice, OrderStatus status, LocalDateTime startOrderTime, String paymentMethod) {
-        this.id = id;
-        this.customerName = customerName;
-        this.finalPrice = finalPrice;
-        this.status = status;
-        this.startOrderTime = startOrderTime;
-        this.paymentMethod = paymentMethod;
-    }
-
 }

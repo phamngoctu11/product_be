@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.CartVoucherOptionsDTO;
+import com.example.workflow.dto.CreateVoucherTemplateRequest;
 import com.example.workflow.dto.UserVoucherDTO;
 import com.example.workflow.dto.VoucherCartOptionDTO;
 import com.example.workflow.dto.VoucherTemplateDTO;
@@ -246,27 +247,34 @@ public class VoucherService {
     }
 
     @Transactional
-    public void restoreGuestVoucher(VoucherTemplate template) {
+    public boolean restoreGuestVoucher(VoucherTemplate template) {
         if (template == null || template.getId() == null || !template.isGuestVoucher()) {
-            return;
+            return false;
         }
-        templateRepository.incrementGuestQuantity(template.getId());
+        return templateRepository.incrementGuestQuantity(template.getId()) == 1;
     }
 
     @Transactional
-    public void restoreAfterCancellation(Order order) {
+    public boolean restoreAfterCancellation(Order order) {
         if (order == null) {
-            return;
+            return false;
         }
+        boolean restored = false;
         UserVoucher appliedVoucher = order.getUserVoucher();
-        if (appliedVoucher != null) {
-            appliedVoucher.setUsed(false);
-            appliedVoucher.setUsedDate(null);
-            userVoucherRepository.save(appliedVoucher);
+        if (appliedVoucher != null && appliedVoucher.getId() != null) {
+            UserVoucher lockedVoucher = userVoucherRepository.findByIdForUpdate(appliedVoucher.getId())
+                    .orElse(null);
+            if (lockedVoucher != null && lockedVoucher.isUsed()) {
+                lockedVoucher.setUsed(false);
+                lockedVoucher.setUsedDate(null);
+                userVoucherRepository.save(lockedVoucher);
+                restored = true;
+            }
         }
         if (order.getUser() == null) {
-            restoreGuestVoucher(order.getGuestVoucherTemplate());
+            restored = restoreGuestVoucher(order.getGuestVoucherTemplate()) || restored;
         }
+        return restored;
     }
 
     public double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
@@ -277,12 +285,10 @@ public class VoucherService {
     }
 
     @Transactional
-    public VoucherTemplate createNewVoucherCampaign(VoucherTemplate request) {
-        request.setId(null);
-        request.setActive(true);
-        VoucherTemplate savedTemplate = templateRepository.save(request);
+    public VoucherTemplateDTO createNewVoucherCampaign(CreateVoucherTemplateRequest request) {
+        VoucherTemplate savedTemplate = templateRepository.save(voucherMapper.toEntity(request));
         applicationCacheService.evictVoucherCampaignChanged();
-        return savedTemplate;
+        return voucherMapper.toTemplateDto(savedTemplate);
     }
 
     private VoucherTemplate getTemplateOrThrow(Long templateId) {

@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/cart/items/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/cart/items/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guest-checkout", "/api/guest-checkout/").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/guest/orders/*/cancellation").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/guest/orders/*/cancellation").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payment/momo-callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/momo-mock-success").permitAll()
                         .requestMatchers("/ws/**", "/camunda/**").permitAll()

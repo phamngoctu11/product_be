@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       HOÀN THÀNH WF01–WF09
-Tái triển khai code:      PHẦN 05 ĐÃ IMPLEMENTED, CHỜ REVIEW
-Phần đang thực hiện:      PHẦN 05 — Bàn giao API/transaction CustomRequest
-Phần hoàn thành gần nhất: PHẦN 05 — Custom request, WF01 (H2/application)
-Ngày cập nhật gần nhất:   07/10/2026
+Tái triển khai code:      PHẦN 06 ĐÃ IMPLEMENTED, CHỜ REVIEW
+Phần đang thực hiện:      PHẦN 06 — Bàn giao kernel/API hủy Order dùng chung
+Phần hoàn thành gần nhất: PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09
+Ngày cập nhật gần nhất:   08/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -48,8 +48,8 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 02 | Domain contract và migration expand | State, entity, tiền, thời gian, dữ liệu mới | 01 | `VERIFIED` |
 | 03 | Hạ tầng nhất quán dùng chung | Transition, lock/version, idempotency, outbox, token, audit | 02 | `VERIFIED` |
 | 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
-| 05 | Custom request | WF01 | 02–04 | `IN_PROGRESS` |
-| 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `NOT_STARTED` |
+| 05 | Custom request | WF01 | 02–04 | `IMPLEMENTED` |
+| 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
 | 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `NOT_STARTED` |
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `NOT_STARTED` |
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `NOT_STARTED` |
@@ -217,7 +217,9 @@ Phạm vi chính:
 
 ### PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` — kernel transaction, API USER/Guest, token/rate/version/idempotency, penalty/voucher/assignment và outbox `ORDER_CANCELLED` đã hoàn thành; còn review contract, MySQL opt-in và BPMN message catch/cutover ở PHẦN 13.
+
+Bàn giao: [06-order-cancellation.md](implementation/06-order-cancellation.md).
 
 Phạm vi chính:
 
@@ -437,6 +439,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 07/10/2026 | Nền tảng/refactor | `VERIFIED` | Tách việc xác định người dùng hiện tại khỏi `AuthService` sang một `CurrentUserService`; mọi service, cache key, rate limit và WebSocket dùng chung đầu mối này; giữ nguyên endpoint và nghiệp vụ | `.\mvnw.cmd test`: 220 test chạy, 0 failure/error, 6 MySQL opt-in skipped; `git diff --check` đạt | Tiếp tục tách các nghiệp vụ trùng lặp theo từng cụm service, bắt đầu với lifecycle/hủy Order khi PHẦN 05 được duyệt |
 | 08/10/2026 | Nền tảng/refactor | `VERIFIED` | Hoàn tất gom toàn bộ nhóm hàm trùng mục đích đã audit: lookup user/order/consultation/product-variant; pageable/text/JSON/money/root-cause/session guest/commission key; checkout chỉ còn ở `CheckoutService`; bỏ service chuyển tiếp manager/staff; gom hoàn kho, hoàn voucher, dừng workflow, audit và event hủy vào `OrderCancellationService` cùng các service chuyên trách | `.\mvnw.cmd test`: 211 test chạy, 0 failure/error, 6 test opt-in skipped; rà tên hàm trùng chỉ còn overload hoặc cùng tên khác miền nghiệp vụ | Review refactor; sau đó tiếp tục PHẦN 06 để áp policy WF09 mới lên service hủy dùng chung |
 | 08/10/2026 | Nền tảng/refactor | `VERIFIED` | Chuẩn hóa side effect vòng đời Order: checkout/custom submit chỉ phát parent event; handler tập trung tạo email/notification và cache read-model; hủy đơn dùng `ORDER_CANCELLED`; xác nhận thanh toán dùng `PAYMENT_CONFIRMED`; loại nguồn phát `GUEST_ORDER_CREATED` trùng trong BPMN/fallback. Cache cart được xóa trực tiếp sau checkout; Product/Products chỉ xóa khi quản trị catalog; Dashboard và BestSelling chỉ dùng TTL 20 phút | `.\mvnw.cmd test`: 216 test chạy, 0 failure/error, 6 test opt-in skipped; `git diff --check` đạt; rà mã xác nhận không còn invalidation Dashboard/BestSelling trong service nghiệp vụ | Review ranh giới handler/cache; sau đó tiếp tục PHẦN 06 theo kế hoạch |
+| 08/10/2026 | Nền tảng/refactor mapper | `VERIFIED` | Chuẩn hóa toàn bộ MapStruct bằng strict config; tách mapper/assembler/factory; bỏ dựng DTO lặp trong service; đóng ranh giới Entity tại Chat/Voucher API; snapshot Order là nguồn đọc chính; loại producer Camunda trùng của `GUEST_ORDER_CREATED` | `.\mvnw.cmd test`: 218 test chạy, 0 failure/error, 6 test opt-in skipped; `.\mvnw.cmd -DskipTests compile` và `git diff --check` đạt | Review [bàn giao mapper](implementation/06-mapper-boundary-refactor.md); tiếp tục PHẦN 06 nghiệp vụ hủy dùng chung |
+| 08/10/2026 | 06 | `IMPLEMENTED` | Hoàn tất kernel hủy Order dùng chung cho USER, Guest, manager reject và system timeout/failure; API mutation idempotent, Guest GET chỉ đọc, token scope/rate/version, penalty, hoàn voucher, release assignment và `ORDER_CANCELLED` outbox; loại hoàn stock/refund và xóa thô process khỏi đường hủy | `.\mvnw.cmd test`: 232 test chạy, 0 failure/error, 6 MySQL opt-in skipped; atomicity test chứng minh một transition audit và một `ORDER_CANCELLED`; [bàn giao](implementation/06-order-cancellation.md) | Review PHẦN 06; sau đó triển khai PHẦN 07 manager review và assignment dùng kernel hủy cho nhánh reject |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -483,10 +487,10 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Review [bàn giao PHẦN 05](implementation/05-custom-request.md), đặc biệt contract endpoint, snapshot JSON và ranh giới chưa nối BPMN legacy. Sau khi được duyệt, bắt đầu **PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09**:
+Review [bàn giao PHẦN 06](implementation/06-order-cancellation.md), đặc biệt contract API, các ngưỡng Guest rate limit/TTL và ranh giới BPMN chưa cutover. Sau khi được duyệt, bắt đầu **PHẦN 07 — Manager review và assignment, WF02**:
 
-1. Rà toàn bộ đường hủy USER/Guest/manager/system hiện tại và xác định caller cần chuyển sang `CancelOrderService`.
-2. Triển khai policy trạng thái trước `ORDER_ACCEPTED`, ownership/token/rate limit và optimistic version/idempotency.
-3. Gom penalty/reputation, voucher, assignment release, stock legacy guard và event/email/notification vào một transaction/outbox.
-4. Viết migration nếu cần, test từng actor/source, callback payment muộn và retry không lặp side effect.
-5. Không triển khai timer Camunda hoặc manager review trong PHẦN 06; các luồng đó dùng service hủy chung ở phần workflow tương ứng.
+1. Chuẩn hóa API manager xem/approve/reject Order `PENDING_APPROVAL`; actor lấy từ JWT, mutation có version và idempotency key.
+2. Cho nhánh reject gọi `OrderCancellationService` với source `MANAGER_REJECTED`, không sao chép penalty/voucher/event.
+3. Xây một service assignment dùng chung cho manager assign và staff claim; khóa Order/staff và bảo đảm mỗi staff chỉ có một assignment active.
+4. Chuyển approve sang `PENDING_ASSIGNMENT` hoặc trạng thái thảo luận phù hợp khi đã assign; chưa tạo payment URL.
+5. Viết test cạnh tranh hai manager, hai staff và manager approve/reject với customer cancel; chưa triển khai chat/agreement PT24H của PHẦN 08.

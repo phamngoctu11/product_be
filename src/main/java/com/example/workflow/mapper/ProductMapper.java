@@ -5,13 +5,14 @@ import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import org.mapstruct.AfterMapping;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = CentralMapperConfig.class)
 public interface ProductMapper {
 
     // 1. Chuyển từ Entity sang DTO (Dùng cho getAllProducts, getProductById)
@@ -26,17 +27,40 @@ public interface ProductMapper {
     // 2. Chuyển từ DTO sang Entity (Dùng cho createProduct)
     @Mapping(source = "product_name", target = "productName")
     @Mapping(source = "image_url", target = "imageUrl")
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "delete", ignore = true)
     Product toEntity(ProductDTO dto);
 
     // ĐÃ FIX: Chỉ định MapStruct ánh xạ đúng tên biến ảnh cho Biến thể
     @Mapping(source = "imageUrl", target = "imageUrl")
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "product", ignore = true)
     @Mapping(target = "quantity", ignore = true)
+    @Mapping(target = "delete", ignore = true)
     ProductVariant variantToEntity(ProductVariantDTO dto);
 
-    // 3. Cập nhật Entity có sẵn từ DTO (Dùng cho updateProduct)
+    @BeanMapping(ignoreByDefault = true)
     @Mapping(source = "product_name", target = "productName")
-    @Mapping(source = "image_url", target = "imageUrl") // Bổ sung luôn cho an toàn tuyệt đối
-    void updateProductFromDto(ProductDTO dto, @MappingTarget Product entity);
+    @Mapping(source = "image_url", target = "imageUrl")
+    @Mapping(source = "price", target = "price")
+    @Mapping(source = "tags", target = "tags")
+    @Mapping(source = "madeDay", target = "madeDay")
+    @Mapping(source = "handmade", target = "handmade")
+    void updateCatalogInfo(ProductDTO dto, @MappingTarget Product entity);
+
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(source = "product_name", target = "productName")
+    @Mapping(source = "image_url", target = "imageUrl")
+    @Mapping(source = "price", target = "price")
+    @Mapping(source = "tags", target = "tags")
+    void updateBasicInfo(ProductDTO dto, @MappingTarget Product entity);
+
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(source = "variantName", target = "variantName")
+    @Mapping(source = "price", target = "price")
+    @Mapping(source = "attributes", target = "attributes")
+    @Mapping(source = "imageUrl", target = "imageUrl")
+    void updateVariant(ProductVariantDTO dto, @MappingTarget ProductVariant entity);
 
     // Chỉ trả về các biến thể chưa bị xóa. Tồn kho không còn là một phần của catalog made-to-order.
     @AfterMapping

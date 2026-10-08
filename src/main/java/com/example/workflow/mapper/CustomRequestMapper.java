@@ -7,7 +7,7 @@ import org.mapstruct.Mapping;
 
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = CentralMapperConfig.class)
 public interface CustomRequestMapper {
     @Mapping(target = "editable", expression = "java(request != null && request.isEditable())")
     CustomRequestDTO toDto(CustomRequest request);

@@ -7,6 +7,8 @@ import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapperImpl;
+import com.example.workflow.mapper.CheckoutResponseMapperImpl;
+import com.example.workflow.mapper.NotificationMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.service.CurrentUserService;
@@ -17,6 +19,7 @@ import com.example.workflow.service.UserService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OutboxStore;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.factory.CustomOrderFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import liquibase.Contexts;
 import liquibase.LabelExpression;
@@ -54,6 +57,9 @@ import static org.mockito.Mockito.when;
 @Import({
         CustomRequestService.class,
         CustomRequestMapperImpl.class,
+        CheckoutResponseMapperImpl.class,
+        NotificationMapperImpl.class,
+        CustomOrderFactory.class,
         DurableRequestExecutor.class,
         OutboxStore.class,
         DomainEventPublisher.class,

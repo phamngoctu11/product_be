@@ -16,6 +16,7 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +58,7 @@ public class OrderService {
     private final UserService userService;
     private final ReputationService reputationService;
     private final CartService cartService;
-    private final ProductReviewRepository productReviewRepository;
+    private final OrderDetailsAssembler orderDetailsAssembler;
     private final ApplicationCacheService applicationCacheService;
     private final OrderLookupService orderLookupService;
     private final OrderStatusHistoryService orderStatusHistoryService;
@@ -160,6 +161,7 @@ public class OrderService {
         //Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
 
         OrderStatus oldStatus = order.getStatus();
+        Long reviewOrderVersion = order.getVersion();
         order.setManager(manager);
         order.setApprovedById(manager.getId());
         order.setApprovedByFullName(userService.fullName(manager));
@@ -177,18 +179,13 @@ public class OrderService {
             String rejectionReason = "Quan ly tu choi: " + request.getCancelReason();
             order.setCancelReason(rejectionReason);
             variables.put("isApproved", false);
-            orderCancellationService.cancel(
-                    order,
-                    new OrderCancellationService.Request(
-                            rejectionReason,
-                            "MANAGER_REJECT_RETURN",
-                            false,
-                            manager.getId(),
-                            CancellationSource.MANAGER_REJECTED,
-                            "manager-reject:" + orderId,
-                            true,
-                            "Manager rejected order"
-                    )
+            orderCancellationService.cancelByManagerReject(
+                    orderId,
+                    reviewOrderVersion,
+                    rejectionReason,
+                    manager.getId(),
+                    "manager-review:" + orderId + ":" + reviewOrderVersion,
+                    "manager-review:" + orderId + ":" + reviewOrderVersion
             );
         }
 
@@ -476,69 +473,6 @@ public class OrderService {
         return variant.getVariantName();
     }
 
-    private int calculateCancellationReputationDeduction(Order order) {
-        double finalPrice = resolveFinalPrice(order);
-        if (finalPrice < 1_000_000) {
-            return 1;
-        }
-        if (finalPrice <= 5_000_000) {
-            return 2;
-        }
-        if (finalPrice <= 10_000_000) {
-            return 3;
-        }
-        return 5;
-    }
-
-    private double resolveFinalPrice(Order order) {
-        if (order.getFinalPrice() != null) {
-            return order.getFinalPrice();
-        }
-        double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
-        return Math.max(0.0, order.getTotalPrice() - discountAmount);
-    }
-
-    private void deductUserReputation(User user, int deduction, Long orderId) {
-        reputationService.changeReputation(
-                user,
-                -deduction,
-                "Cancelled order #" + orderId,
-                "ORDER",
-                String.valueOf(orderId)
-        );
-    }
-
-    @Transactional
-    public void cancelOrder(Long id, String reason) {
-        Order order = orderLookupService.requireForUpdate(id);
-        User user = currentUserService.requireCurrentUser();
-
-        if (!order.getUser().getId().equals(user.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CANNOT_CANCEL_ANOTHER_USERS_ORDER);
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING_APPROVAL && order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_CANCELLED);
-        }
-
-        deductUserReputation(user, calculateCancellationReputationDeduction(order), id);
-        String cancelReason = "Khach hang tu huy: " + reason;
-        orderCancellationService.cancel(
-                order,
-                new OrderCancellationService.Request(
-                        cancelReason,
-                        "CANCEL_RETURN",
-                        false,
-                        user.getId(),
-                        CancellationSource.USER,
-                        "customer-cancel:" + id,
-                        true,
-                        "Customer cancelled order"
-                )
-        );
-
-    }
-
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ReorderResponseDTO reorderOrder(Long orderId) {
         Order order = orderLookupService.require(orderId);
@@ -617,48 +551,7 @@ public class OrderService {
     public OrderDTO getOrderById(Long id) {
         Order order = orderLookupService.require(id);
         assertCurrentUserCanViewOrder(order);
-        OrderDTO dto = orderMapper.toDto(order);
-        injectImageUrls(order, dto);
-        injectReviewStatuses(dto);
-        return dto;
-    }
-
-    private void injectImageUrls(Order entity, OrderDTO dto) {
-        if (entity.getItems() != null && dto.getItems() != null) {
-            for (int j = 0; j < entity.getItems().size(); j++) {
-                OrderItem itemEntity = entity.getItems().get(j);
-                var itemDTO = dto.getItems().get(j);
-                if (itemEntity.getProductVariant() != null) {
-                    ProductVariant variant = itemEntity.getProductVariant();
-                    if (variant.getImageUrl() != null && !variant.getImageUrl().isEmpty()) itemDTO.setImageUrl(variant.getImageUrl());
-                    else if (variant.getProduct() != null && variant.getProduct().getImageUrl() != null) itemDTO.setImageUrl(variant.getProduct().getImageUrl());
-                }
-            }
-        }
-    }
-
-    private void injectReviewStatuses(OrderDTO dto) {
-        if (dto.getItems() == null || dto.getItems().isEmpty()) {
-            return;
-        }
-
-        List<Long> orderItemIds = dto.getItems().stream()
-                .map(OrderItemDTO::getOrderItemId)
-                .filter(id -> id != null)
-                .toList();
-        if (orderItemIds.isEmpty()) {
-            return;
-        }
-
-        Map<Long, Long> reviewIdByOrderItemId = productReviewRepository.findByOrderItem_IdIn(orderItemIds)
-                .stream()
-                .collect(Collectors.toMap(review -> review.getOrderItem().getId(), ProductReview::getId));
-
-        dto.getItems().forEach(item -> {
-            Long reviewId = reviewIdByOrderItemId.get(item.getOrderItemId());
-            item.setReviewed(reviewId != null);
-            item.setReviewId(reviewId);
-        });
+        return orderDetailsAssembler.toDto(order);
     }
 
     @Transactional(readOnly = true)
@@ -716,18 +609,13 @@ public class OrderService {
     private void handleFailedMomoPayment(Order order, String resultCode) {
         Long orderId = order.getId();
         String cancelReason = "Thanh toan MoMo that bai hoac khach huy giao dich (Ma loi MoMo: " + resultCode + ")";
-        orderCancellationService.cancel(
-                order,
-                new OrderCancellationService.Request(
-                        cancelReason,
-                        "PAYMENT_FAILED_RETURN",
-                        false,
-                        null,
-                        CancellationSource.PAYMENT_FAILED,
-                        "momo-result:" + resultCode,
-                        true,
-                        "MoMo payment failed"
-                )
+        orderCancellationService.cancelBySystem(
+                orderId,
+                order.getVersion(),
+                CancellationSource.PAYMENT_FAILED,
+                cancelReason,
+                "momo-result:" + orderId + ":" + resultCode,
+                "momo-result:" + orderId + ":" + resultCode
         );
 
     }

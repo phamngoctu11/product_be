@@ -1,12 +1,16 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.ChatUserDTO;
+import com.example.workflow.dto.ChatMessageDTO;
 import com.example.workflow.dto.ConsultationRequestDTO;
+import com.example.workflow.dto.SendChatMessageRequest;
 import com.example.workflow.entity.ChatMessage;
 import com.example.workflow.entity.ConsultationRequest;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.mapper.ChatMessageMapper;
+import com.example.workflow.mapper.ChatUserMapper;
 import com.example.workflow.nume.ConsultationStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChatMessageRepository;
@@ -15,19 +19,15 @@ import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.redis.ChatPresenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -45,22 +45,25 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private final ConsultationRequestRepository consultationRepository;
-    private final MongoTemplate mongoTemplate;
     private final ChatPresenceService chatPresenceService;
     private final NotificationService notificationService;
     private final CurrentUserService currentUserService;
     private final UserService userService;
     private final ConsultationLookupService consultationLookupService;
+    private final ChatMessageMapper chatMessageMapper;
+    private final ChatUserMapper chatUserMapper;
 
     @Transactional(readOnly = true)
-    public List<ChatMessage> getChatHistory(String userId) {
+    public List<ChatMessageDTO> getChatHistory(String userId) {
         User currentUser = currentUserService.requireCurrentUser();
         validateUserChatReadAccess(userId, currentUser);
-        return chatMessageRepository.findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(userId);
+        return chatMessageMapper.toDtos(
+                chatMessageRepository.findByUserIdAndConsultationRequestIdIsNullOrderByTimestampAsc(userId)
+        );
     }
 
     @Transactional(readOnly = true)
-    public List<ChatMessage> getConsultationChatHistory(Long consultationRequestId, Long productId) {
+    public List<ChatMessageDTO> getConsultationChatHistory(Long consultationRequestId, Long productId) {
         ConsultationRequest consultation = consultationLookupService.require(consultationRequestId);
         User currentUser = currentUserService.requireCurrentUser();
         validateConsultationReadAccess(consultation, currentUser);
@@ -68,9 +71,11 @@ public class ChatService {
             if (!consultation.getProduct().getId().equals(productId)) {
                 throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Product does not belong to this consultation request.");
             }
-            return chatMessageRepository.findByConsultationRequestIdAndProductIdOrderByTimestampAsc(consultationRequestId, productId);
+            return chatMessageMapper.toDtos(
+                    chatMessageRepository.findByConsultationRequestIdAndProductIdOrderByTimestampAsc(consultationRequestId, productId)
+            );
         }
-        return chatMessageRepository.findByConsultationRequestIdOrderByTimestampAsc(consultationRequestId);
+        return chatMessageMapper.toDtos(chatMessageRepository.findByConsultationRequestIdOrderByTimestampAsc(consultationRequestId));
     }
 
     @Transactional(readOnly = true)
@@ -79,54 +84,11 @@ public class ChatService {
         if (currentUser.getRole() == Role.STAFF) {
             return getAssignedChatUsers(currentUser);
         }
-        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER) {
-            return getAllChattedUsers();
+        if (currentUser.getRole() == Role.USER) {
+            return getCustomerChatThreads(currentUser);
         }
-        return getCustomerChatThreads(currentUser);
-    }
-
-    private List<ChatUserDTO> getAllChattedUsers() {
-        List<ConsultationRequestDTO> requests = consultationRepository
-                .findDtosByStatusIn(OPEN_STATUSES, Pageable.unpaged())
-                .getContent();
-
-        List<String> userIds = mongoTemplate.query(ChatMessage.class)
-                .distinct("userId")
-                .as(String.class)
-                .all();
-
-        List<String> requestUserIds = requests.stream()
-                .map(ConsultationRequestDTO::getUserId)
-                .distinct()
-                .toList();
-        List<String> allUserIds = Stream.concat(userIds.stream(), requestUserIds.stream())
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-
-        if (allUserIds.isEmpty()) {
-            return List.of();
-        }
-
-        Map<String, ChatUserDTO> usersById = loadChatUsersById(allUserIds);
-
-        List<ChatUserDTO> chatUsers = new ArrayList<>();
-        for (ConsultationRequestDTO request : requests) {
-            ChatUserDTO enrichedUser = enrichChatUser(usersById.get(request.getUserId()), request);
-            if (enrichedUser != null) {
-                chatUsers.add(enrichedUser);
-            }
-        }
-
-        Map<String, ChatUserDTO> consultationUsersById = chatUsers.stream()
-                .collect(Collectors.toMap(ChatUserDTO::getId, Function.identity(), (first, second) -> first, LinkedHashMap::new));
-        userIds.stream()
-                .filter(userId -> !consultationUsersById.containsKey(userId))
-                .map(usersById::get)
-                .filter(user -> user != null)
-                .forEach(chatUsers::add);
-
-        return chatUsers;
+        throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.BAD_REQUEST_DETAIL,
+                "Only the customer and assigned staff can access chat rooms.");
     }
 
     private List<ChatUserDTO> getAssignedChatUsers(User staff) {
@@ -144,7 +106,7 @@ public class ChatService {
         Map<String, ChatUserDTO> usersById = loadChatUsersById(userIds);
 
         return requests.stream()
-                .map(request -> enrichChatUser(usersById.get(request.getUserId()), request))
+                .map(request -> chatUserMapper.toStaffThread(usersById.get(request.getUserId()), request))
                 .filter(chatUser -> chatUser != null)
                 .toList();
     }
@@ -158,7 +120,11 @@ public class ChatService {
         }
 
         return requests.stream()
-                .map(request -> toCustomerThread(user, request))
+                .map(request -> chatUserMapper.toCustomerThread(
+                        user,
+                        request,
+                        request.getAssignedStaffId() != null && chatPresenceService.isOnline(request.getAssignedStaffId())
+                ))
                 .toList();
     }
 
@@ -184,6 +150,18 @@ public class ChatService {
             notifyCustomerWhenStaffReplies(sender, consultation);
         }
         return savedMessage;
+    }
+
+    @Transactional
+    public ChatMessageDTO saveMessage(SendChatMessageRequest request, String sessionUserId) {
+        ChatMessage message = chatMessageMapper.toEntity(request);
+        if (sessionUserId != null && !sessionUserId.isBlank()) {
+            message.setSenderId(sessionUserId.trim());
+            if (message.getUserId() == null) {
+                message.setUserId(sessionUserId.trim());
+            }
+        }
+        return chatMessageMapper.toDto(saveMessage(message));
     }
 
     public long deleteConsultationHistory(Long consultationRequestId) {
@@ -275,9 +253,6 @@ public class ChatService {
     }
 
     private void validateUserChatReadAccess(String userId, User currentUser) {
-        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER) {
-            return;
-        }
         if (currentUser.getRole() == Role.USER && currentUser.getId().equals(userId)) {
             return;
         }
@@ -293,9 +268,6 @@ public class ChatService {
     }
 
     private void validateConsultationReadAccess(ConsultationRequest consultation, User currentUser) {
-        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER) {
-            return;
-        }
         if (currentUser.getRole() == Role.USER && consultation.getUser().getId().equals(currentUser.getId())) {
             return;
         }
@@ -372,64 +344,11 @@ public class ChatService {
                 );
     }
 
-    private ChatUserDTO enrichChatUser(ChatUserDTO source, ConsultationRequestDTO request) {
-        if (source == null) {
-            return null;
-        }
-
-        ChatUserDTO chatUser = new ChatUserDTO(
-                source.getId(),
-                source.getFirstname(),
-                source.getLastname(),
-                source.getEmail(),
-                source.getAvatarUrl(),
-                source.getIsActive()
-        );
-        applyConsultationThreadMetadata(chatUser, request);
-        chatUser.setChatTitle(request.getCustomerName() + " - " + request.getProductName());
-        return chatUser;
-    }
-
-    private ChatUserDTO toCustomerThread(User user, ConsultationRequestDTO request) {
-        ChatUserDTO chatUser = toChatUserDTO(user);
-        applyConsultationThreadMetadata(chatUser, request);
-        chatUser.setIsActive(request.getAssignedStaffId() != null && chatPresenceService.isOnline(request.getAssignedStaffId()));
-
-        String staffName = request.getAssignedStaffName() == null || request.getAssignedStaffName().isBlank()
-                ? "Dang cho nhan vien"
-                : request.getAssignedStaffName();
-        chatUser.setChatTitle(request.getProductName() + " - " + staffName);
-        return chatUser;
-    }
-
     private Map<String, ChatUserDTO> loadChatUsersById(List<String> userIds) {
         return userRepository.findChatUserDtosByIds(userIds)
                 .stream()
                 .peek(user -> user.setIsActive(chatPresenceService.isOnline(user.getId())))
                 .collect(Collectors.toMap(ChatUserDTO::getId, Function.identity(), (first, second) -> first));
-    }
-
-    private void applyConsultationThreadMetadata(ChatUserDTO chatUser, ConsultationRequestDTO request) {
-        chatUser.setChatThreadId(request.getId());
-        chatUser.setConsultationRequestId(request.getId());
-        chatUser.setProductId(request.getProductId());
-        chatUser.setProductName(request.getProductName());
-        chatUser.setProductImageUrl(request.getProductImageUrl());
-        chatUser.setAssignedStaffId(request.getAssignedStaffId());
-        chatUser.setAssignedStaffName(request.getAssignedStaffName());
-        chatUser.setAssignedByManagerId(request.getAssignedByManagerId());
-        chatUser.setAssignedByManagerName(request.getAssignedByManagerName());
-    }
-
-    private ChatUserDTO toChatUserDTO(User user) {
-        return new ChatUserDTO(
-                user.getId(),
-                user.getFirstname(),
-                user.getLastname(),
-                user.getEmail(),
-                user.getAvatarUrl(),
-                false
-        );
     }
 
     private User getActiveUserById(String userId) {

@@ -1,7 +1,7 @@
 package com.example.workflow.service.redis;
 
 import com.example.workflow.dto.ChatRealtimeEvent;
-import com.example.workflow.entity.ChatMessage;
+import com.example.workflow.dto.ChatMessageDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +21,7 @@ public class ChatRealtimePublisher {
     @Value("${chat.realtime.redis-pubsub.enabled:false}")
     private boolean redisPubSubEnabled;
 
-    public void publishMessage(String destination, ChatMessage message) {
+    public void publishMessage(String destination, ChatMessageDTO message) {
         ChatRealtimeEvent event = new ChatRealtimeEvent(destination, message, null, null);
         if (!publishToRedis(event)) {
             publishLocal(destination, message);
@@ -30,7 +30,7 @@ public class ChatRealtimePublisher {
 
     public void publishStatus(String userId, boolean active) {
         ChatRealtimeEvent event = new ChatRealtimeEvent(
-                "/topic/chat/admin/status",
+                "/topic/chat/presence/" + userId,
                 null,
                 userId,
                 active
