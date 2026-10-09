@@ -114,6 +114,21 @@ class OrderAssignmentServiceTest {
         verify(userRepository, never()).findByIdForUpdate(anyString());
     }
 
+    @Test
+    void legacyWarehouseAssignmentCannotBeOverwritten() {
+        User existingStaff = user("staff-existing", Role.STAFF, true);
+        Order order = order(50L, OrderStatus.PENDING_ASSIGNMENT, OrderType.CATALOG, user("owner", Role.USER, true));
+        order.setWarehouseStaff(existingStaff);
+        when(orderRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.assignWithinTransaction(
+                50L, 0L, "staff-new", AssignmentSource.MANAGER, "manager-1", false
+        )).isInstanceOf(AppException.class);
+
+        verify(userRepository, never()).findByIdForUpdate("staff-new");
+        verify(transitionService, never()).apply(anyLong(), anyLong(), any(), anyString(), anyString(), anyString(), any());
+    }
+
     private void prepareAvailable(Order order, User staff) {
         when(orderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(assignmentRepository.findActiveByOrderIdForUpdate(order.getId())).thenReturn(Optional.empty());

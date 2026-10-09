@@ -8,9 +8,9 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       WF01 ĐÃ CẬP NHẬT CONTRACT CUSTOM NGÀY 09/10; WF02–WF09 GIỮ NGUYÊN
-Tái triển khai code:      PHẦN 05 ĐÃ IMPLEMENTED THEO CONTRACT DESCRIPTION/IMAGE URL MỚI
-Phần đang thực hiện:      REVIEW/BÀN GIAO PHẦN 05
-Phần hoàn thành gần nhất: PHẦN 05 — Custom request, WF01 (contract 09/10/2026)
+Tái triển khai code:      PHẦN 05 VÀ F06/PHẦN 07 ĐÃ IMPLEMENTED THEO CONTRACT MỚI
+Phần đang thực hiện:      REVIEW/BÀN GIAO F06 — MANAGER REVIEW (THUỘC PHẦN 07)
+Phần hoàn thành gần nhất: F06 — Manager duyệt khả năng thực hiện (PHẦN 07)
 Ngày cập nhật gần nhất:   09/10/2026
 ```
 
@@ -450,6 +450,7 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 08/10/2026 | 07 | `IMPLEMENTED` | Thay API review/assign/claim legacy bằng `ManagerOrderReviewService` và kernel `OrderAssignmentService`; actor từ JWT, version/idempotency, Order/staff lock, active unique, CUSTOM due +24h, Guest CATALOG sang ORDER_ACCEPTED và manager reject dùng PHẦN 06 | `.\mvnw.cmd test`: 244 test chạy, 0 failure/error, 6 MySQL opt-in skipped; migration legacy lặp đạt; atomicity test chứng minh một decision/assignment/transition; [bàn giao](implementation/07-manager-review-assignment.md) | Review PHẦN 07; sau đó triển khai PHẦN 08 chat, agreement và timer CUSTOM PT24H |
 | 09/10/2026 | 05 | `IN_PROGRESS` | Người dùng chốt custom draft gồm description tối đa 4.000 từ và `imageUrls` dạng danh sách URL; rà soát xác nhận code hiện dùng `spec/attachments` String và schema `TEXT` nên chưa đạt contract mới | Cập nhật target, WF01 và báo cáo; chưa sửa code. Test review trước quyết định: 26 test PHẦN 05 đạt trên H2, Docker/MySQL không sẵn sàng | Sửa migration/entity/DTO/mapper/service/snapshot/test PHẦN 05 trước khi bắt đầu PHẦN 08 |
 | 09/10/2026 | 05 | `IMPLEMENTED` | Hoàn tất API/domain `description` + `imageUrls`, giới hạn 4.000 từ, URL HTTP/HTTPS, migration LONGTEXT tương thích cột legacy, snapshot mới/fallback cũ, response `draftId/orderType`, link email và chặn user soft-delete | `.\mvnw.cmd test`: 254 test, 0 failure/error, 7 MySQL opt-in skipped; test đồng thời chỉ tạo 1 Order và fault injection xác nhận rollback toàn transaction; `git diff --check` đạt | Review PHẦN 05, chạy MySQL opt-in khi Docker sẵn sàng, sau đó bắt đầu PHẦN 08 |
+| 09/10/2026 | 07 / F06 | `IMPLEMENTED` | Nghiệm thu lại manager review theo contract custom mới: chi tiết OrderItem trả typed `description/imageUrls` với fallback snapshot legacy; assignment mới chặn ghi đè cả `assignedStaff` lẫn `warehouseStaff` legacy | Targeted 14 test mapper/review/assignment/atomicity đạt; full suite được chạy lại ở checkpoint bàn giao | Review PHẦN 05 và PHẦN 07/F06, sau đó bắt đầu PHẦN 08 |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -497,7 +498,7 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Review/bàn giao **PHẦN 05 — Custom request, WF01** theo quyết định ngày 09/10/2026:
+Review/bàn giao **PHẦN 05 — Custom request** và **F06 manager review thuộc PHẦN 07** theo quyết định ngày 09/10/2026:
 
 1. Khi Docker sẵn sàng, chạy bộ MySQL opt-in để nghiệm thu changeset `06-custom-request-content.xml` trên MySQL thực tế.
 2. Sau khi review PHẦN 05 và PHẦN 07, bắt đầu PHẦN 08 — ChatThread, Agreement versioned và timer CUSTOM PT24H.

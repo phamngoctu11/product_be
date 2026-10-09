@@ -1,6 +1,6 @@
 # Bàn giao PHẦN 07 — Manager review và assignment (WF02)
 
-Ngày cập nhật: 08/10/2026.
+Ngày cập nhật: 09/10/2026.
 
 ## Kết quả
 
@@ -8,6 +8,8 @@ PHẦN 07 đã thay đường manager review/assign và staff claim legacy bằn
 
 - `ManagerOrderReviewService`: danh sách/chi tiết chờ duyệt, approve/reject, metadata quyết định và hạn xác nhận CUSTOM.
 - `OrderAssignmentService`: một kernel gán dùng chung cho manager assign, manager approve kèm staff và staff self-claim.
+
+API chi tiết Order hiện trả thêm `description` và `imageUrls` đã parse trên từng `OrderItemDTO` CUSTOM. FE không phải tự parse `specSnapshot`; trường snapshot thô vẫn được giữ tạm để tương thích client cũ. Mapper đọc cả snapshot mới `{description,imageUrls}` và snapshot legacy `{spec,attachments}`.
 
 Actor không còn lấy từ `changerId` do client gửi. Mọi thao tác lấy MANAGER/STAFF từ JWT qua `CurrentUserService`, bắt buộc `orderVersion` và `Idempotency-Key`.
 
@@ -83,6 +85,7 @@ Trong model hiện tại, `AVAILABLE` được suy ra từ ba điều kiện:
 - User có role `STAFF`, chưa bị xóa và `isActive=true`.
 - Không tồn tại `OrderAssignment.activeStaffId` cho staff.
 - Order chưa có `OrderAssignment.activeOrderId` và chưa có assigned staff.
+- Order cũng không được còn `warehouseStaff` legacy; endpoint mới từ chối thay vì ghi đè người đã phụ trách trong dữ liệu cũ.
 
 Transaction luôn khóa Order trước, sau đó khóa hàng User của staff. Nó kiểm tra lại active assignment dưới khóa rồi mới chuyển trạng thái và `saveAndFlush` assignment. Hai unique constraint `active_order_id` và `active_staff_id` là lớp bảo vệ cuối ở database.
 
@@ -125,6 +128,8 @@ Guest đã nhận secure lookup link trong email tạo đơn. Event `ORDER_ACCEP
 - USER order sang `DISCUSSING`, Guest CATALOG sang `ORDER_ACCEPTED`;
 - staff bận không nhận Order thứ hai;
 - version cũ thất bại trước khi khóa/gán staff;
+- snapshot CUSTOM mới/legacy đều trả `description` và `imageUrls` có kiểu rõ ràng cho màn hình manager;
+- `warehouseStaff` legacy không thể bị endpoint assign mới ghi đè;
 - retry cùng key chỉ có một assignment, một transition audit và một notification;
 - migration chạy lặp trên schema legacy;
 - `ORDER_ACCEPTED` được consumer định tuyến đúng và không tạo notification hệ thống cho Guest.

@@ -183,6 +183,7 @@ public class OrderAssignmentService {
             );
         }
         if (order.getAssignedStaff() != null
+                || order.getWarehouseStaff() != null
                 || assignmentRepository.findActiveByOrderIdForUpdate(orderId).isPresent()) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_ASSIGNMENT_CONFLICT);
         }

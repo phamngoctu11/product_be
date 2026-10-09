@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class OrderItemDTO implements Serializable {
@@ -20,6 +21,8 @@ public class OrderItemDTO implements Serializable {
     private Double price;
     private OrderItemSourceType sourceType;
     private String specSnapshot;
+    private String description;
+    private List<String> imageUrls;
     private Double madeDaySnapshot;
     private Integer productionDurationDays;
     private String durationRuleVersion;

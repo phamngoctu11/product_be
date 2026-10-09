@@ -19,17 +19,34 @@ class OrderItemMapperSnapshotTest {
         item.setSourceType(OrderItemSourceType.CUSTOM);
         item.setProductNameSnapshot("Custom product");
         item.setVariantNameSnapshot("Made to order");
-        item.setSpecSnapshot("{\"material\":\"wood\"}");
+        item.setSpecSnapshot("{\"description\":\"Bàn gỗ khắc tên\",\"imageUrls\":[\"https://cdn.example/a.jpg\",\"https://cdn.example/b.jpg\"]}");
         item.setQuantity(2);
 
         var result = mapper.toDto(item);
 
         assertThat(result.getProductName()).isEqualTo("Custom product");
         assertThat(result.getVariantName()).isEqualTo("Made to order");
-        assertThat(result.getSpecSnapshot()).isEqualTo("{\"material\":\"wood\"}");
+        assertThat(result.getSpecSnapshot()).contains("Bàn gỗ khắc tên");
+        assertThat(result.getDescription()).isEqualTo("Bàn gỗ khắc tên");
+        assertThat(result.getImageUrls()).containsExactly(
+                "https://cdn.example/a.jpg",
+                "https://cdn.example/b.jpg"
+        );
         assertThat(result.getVariantId()).isNull();
         assertThat(result.getProductId()).isNull();
         assertThat(result.getPrice()).isNull();
+    }
+
+    @Test
+    void customItemReadsLegacySnapshotWithoutExposingParsingToApiClients() {
+        OrderItem item = new OrderItem();
+        item.setSourceType(OrderItemSourceType.CUSTOM);
+        item.setSpecSnapshot("{\"spec\":\"Legacy description\",\"attachments\":\"[\\\"https://cdn.example/legacy.jpg\\\"]\"}");
+
+        var result = mapper.toDto(item);
+
+        assertThat(result.getDescription()).isEqualTo("Legacy description");
+        assertThat(result.getImageUrls()).containsExactly("https://cdn.example/legacy.jpg");
     }
 
     @Test
