@@ -1,15 +1,23 @@
 package com.example.workflow.controller;
 
-import com.example.workflow.dto.AdminReviewRequest;
+import com.example.workflow.dto.AssignOrderRequest;
+import com.example.workflow.dto.AvailableStaffDTO;
 import com.example.workflow.dto.ApiResponse;
-import com.example.workflow.dto.OrderListDTO;
+import com.example.workflow.dto.ManagerOrderReviewDetailDTO;
+import com.example.workflow.dto.ManagerOrderReviewSummaryDTO;
+import com.example.workflow.dto.ManagerReviewRequest;
+import com.example.workflow.dto.ManagerReviewResultDTO;
+import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.service.ManagerOrderReviewService;
+import com.example.workflow.service.OrderAssignmentService;
 import com.example.workflow.service.OrderService;
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,7 +27,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,48 +41,57 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ManagerOrderController {
     private final OrderService orderService;
+    private final ManagerOrderReviewService reviewService;
+    private final OrderAssignmentService assignmentService;
 
-    @PostMapping("/admin/pending")
-    @PreAuthorize("hasAnyAuthority('MANAGER', 'STAFF', 'ADMIN')")
-    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getPendingOrders(
-            @RequestParam OrderStatus status,
+    @GetMapping("/manager/reviews")
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public ResponseEntity<ApiResponse<Page<ManagerOrderReviewSummaryDTO>>> getPendingReviews(
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(orderService.getPendingOrders(status, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(reviewService.listPending(pageable)));
     }
 
-    @PostMapping("/manager/review-order/{orderId}")
+    @GetMapping("/manager/reviews/{orderId}")
     @PreAuthorize("hasAuthority('MANAGER')")
-    public ResponseEntity<ApiResponse<Void>> reviewOrder(
-            @Positive @PathVariable Long orderId,
-            @Valid @RequestBody AdminReviewRequest request,
-            @RequestParam("changerId") String changerId,
-            @RequestParam(value = "staffId", required = false) String staffId
+    public ResponseEntity<ApiResponse<ManagerOrderReviewDetailDTO>> getReviewDetail(
+            @Positive @PathVariable Long orderId
     ) {
-        try {
-            orderService.processAdminReview(orderId, request, changerId, staffId);
-            return ResponseEntity.ok(ApiResponse.success("Duyet don thanh cong!"));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        return ResponseEntity.ok(ApiResponse.success(reviewService.getReviewDetail(orderId)));
     }
 
-    @PostMapping("/manager/assign-staff/{orderId}")
+    @PostMapping("/manager/reviews/{orderId}")
     @PreAuthorize("hasAuthority('MANAGER')")
-    public ResponseEntity<ApiResponse<Void>> assignStaffToOrder(
+    public ResponseEntity<ApiResponse<ManagerReviewResultDTO>> reviewOrder(
             @Positive @PathVariable Long orderId,
-            @RequestParam("staffId") String staffId
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody ManagerReviewRequest request
     ) {
-        try {
-            orderService.assignStaffToOrder(orderId, staffId);
-            return ResponseEntity.ok(ApiResponse.success("Gan nhan vien phu trach don hang thanh cong."));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã ghi nhận quyết định của quản lý.",
+                reviewService.review(orderId, request, idempotencyKey)
+        ));
+    }
+
+    @GetMapping("/manager/available-staff")
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public ResponseEntity<ApiResponse<Page<AvailableStaffDTO>>> getAvailableStaff(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(assignmentService.listAvailableStaff(pageable)));
+    }
+
+    @PostMapping("/manager/assignments/{orderId}")
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public ResponseEntity<ApiResponse<OrderAssignmentResultDTO>> assignStaffToOrder(
+            @Positive @PathVariable Long orderId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody AssignOrderRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Gán nhân viên phụ trách đơn hàng thành công.",
+                assignmentService.assignByManager(orderId, request, idempotencyKey)
+        ));
     }
 
     @PostMapping("/manager/kcs-check/{orderId}")

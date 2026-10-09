@@ -2,6 +2,7 @@ package com.example.workflow.service.redis;
 
 import com.example.workflow.entity.Order;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
+import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
@@ -65,6 +66,19 @@ class RedisStreamEventConsumerTest {
         ReflectionTestUtils.invokeMethod(consumer, "handleGuestOrderCreated", payload(200L));
 
         verify(orderLifecycleEventHandler).handleGuestOrderCreated(new GuestOrderCreatedEvent(200L));
+    }
+
+    @Test
+    void orderAcceptedEventDelegatesToLifecycleHandler() throws JsonProcessingException {
+        OrderAcceptedEvent event = new OrderAcceptedEvent(200L);
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleOrderAccepted",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(orderLifecycleEventHandler).handleOrderAccepted(event);
     }
 
     @Test

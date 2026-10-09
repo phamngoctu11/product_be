@@ -6,6 +6,7 @@ import com.example.workflow.entity.User;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
+import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
@@ -95,6 +96,21 @@ class OrderLifecycleEventHandlerTest {
 
         verify(emailService).sendCustomOrderConfirmationEmail(
                 "user@example.com", "User One", 10L, "Khắc tên An", 2
+        );
+    }
+
+    @Test
+    void orderAcceptedEmailsOwnerAndOnlyNotifiesSystemUser() {
+        Order order = userOrder();
+        order.setStatus(OrderStatus.ORDER_ACCEPTED);
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+
+        handler.handleOrderAccepted(new OrderAcceptedEvent(10L));
+
+        verify(emailService).sendOrderAcceptedEmail("user@example.com", "User One", 10L);
+        verify(notificationService).sendNotification(
+                eq("Đơn hàng đã được chấp nhận"), anyString(), eq(10L), eq("user-1"), eq(null),
+                eq("/topic/user-notifications/user-1")
         );
     }
 

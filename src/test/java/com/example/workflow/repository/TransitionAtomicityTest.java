@@ -24,7 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import javax.sql.DataSource;
 import static org.assertj.core.api.Assertions.*;
 
-@DataJpaTest(properties={"spring.jpa.hibernate.ddl-auto=create-drop", "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect", "spring.jpa.show-sql=false"})
+@DataJpaTest(properties={"spring.liquibase.enabled=false", "spring.jpa.hibernate.ddl-auto=create-drop", "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect", "spring.jpa.show-sql=false"})
 @Transactional(propagation=Propagation.NOT_SUPPORTED)
 @Import({DurableRequestExecutor.class, OutboxStore.class, OrderTransitionService.class,
         DomainEventPublisher.class, DeferredCacheEvictionPublisher.class, TransitionAtomicityTest.Config.class})

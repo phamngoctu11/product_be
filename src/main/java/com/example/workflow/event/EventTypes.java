@@ -9,6 +9,7 @@ public final class EventTypes {
     public static final String PASSWORD_RESET_EMAIL_REQUESTED = "PASSWORD_RESET_EMAIL_REQUESTED";
     public static final String WORKFLOW_EMAIL_REQUESTED = "WORKFLOW_EMAIL_REQUESTED";
     public static final String ORDER_CREATED = "ORDER_CREATED";
+    public static final String ORDER_ACCEPTED = "ORDER_ACCEPTED";
     public static final String GUEST_ORDER_CREATED = "GUEST_ORDER_CREATED";
     public static final String ORDER_DELIVERED = "ORDER_DELIVERED";
     public static final String ORDER_CANCELLED = "ORDER_CANCELLED";

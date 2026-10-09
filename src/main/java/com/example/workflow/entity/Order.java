@@ -7,6 +7,7 @@ import com.example.workflow.nume.OrderProductionStatus;
 import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentMethod;
 import com.example.workflow.nume.PaymentStatus;
+import com.example.workflow.nume.ManagerReviewDecision;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -148,6 +149,13 @@ public class Order {
 
     @Column(name = "manager_approved_at")
     private LocalDateTime managerApprovedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "manager_review_decision", length = 16, columnDefinition = "varchar(16)")
+    private ManagerReviewDecision managerReviewDecision;
+
+    @Column(name = "manager_rejected_at")
+    private LocalDateTime managerRejectedAt;
 
     @Column(name = "confirmation_due_at")
     private LocalDateTime confirmationDueAt;

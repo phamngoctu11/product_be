@@ -1,5 +1,6 @@
 package com.example.workflow.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 public class ProductionCalendarService {
     private final Set<LocalDate> holidays;
 
+    @Autowired
     public ProductionCalendarService(@Value("${workflow.production.holidays:}") String configuredHolidays) {
         this(parseHolidays(configuredHolidays));
     }

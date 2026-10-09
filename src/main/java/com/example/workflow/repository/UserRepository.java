@@ -40,6 +40,12 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     List<User> findByRoleAndIsDeleteFalse(Role role);
 
+    @Query("SELECT u FROM User u WHERE u.role = com.example.workflow.nume.Role.STAFF " +
+            "AND u.isDelete = false AND u.isActive = true " +
+            "AND NOT EXISTS (SELECT a.id FROM OrderAssignment a WHERE a.activeStaffId = u.id) " +
+            "ORDER BY u.lastname ASC, u.firstname ASC, u.id ASC")
+    Page<User> findAvailableStaff(Pageable pageable);
+
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
     boolean existsByEmailAndIdNot(String email, String id);

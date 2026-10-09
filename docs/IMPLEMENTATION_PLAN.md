@@ -8,9 +8,9 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       HOÀN THÀNH WF01–WF09
-Tái triển khai code:      PHẦN 06 ĐÃ IMPLEMENTED, CHỜ REVIEW
-Phần đang thực hiện:      PHẦN 06 — Bàn giao kernel/API hủy Order dùng chung
-Phần hoàn thành gần nhất: PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09
+Tái triển khai code:      PHẦN 07 ĐÃ IMPLEMENTED, CHỜ REVIEW
+Phần đang thực hiện:      PHẦN 07 — Bàn giao manager review và assignment
+Phần hoàn thành gần nhất: PHẦN 07 — Manager review và assignment, WF02
 Ngày cập nhật gần nhất:   08/10/2026
 ```
 
@@ -50,7 +50,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
 | 05 | Custom request | WF01 | 02–04 | `IMPLEMENTED` |
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
-| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `NOT_STARTED` |
+| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IMPLEMENTED` |
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `NOT_STARTED` |
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `NOT_STARTED` |
 | 10 | Production, checkpoint và KCS | WF05 | 07–09 | `NOT_STARTED` |
@@ -240,7 +240,9 @@ Phạm vi chính:
 
 ### PHẦN 07 — Manager review và assignment, WF02
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` — API review/list/detail, manager assign, staff claim, JWT actor, version/idempotency, active assignment locking, decision metadata/migration và `ORDER_ACCEPTED` event đã hoàn thành; còn review, MySQL opt-in và BPMN cutover ở PHẦN 13.
+
+Bàn giao: [07-manager-review-assignment.md](implementation/07-manager-review-assignment.md).
 
 Phạm vi chính:
 
@@ -441,6 +443,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 08/10/2026 | Nền tảng/refactor | `VERIFIED` | Chuẩn hóa side effect vòng đời Order: checkout/custom submit chỉ phát parent event; handler tập trung tạo email/notification và cache read-model; hủy đơn dùng `ORDER_CANCELLED`; xác nhận thanh toán dùng `PAYMENT_CONFIRMED`; loại nguồn phát `GUEST_ORDER_CREATED` trùng trong BPMN/fallback. Cache cart được xóa trực tiếp sau checkout; Product/Products chỉ xóa khi quản trị catalog; Dashboard và BestSelling chỉ dùng TTL 20 phút | `.\mvnw.cmd test`: 216 test chạy, 0 failure/error, 6 test opt-in skipped; `git diff --check` đạt; rà mã xác nhận không còn invalidation Dashboard/BestSelling trong service nghiệp vụ | Review ranh giới handler/cache; sau đó tiếp tục PHẦN 06 theo kế hoạch |
 | 08/10/2026 | Nền tảng/refactor mapper | `VERIFIED` | Chuẩn hóa toàn bộ MapStruct bằng strict config; tách mapper/assembler/factory; bỏ dựng DTO lặp trong service; đóng ranh giới Entity tại Chat/Voucher API; snapshot Order là nguồn đọc chính; loại producer Camunda trùng của `GUEST_ORDER_CREATED` | `.\mvnw.cmd test`: 218 test chạy, 0 failure/error, 6 test opt-in skipped; `.\mvnw.cmd -DskipTests compile` và `git diff --check` đạt | Review [bàn giao mapper](implementation/06-mapper-boundary-refactor.md); tiếp tục PHẦN 06 nghiệp vụ hủy dùng chung |
 | 08/10/2026 | 06 | `IMPLEMENTED` | Hoàn tất kernel hủy Order dùng chung cho USER, Guest, manager reject và system timeout/failure; API mutation idempotent, Guest GET chỉ đọc, token scope/rate/version, penalty, hoàn voucher, release assignment và `ORDER_CANCELLED` outbox; loại hoàn stock/refund và xóa thô process khỏi đường hủy | `.\mvnw.cmd test`: 232 test chạy, 0 failure/error, 6 MySQL opt-in skipped; atomicity test chứng minh một transition audit và một `ORDER_CANCELLED`; [bàn giao](implementation/06-order-cancellation.md) | Review PHẦN 06; sau đó triển khai PHẦN 07 manager review và assignment dùng kernel hủy cho nhánh reject |
+| 08/10/2026 | 07 | `IN_PROGRESS` | Bắt đầu chuẩn hóa manager review và assignment WF02; giữ database là nguồn nghiệp vụ, reject tái sử dụng kernel PHẦN 06 | Đang đối chiếu target/WF02 với API, service, repository và transition hiện tại | Triển khai contract review/assign/claim, khóa cạnh tranh và test nguyên tử |
+| 08/10/2026 | 07 | `IMPLEMENTED` | Thay API review/assign/claim legacy bằng `ManagerOrderReviewService` và kernel `OrderAssignmentService`; actor từ JWT, version/idempotency, Order/staff lock, active unique, CUSTOM due +24h, Guest CATALOG sang ORDER_ACCEPTED và manager reject dùng PHẦN 06 | `.\mvnw.cmd test`: 244 test chạy, 0 failure/error, 6 MySQL opt-in skipped; migration legacy lặp đạt; atomicity test chứng minh một decision/assignment/transition; [bàn giao](implementation/07-manager-review-assignment.md) | Review PHẦN 07; sau đó triển khai PHẦN 08 chat, agreement và timer CUSTOM PT24H |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -487,10 +491,10 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Review [bàn giao PHẦN 06](implementation/06-order-cancellation.md), đặc biệt contract API, các ngưỡng Guest rate limit/TTL và ranh giới BPMN chưa cutover. Sau khi được duyệt, bắt đầu **PHẦN 07 — Manager review và assignment, WF02**:
+Review [bàn giao PHẦN 07](implementation/07-manager-review-assignment.md), đặc biệt state sau assignment, cách suy `AVAILABLE`, compatibility mirror `warehouseStaff` và ranh giới BPMN chưa cutover. Sau khi được duyệt, bắt đầu **PHẦN 08 — Chat, agreement và timer custom, WF03**:
 
-1. Chuẩn hóa API manager xem/approve/reject Order `PENDING_APPROVAL`; actor lấy từ JWT, mutation có version và idempotency key.
-2. Cho nhánh reject gọi `OrderCancellationService` với source `MANAGER_REJECTED`, không sao chép penalty/voucher/event.
-3. Xây một service assignment dùng chung cho manager assign và staff claim; khóa Order/staff và bảo đảm mỗi staff chỉ có một assignment active.
-4. Chuyển approve sang `PENDING_ASSIGNMENT` hoặc trạng thái thảo luận phù hợp khi đã assign; chưa tạo payment URL.
-5. Viết test cạnh tranh hai manager, hai staff và manager approve/reject với customer cancel; chưa triển khai chat/agreement PT24H của PHẦN 08.
+1. Chuẩn hóa ChatThread theo `orderId`, tạo đúng một lần sau assignment cho nhánh USER cần trao đổi; MANAGER không có quyền đọc/gửi chat.
+2. Chỉ owner USER và assigned STAFF được dùng REST/WebSocket; membership luôn đối chiếu assignment hiện hành trong database.
+3. Xây Agreement versioned: USER gửi form, staff confirm hoặc yêu cầu sửa; CATALOG không được thay giá snapshot, CUSTOM chốt spec/quantity/price/duration/voucher.
+4. Chuyển `DISCUSSING → WAITING_STAFF_CONFIRMATION → ORDER_ACCEPTED` qua application service có version/idempotency và event sau commit.
+5. Triển khai timer CUSTOM PT24H tuyệt đối từ `managerApprovedAt`; form hợp lệ dừng timer ngay, timeout gọi kernel hủy PHẦN 06 và test submit–timeout race.

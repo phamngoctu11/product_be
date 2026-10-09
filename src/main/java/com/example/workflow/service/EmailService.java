@@ -6,6 +6,7 @@ import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
+import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -63,6 +64,22 @@ public class EmailService {
         eventPublisher.publishAfterCommit(
                 EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
                 new OrderConfirmationEmailRequestedEvent(toEmail, customerName, orderId, customSpec, quantity)
+        );
+    }
+
+    public void sendOrderAcceptedEmail(String toEmail, String customerName, Long orderId) {
+        String htmlContent = "<html><body><p>Xin chào " + escapeHtml(customerName)
+                + ",</p><p>Đơn hàng #" + orderId
+                + " đã được chấp nhận và đang chờ bước tiếp theo.</p></body></html>";
+        eventPublisher.publishAfterCommit(
+                EventTypes.WORKFLOW_EMAIL_REQUESTED,
+                new WorkflowEmailRequestedEvent(
+                        "ORDER_ACCEPTED",
+                        toEmail,
+                        "Đơn hàng #" + orderId + " đã được chấp nhận",
+                        htmlContent,
+                        orderId
+                )
         );
     }
 

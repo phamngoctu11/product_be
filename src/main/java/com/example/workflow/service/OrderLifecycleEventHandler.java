@@ -5,6 +5,7 @@ import com.example.workflow.entity.OrderItem;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
+import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.nume.OrderType;
@@ -78,6 +79,28 @@ public class OrderLifecycleEventHandler {
                 null,
                 "/topic/user-notifications/" + userId
         );
+    }
+
+    public void handleOrderAccepted(OrderAcceptedEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_ACCEPTED");
+        if (StringUtils.hasText(order.getEmail())) {
+            emailService.sendOrderAcceptedEmail(
+                    order.getEmail(),
+                    order.getRecipientName(),
+                    order.getId()
+            );
+        }
+        if (order.getUser() != null) {
+            String userId = order.getUser().getId();
+            notificationService.sendNotification(
+                    "Đơn hàng đã được chấp nhận",
+                    "Đơn hàng #" + order.getId() + " đã được chấp nhận và đang chờ bước tiếp theo.",
+                    order.getId(),
+                    userId,
+                    null,
+                    "/topic/user-notifications/" + userId
+            );
+        }
     }
 
     public void handleGuestOrderCreated(GuestOrderCreatedEvent event) {

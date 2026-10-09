@@ -5,4 +5,5 @@
     <include file="02-domain-expand.xml" relativeToChangelogFile="true"/>
     <include file="03-consistency.xml" relativeToChangelogFile="true"/>
     <include file="04-custom-request.xml" relativeToChangelogFile="true"/>
+    <include file="05-manager-review.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

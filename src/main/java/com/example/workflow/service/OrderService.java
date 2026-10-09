@@ -64,14 +64,6 @@ public class OrderService {
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderCancellationService orderCancellationService;
 
-    private User getManagerReviewer(String changerId) {
-        User manager = userService.requireUser(changerId, ConstantErrorCode.REVIEWER_NOT_FOUND, changerId);
-        if (manager.getRole() != Role.MANAGER) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.REVIEWER_MANAGER_ROLE_REQUIRED);
-        }
-        return manager;
-    }
-
     private void assertCurrentUserCanViewOrder(Order order) {
         User currentUser = currentUserService.requireCurrentUser();
         if (currentUser.getRole() == Role.USER
@@ -109,98 +101,6 @@ public class OrderService {
                 .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, variantId));
     }
 
-    @Transactional
-    public void claimWarehouseOrder(Long orderId) {
-        Order order = orderLookupService.require(orderId);
-        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-
-        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_WAREHOUSE_STAFF);
-        }
-        if (order.getWarehouseStaff() != null) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_ALREADY_ASSIGNED);
-        }
-
-        OrderStatus oldStatus = order.getStatus();
-        order.setWarehouseStaff(staff);
-        order.setStatus(OrderStatus.DISCUSSING);
-        saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
-
-        applicationCacheService.evictWarehouseClaimed(order, staff.getId());
-    }
-
-    @Transactional
-    public void assignStaffToOrder(Long orderId, String staffId) {
-        Order order = orderLookupService.require(orderId);
-        User manager = currentUserService.requireCurrentUser(Role.MANAGER, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED);
-        User staff = userService.requireActiveStaff(staffId);
-
-        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED && order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_CANNOT_BE_ASSIGNED);
-        }
-
-        OrderStatus oldStatus = order.getStatus();
-        String previousStaffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
-        order.setWarehouseStaff(staff);
-        order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
-        saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
-        saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc manager giao cho ban phu trach xuat kho.", orderId, staff.getId(), "/topic/user-notifications/" + staff.getId());
-
-        applicationCacheService.evictStaffAssigned(order, oldStatus, previousStaffId, staff.getId());
-    }
-
-    // ==========================================
-    // Station 1: manager review
-    // ==========================================
-    @Transactional
-    public void processAdminReview(Long orderId, AdminReviewRequest request, String changerId, String staffId) {
-        Order order = orderLookupService.require(orderId);
-        User manager = getManagerReviewer(changerId);
-        User assignedStaff = request.isApproved() && staffId != null ? userService.requireActiveStaff(staffId) : null;
-
-        //Task task = findWorkflowTask(orderId, "manager_approve_order", "Order is not waiting for manager approval!");
-
-        OrderStatus oldStatus = order.getStatus();
-        Long reviewOrderVersion = order.getVersion();
-        order.setManager(manager);
-        order.setApprovedById(manager.getId());
-        order.setApprovedByFullName(userService.fullName(manager));
-
-        Map<String, Object> variables = new HashMap<>();
-        if (request.isApproved()) {
-            order.setWarehouseStaff(assignedStaff);
-            order.setStatus(assignedStaff == null ? OrderStatus.PENDING_WAREHOUSE : OrderStatus.WAREHOUSE_ASSIGNED);
-            variables.put("isApproved", true);
-            if (assignedStaff != null) {
-                saveAndSendNotification("Don hang moi duoc gan", "Don #" + orderId + " da duoc giao cho ban phu trach xuat kho.", orderId, assignedStaff.getId(), "/topic/user-notifications/" + assignedStaff.getId());
-            }
-        } else {
-            order.setWarehouseStaff(null);
-            String rejectionReason = "Quan ly tu choi: " + request.getCancelReason();
-            order.setCancelReason(rejectionReason);
-            variables.put("isApproved", false);
-            orderCancellationService.cancelByManagerReject(
-                    orderId,
-                    reviewOrderVersion,
-                    rejectionReason,
-                    manager.getId(),
-                    "manager-review:" + orderId + ":" + reviewOrderVersion,
-                    "manager-review:" + orderId + ":" + reviewOrderVersion
-            );
-        }
-
-        if (request.isApproved()) {
-            saveOrderAndAuditStatusChange(order, oldStatus, manager.getId());
-        }
-        //taskService.complete(task.getId(), variables);
-
-        applicationCacheService.evictManagerReviewed(
-                order,
-                request.isApproved(),
-                assignedStaff == null ? null : assignedStaff.getId()
-        );
-    }
-
     // ==========================================
     // Station 2: warehouse export
     // ==========================================
@@ -209,7 +109,7 @@ public class OrderService {
         Order order = orderLookupService.require(orderId);
         User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
 
-        if (order.getStatus() != OrderStatus.WAREHOUSE_ASSIGNED) {
+        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_STAFF_REQUIRED_BEFORE_EXPORT);
         }
         if (order.getWarehouseStaff() == null) {
@@ -234,7 +134,7 @@ public class OrderService {
         }
 
         OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.PENDING_KCS);
+        order.setStatus(OrderStatus.READY_TO_SHIP);
         saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
         taskService.complete(task.getId());
 
@@ -248,7 +148,7 @@ public class OrderService {
     public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
         Order order = orderLookupService.require(orderId);
 
-        if (order.getStatus() != OrderStatus.PENDING_KCS) {
+        if (order.getStatus() != OrderStatus.READY_TO_SHIP) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_KCS);
         }
 
@@ -262,7 +162,7 @@ public class OrderService {
             order.setStatus(OrderStatus.SHIPPING);
             saveCustomerNotificationIfSystemUser(order, "Don hang dang giao", "Don hang #" + orderId + " da xuat kho va dang tren duong giao den ban.");
         } else {
-            order.setStatus(OrderStatus.WAREHOUSE_ASSIGNED);
+            order.setStatus(OrderStatus.READY_TO_SHIP);
             String message = " vui long kiem tra lai so luong xuat.";
             if (cancelReason != null) message = "Ly do: " + cancelReason;
             String staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
@@ -582,7 +482,7 @@ public class OrderService {
     @Transactional
     public void processMomoCallbackResult(Long orderId, String resultCode) {
         Order order = orderLookupService.requireForUpdate(orderId);
-        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+        if (order.getStatus() != OrderStatus.PENDING_ASSIGNMENT) {
             System.out.println("MoMo callback skipped because order #" + orderId + " was already processed.");
             return;
         }
@@ -641,11 +541,13 @@ public class OrderService {
         return orderRepository.findListDtoByUserId(
                 userId,
                 List.of(
-                        OrderStatus.PENDING_PAYMENT,
                         OrderStatus.PENDING_APPROVAL,
-                        OrderStatus.PENDING_WAREHOUSE,
-                        OrderStatus.WAREHOUSE_ASSIGNED,
-                        OrderStatus.PENDING_KCS
+                        OrderStatus.PENDING_ASSIGNMENT,
+                        OrderStatus.DISCUSSING,
+                        OrderStatus.WAITING_STAFF_CONFIRMATION,
+                        OrderStatus.ORDER_ACCEPTED,
+                        OrderStatus.ORDER_CREATING,
+                        OrderStatus.READY_TO_SHIP
                 ),
                 OrderStatus.SHIPPING,
                 OrderStatus.DELIVERED,
@@ -674,12 +576,6 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = CacheNames.WAREHOUSE_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).warehousePendingOrders(#pageable)")
-    public Page<OrderListDTO> getWarehousePendingOrders(Pageable pageable) {
-        return orderRepository.findUnassignedListDtoByStatus(OrderStatus.PENDING_WAREHOUSE, PageableUtils.normalize(pageable, 20, 100));
-    }
-
-    @Transactional(readOnly = true)
     @Cacheable(
             value = CacheNames.STAFF_ASSIGNED_ORDERS,
             key = "T(com.example.workflow.cache.CacheKeys).staffAssignedOrders(@currentUserService.requireCurrentUserId(), #pageable)"
@@ -688,21 +584,27 @@ public class OrderService {
         User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
         return orderRepository.findListDtoByWarehouseStaffIdAndStatusIn(
                 staff.getId(),
-                List.of(OrderStatus.WAREHOUSE_ASSIGNED, OrderStatus.PENDING_KCS, OrderStatus.SHIPPING),
-                List.of(OrderStatus.WAREHOUSE_ASSIGNED, OrderStatus.PENDING_KCS),
-                OrderStatus.WAREHOUSE_ASSIGNED,
-                OrderStatus.PENDING_KCS,
-                OrderStatus.SHIPPING,
+                List.of(
+                        OrderStatus.DISCUSSING,
+                        OrderStatus.WAITING_STAFF_CONFIRMATION,
+                        OrderStatus.ORDER_ACCEPTED,
+                        OrderStatus.ORDER_CREATING,
+                        OrderStatus.READY_TO_SHIP,
+                        OrderStatus.SHIPPING,
+                        OrderStatus.DELIVERED,
+                        OrderStatus.CANCELLED
+                ),
+                List.of(
+                        OrderStatus.DISCUSSING,
+                        OrderStatus.WAITING_STAFF_CONFIRMATION,
+                        OrderStatus.ORDER_ACCEPTED,
+                        OrderStatus.ORDER_CREATING
+                ),
+                OrderStatus.DISCUSSING,
+                OrderStatus.ORDER_CREATING,
+                OrderStatus.READY_TO_SHIP,
                 PageableUtils.normalize(pageable, 20, 100)
         );
-    }
-
-    // Get pending order list for manager.
-    @Transactional(readOnly = true)
-    @Cacheable(value = CacheNames.MANAGER_PENDING_ORDERS, key = "T(com.example.workflow.cache.CacheKeys).managerPendingOrders(#status, #pageable)")
-    public Page<OrderListDTO> getPendingOrders(OrderStatus status,Pageable pageable) {
-        // Read list DTOs directly from DB.
-        return orderRepository.findListDtoByStatusOldestFirst(status, PageableUtils.normalize(pageable, 20, 100));
     }
 
     public InventoryReservationService getInventoryReservationService() {

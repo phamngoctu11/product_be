@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="05-manager-review-metadata" author="workflow">
+        <addColumn tableName="orders">
+            <column name="manager_review_decision" type="varchar(16)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="manager_rejected_at" type="datetime">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <createIndex tableName="orders" indexName="idx_orders_review_queue">
+            <column name="status"/>
+            <column name="id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

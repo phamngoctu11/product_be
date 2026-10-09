@@ -63,7 +63,7 @@ public class ApplicationCacheService {
 
     public void evictStaffAssigned(Order order, OrderStatus oldStatus, String previousStaffId, String assignedStaffId) {
         evictManagerPendingOrdersAfterCommit(oldStatus);
-        if (oldStatus == OrderStatus.PENDING_WAREHOUSE) {
+        if ( oldStatus == OrderStatus.PENDING_ASSIGNMENT) {
             optionalCacheService.clearAfterCommit(CacheNames.WAREHOUSE_PENDING_ORDERS);
         }
         evictStaffAssignedOrdersAfterCommit(previousStaffId);
@@ -84,12 +84,12 @@ public class ApplicationCacheService {
 
     public void evictStaffExported(Order order, String staffId) {
         evictStaffAssignedOrdersAfterCommit(staffId);
-        evictManagerPendingOrdersAfterCommit(OrderStatus.PENDING_KCS);
+        evictManagerPendingOrdersAfterCommit(OrderStatus.READY_TO_SHIP);
         evictUserOrdersAfterCommit(orderUserId(order));
     }
 
     public void evictManagerKcsChecked(Order order) {
-        evictManagerPendingOrdersAfterCommit(OrderStatus.PENDING_KCS);
+        evictManagerPendingOrdersAfterCommit(OrderStatus.READY_TO_SHIP);
         evictStaffAssignedOrdersAfterCommit(orderStaffId(order));
         evictUserOrdersAfterCommit(orderUserId(order));
     }
@@ -106,7 +106,7 @@ public class ApplicationCacheService {
         evictUserVoucherWalletAfterCommit(userId);
         evictUserStateAfterCommit(userId);
         evictManagerPendingOrdersAfterCommit(oldStatus);
-        if (oldStatus == OrderStatus.PENDING_WAREHOUSE) {
+        if (oldStatus == OrderStatus.PENDING_ASSIGNMENT) {
             optionalCacheService.clearAfterCommit(CacheNames.WAREHOUSE_PENDING_ORDERS);
         }
         evictStaffAssignedOrdersAfterCommit(orderStaffId(order));
