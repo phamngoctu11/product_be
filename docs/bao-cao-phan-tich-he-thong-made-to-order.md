@@ -22,7 +22,7 @@ Ba loại thông tin được phân biệt:
 
 Hệ thống là nền tảng bán sản phẩm handmade đa danh mục theo mô hình made-to-order. Các sản phẩm xuất hiện trên website chủ yếu là mẫu thiết kế do cửa hàng xây dựng. Hình ảnh thể hiện mẫu tham khảo; sản phẩm được chế tác sau khi có đơn và đủ điều kiện bắt đầu sản xuất. Giao diện phải thông báo rõ đặc điểm này.
 
-Khách hàng có thể đặt sản phẩm theo mẫu của cửa hàng. Khách có tài khoản còn được gửi yêu cầu thiết kế riêng, trao đổi yêu cầu, nhận báo giá và xác nhận báo giá trước khi tạo đơn. Khách vãng lai được sử dụng giỏ hàng theo phiên, đặt hàng bằng thông tin liên hệ và theo dõi đơn qua liên kết bảo mật.
+Khách hàng có thể đặt sản phẩm theo mẫu của cửa hàng. Khách có tài khoản còn được lưu nhiều custom draft gồm description và danh sách URL ảnh minh họa; submit một draft tạo Order CUSTOM ở PENDING_APPROVAL, sau đó mới đi qua manager review, phân staff và xác nhận agreement/giá. Khách vãng lai được sử dụng giỏ hàng theo phiên, đặt hàng bằng thông tin liên hệ và theo dõi đơn qua liên kết bảo mật.
 
 Mỗi đơn có một nhân viên chính do quản lý phân công. Người này là đầu mối trao đổi với khách và theo dõi tiến độ toàn đơn. Quản lý đồng thời phân công người trực tiếp sản xuất từng dòng sản phẩm trong đơn. Hai vai trò có thể do cùng một người đảm nhiệm nhưng được lưu và kiểm soát riêng.
 
@@ -36,7 +36,7 @@ Khi mọi dòng hàng đủ điều kiện giao, đơn được chuẩn bị gia
 
 ### 2.2. Phạm vi chức năng
 
-Trong phạm vi: catalog đa danh mục; tìm kiếm/lọc; tài khoản; giỏ hàng user/guest; checkout; voucher; custom request; báo giá; thanh toán theo chính sách; phân công; chat theo đơn; thỏa thuận thời hạn; sản xuất theo item; checkpoint/rework/final QC; change request; giao hàng và nhận hàng; email, thông báo và lịch sử nghiệp vụ.
+Trong phạm vi: catalog đa danh mục; tìm kiếm/lọc; tài khoản; giỏ hàng user/guest; checkout; voucher; custom request/agreement; thanh toán theo chính sách; phân công; chat theo đơn; thỏa thuận thời hạn; sản xuất theo item; checkpoint/rework/final QC; change request; giao hàng và nhận hàng; email, thông báo và lịch sử nghiệp vụ.
 
 Các chức năng cũ có thể kế thừa như wishlist, đánh giá sản phẩm, reputation, tư vấn trước bán và báo cáo hoa hồng được coi là phân hệ hỗ trợ. Không mặc định áp dụng cơ chế hoa hồng tư vấn cho phân công sản xuất; chính sách đó cần được xác định riêng.
 
@@ -254,21 +254,20 @@ Việc sơ đồ online nối USER phản ánh phạm vi hiện có được k�
 
 **Hậu điều kiện:** một đơn được lưu nhất quán; không có giữ/trừ stock. Email hoặc workflow lỗi phải có trạng thái retry/xử lý rõ, không làm người dùng vô tình đặt thêm đơn.
 
-### UC07–UC09 — Custom request và báo giá
+### UC07–UC09 — Custom draft và gửi Order
 
-**Tác nhân:** USER, MANAGER. **Tiền điều kiện:** user đăng nhập.
+**Tác nhân:** USER. **Tiền điều kiện:** user đăng nhập.
 
-1. User nhập chất liệu, màu, hình dáng, kích thước, số lượng, ghi chú và ảnh tham khảo.
-2. Hệ thống lưu CustomRequest, spec và attachment; chuyển chờ review.
-3. Manager từ chối, yêu cầu bổ sung, hoặc duyệt tính khả thi và lập báo giá.
-4. Khi cần bổ sung, user cập nhật và gửi lại; giữ lịch sử các phiên bản.
-5. User chấp nhận hoặc từ chối báo giá hiện hành.
-6. Khi chấp nhận, hệ thống tạo đơn từ snapshot spec và giá đã chốt, liên kết về request/quote.
-7. Đơn đi vào luồng phân công, thỏa thuận thời hạn và sản xuất chung.
+1. User nhập description mô tả sản phẩm custom tối đa 4.000 từ, quantity và danh sách `imageUrls` ảnh tham khảo.
+2. Hệ thống lưu nhiều CustomRequest DRAFT của cùng user. `imageUrls` là list chuỗi URL HTTP/HTTPS có thể rỗng; không phải chuỗi attachment ghép tay.
+3. User chọn một draft và submit bằng idempotency key.
+4. Hệ thống khóa draft, kiểm tra owner/version/dữ liệu, tạo một Order CUSTOM PENDING_APPROVAL và một OrderItem chưa có giá chính thức.
+5. Description và toàn bộ imageUrls được snapshot bất biến vào OrderItem; draft liên kết Order và chuyển SUBMITTED trong cùng transaction.
+6. Sau commit, phát ORDER_CREATED để gửi email/notification và đăng ký manager review. Manager review, assignment và agreement thuộc workflow kế tiếp.
 
-**Ngoại lệ:** quote đã bị thay thế; request đóng; gửi chấp nhận lặp; thông tin chưa đủ. **Hậu điều kiện:** đơn phản ánh đúng quote được chấp nhận. Đề xuất một lần chấp nhận không tạo nhiều đơn.
+**Ngoại lệ:** owner sai; version cũ; description quá 4.000 từ; URL không hợp lệ; quantity sai; draft đã submit; idempotency key xung đột. **Hậu điều kiện:** retry không tạo nhiều Order và lỗi giữa transaction không để Order thiếu item/snapshot.
 
-Giá được chấp nhận không đồng nghĩa deadline đã được xác nhận. Đơn custom không bắt buộc phải có ProductVariant công khai; mô hình cần snapshot spec và nguồn custom riêng. Không tự đưa thiết kế riêng lên catalog công khai.
+Giá custom chưa tồn tại tại WF01 và phải là `null`, không dùng 0 làm giá giả. Đơn custom không bắt buộc có ProductVariant công khai và không tự đưa thiết kế riêng lên catalog. Giá/spec chính thức được chốt ở Agreement sau manager review và assignment.
 
 ### UC10–UC14 — Phân công và thỏa thuận deadline
 
@@ -446,8 +445,8 @@ stateDiagram-v2
 | ProductionCheckpoint | Item, stage, attempt, ảnh, ghi chú, trạng thái, người nộp |
 | ProductionCheckpointImage | Ảnh minh chứng của checkpoint |
 | ProductionDecision | Quyết định review; kế thừa entity hiện có, mở rộng nếu cần nhiều người duyệt |
-| CustomRequest / Spec / Attachment | Yêu cầu riêng và dữ liệu thiết kế/ảnh tham khảo |
-| CustomRequestQuote | Báo giá theo phiên bản, spec liên quan, người lập và kết quả chấp nhận |
+| CustomRequest | Draft riêng của USER: description tối đa 4.000 từ, `imageUrls` dạng list JSON, quantity, version và Order liên kết |
+| OrderAgreement | Phiên bản spec/giá/thời lượng/voucher do USER gửi và assigned STAFF xác nhận sau manager review |
 | OrderItemChangeRequest | Nội dung thay đổi và tác động giá/deadline, các quyết định |
 | Payment | Khái niệm mục tiêu lưu giao dịch và kết quả; hiện cần bổ sung mô hình rõ |
 | VoucherTemplate / UserVoucher / PublicVoucherUsage | Chính sách, quyền sở hữu và lịch sử sử dụng; guest chống lạm dụng theo email/phone hash/session theo rule |
@@ -474,16 +473,14 @@ classDiagram
     ProductionCheckpoint "1" --> "0..*" ProductionDecision : target review history
     OrderItem "1" --> "0..*" OrderItemChangeRequest
     User "1" --> "0..*" CustomRequest
-    CustomRequest "1" *-- "1" CustomRequestSpec
-    CustomRequest "1" *-- "0..*" CustomRequestAttachment
-    CustomRequest "1" --> "0..*" CustomRequestQuote
-    CustomRequestQuote "0..1" --> "0..1" Order : accepted source
+    CustomRequest "0..1" --> "0..1" Order : submitted source
+    Order "1" --> "0..*" OrderAgreement : versioned agreement
     Order "1" --> "0..1" ChatThread : user order channel
     ChatThread "1" *-- "0..*" ChatMessage
     Order "1" --> "0..*" Payment
 ```
 
-Quan hệ quote–order giả định mỗi quote được chấp nhận tạo tối đa một đơn; nếu muốn gộp nhiều custom request hoặc trộn custom/catalog trong một checkout, cần mở rộng mô hình. Quan hệ checkpoint–decision nhiều bản ghi là đề xuất cho lịch sử nhiều quyết định; entity hiện tại là one-to-one. Không đồng nhất hình này với ERD hiện có.
+Mỗi CustomRequest chỉ liên kết tối đa một Order; một custom Order có một loại OrderItem nhưng quantity có thể lớn hơn một. Quan hệ checkpoint–decision nhiều bản ghi là đề xuất cho lịch sử nhiều quyết định; entity hiện tại là one-to-one. Không đồng nhất hình này với ERD hiện có.
 
 ## 10. Sequence Diagram mục tiêu
 
@@ -532,34 +529,26 @@ Quyết định triển khai: `CheckoutService` là producer duy nhất của `O
 sequenceDiagram
     autonumber
     actor U as User
-    actor M as Manager
     participant S as CustomRequestService
     participant DB as Database
     participant W as Camunda
-    participant O as OrderCreationService
-    U->>S: submit(spec, attachments)
-    S->>DB: Lưu request và version
-    S->>W: Khởi tạo workflow review
-    M->>S: review(requestId, decision)
-    alt Cần bổ sung
-        S->>DB: NEED_MORE_INFO
-        S-->>U: Yêu cầu bổ sung
-    else Từ chối
-        S->>DB: REJECTED và lý do
-        S-->>U: Thông báo từ chối
-    else Duyệt và báo giá
-        S->>DB: Lưu quote/version và spec được báo giá
-        S-->>U: Gửi báo giá
-        U->>S: acceptQuote(quoteId, version)
-        S->>DB: Kiểm tra quyền, version và chưa chuyển thành đơn
-        S->>O: Tạo đơn từ quote đã chấp nhận
-        O->>DB: Lưu Order và item/spec snapshot, liên kết quote
-        S->>W: Hoàn thành bước chấp nhận
-        S-->>U: Order chờ phân công và deadline
+    participant E as Outbox/Event
+    U->>S: saveDraft(description, imageUrls[], quantity)
+    S->>S: Kiểm tra owner, <= 4.000 từ và URL HTTP/HTTPS
+    S->>DB: Lưu CustomRequest DRAFT và version
+    U->>S: submit(draftId, expectedVersion, idempotencyKey)
+    S->>DB: Khóa draft và kiểm tra yêu cầu lặp
+    alt Draft hợp lệ và chưa submit
+        S->>DB: Transaction tạo Order CUSTOM/PENDING_APPROVAL + OrderItem snapshot
+        S->>DB: Liên kết draft, lưu durable result và ORDER_CREATED outbox
+        S-->>U: draftId, orderId, CUSTOM, PENDING_APPROVAL
+        E->>W: Sau commit đăng ký manager review
+    else Retry cùng yêu cầu đã thành công
+        S-->>U: Trả lại cùng orderId
     end
 ```
 
-Nhánh user từ chối báo giá đóng hoặc thương lượng lại request, không tạo đơn. Việc chấp nhận quote và liên kết Order cần transaction/idempotency để tránh hai đơn khi nhấn lặp.
+WF01 kết thúc sau khi Order PENDING_APPROVAL được lưu. Manager review, chat và Agreement chốt giá/spec/thời lượng thuộc WF02–WF03; chúng không được đưa ngược vào transaction submit draft.
 
 ### SD03 — Đề xuất và xác nhận deadline
 
@@ -727,7 +716,7 @@ flowchart LR
 | Staff cấp đơn | Hiện dùng warehouseStaff với ý nghĩa phụ trách kho | assignedStaff là đầu mối toàn đơn; không đổi tên mà bỏ qua thay đổi trách nhiệm |
 | Staff cấp item | Có entity OrderItemAssignment | Hoàn thiện API, quyền và workflow phân công/sản xuất |
 | Deadline | Chưa thấy bộ entity/service/controller proposal đầy đủ | Thêm proposal version, xác nhận user/guest và điều kiện chặn sản xuất |
-| Custom | Chưa thấy phân hệ CustomRequest đầy đủ | Thêm request/spec/attachment/quote và chuyển quote thành Order |
+| Custom | Đã triển khai draft/submit với description tối đa 4.000 từ, `imageUrls: string[]`, snapshot mới và đường đọc legacy | Chốt agreement ở workflow sau; nghiệm thu migration trên MySQL thực tế khi Docker sẵn sàng |
 | Chat | Có chat và consultation | Bổ sung phòng theo Order, membership theo phân công |
 | Checkpoint | Có entity/enum/repository, dữ liệu ảnh và decision | Hoàn thiện submit/review/rework/policy/notification và tổng hợp READY |
 | Guest BPMN runtime | Có publish event, manager review và task phân handmade item | Bổ sung staff chính, deadline, production multi-instance và final QC |

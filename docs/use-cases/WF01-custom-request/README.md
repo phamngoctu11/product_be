@@ -1,6 +1,6 @@
 # WF01 — Custom Request
 
-Luồng quản lý bản nháp và gửi yêu cầu tạo đơn custom. Đầu ra gửi thành công là Order CUSTOM ở PENDING_APPROVAL; manager duyệt trong workflow tiếp theo.
+Luồng quản lý bản nháp và gửi yêu cầu tạo đơn custom. Mỗi draft dùng description tối đa 4.000 từ và `imageUrls` dạng danh sách URL; đầu ra gửi thành công là Order CUSTOM ở PENDING_APPROVAL, manager duyệt trong workflow tiếp theo.
 
 Nguồn: [target.txt](../../target.txt). Quy cách tài liệu: [TUTORIAL.md](../TUTORIAL.md).
 

@@ -29,27 +29,6 @@ public interface CheckoutResponseMapper {
     @Mapping(target = "guestWorkflowStatus", expression = "java(enumName(order.getGuestWorkflowStatus()))")
     CheckoutResponseDTO toCatalogResponse(Order order, String lookupToken, String maskedEmail);
 
-    @Mapping(source = "order.id", target = "orderId")
-    @Mapping(source = "order.version", target = "version")
-    @Mapping(target = "status", expression = "java(enumName(order.getStatus()))")
-    @Mapping(target = "message", constant = "Đơn custom đã được tạo và đang chờ quản lý duyệt.")
-    @Mapping(target = "totalPrice", ignore = true)
-    @Mapping(target = "discountAmount", ignore = true)
-    @Mapping(target = "finalPrice", ignore = true)
-    @Mapping(target = "paymentMethod", expression = "java(enumName(order.getPaymentMethodType()))")
-    @Mapping(target = "paymentStatus", expression = "java(enumName(order.getPaymentStatus()))")
-    @Mapping(target = "voucherCode", ignore = true)
-    @Mapping(target = "voucherName", ignore = true)
-    @Mapping(target = "provider", ignore = true)
-    @Mapping(target = "url", ignore = true)
-    @Mapping(target = "payUrl", ignore = true)
-    @Mapping(target = "deeplink", ignore = true)
-    @Mapping(target = "qrCodeUrl", ignore = true)
-    @Mapping(target = "lookupToken", ignore = true)
-    @Mapping(target = "maskedEmail", ignore = true)
-    @Mapping(target = "guestWorkflowStatus", expression = "java(enumName(order.getGuestWorkflowStatus()))")
-    CheckoutResponseDTO toCustomResponse(Order order);
-
     default String enumName(Enum<?> value) {
         return value == null ? null : value.name();
     }

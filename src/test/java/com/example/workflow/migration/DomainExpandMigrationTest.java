@@ -40,8 +40,12 @@ class DomainExpandMigrationTest {
     protected String legacyStatusType() { return "VARCHAR(50)"; }
 
     private void migrate(Connection connection) throws Exception {
+        applyChangelog(connection, "db/changelog/db.changelog-master.xml");
+    }
+
+    private void applyChangelog(Connection connection, String changelog) throws Exception {
         var database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
-        var liquibase = new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(), database);
+        var liquibase = new Liquibase(changelog, new ClassLoaderResourceAccessor(), database);
         liquibase.update(new Contexts(), new LabelExpression());
     }
 
@@ -108,6 +112,37 @@ class DomainExpandMigrationTest {
             try (var statement = connection.createStatement()) {
                 statement.executeUpdate(insert.formatted("request-1"));
                 assertThatThrownBy(() -> statement.executeUpdate(insert.formatted("request-2"))).isInstanceOf(SQLException.class);
+            }
+        }
+    }
+
+    @Test
+    void customContentMigrationBackfillsLegacyNullAttachmentsWithoutRenamingColumns() throws Exception {
+        try (Connection connection = legacyDatabase()) {
+            applyChangelog(connection, "db/changelog/02-domain-expand.xml");
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO custom_requests(
+                            owner_id, status, spec, attachments, quantity, created_at, updated_at
+                        ) VALUES (
+                            'staff-1', 'DRAFT', 'Legacy description', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        )
+                        """);
+            }
+            connection.commit();
+
+            migrate(connection);
+
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery("SELECT spec, attachments FROM custom_requests")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString("spec")).isEqualTo("Legacy description");
+                assertThat(rows.getString("attachments")).isEqualTo("[]");
+            }
+            try (var statement = connection.createStatement()) {
+                assertThatThrownBy(() -> statement.executeUpdate(
+                        "UPDATE custom_requests SET attachments = NULL"
+                )).isInstanceOf(SQLException.class);
             }
         }
     }

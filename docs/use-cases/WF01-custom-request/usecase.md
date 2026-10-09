@@ -48,7 +48,7 @@ Trong Use Case Diagram toàn hệ thống, backend, Camunda và consumer là th�
 |---|---|---|
 | 1 | Mở danh sách bản nháp | Lấy userId từ JWT, truy vấn các bản nháp thuộc user |
 | 2 | Xem danh sách | Hiển thị định danh, mô tả tóm tắt, số lượng và thời điểm cập nhật |
-| 3 | Chọn một bản nháp | Kiểm tra ownership và trả spec, ghi chú, ảnh tham khảo |
+| 3 | Chọn một bản nháp | Kiểm tra ownership và trả description, quantity, ghi chú cùng `imageUrls` đúng kiểu danh sách |
 | 4 | Chọn sửa hoặc gửi | Chuyển tới UC01.2 hoặc UC01.3 |
 
 Luồng thay thế: chưa có bản nháp thì trả danh sách rỗng và hiển thị hành động tạo mới. Bản nháp không tồn tại hoặc không thuộc user không được trả nội dung.
@@ -67,8 +67,8 @@ Luồng thay thế: chưa có bản nháp thì trả danh sách rỗng và hiể
 | Bước | User | Hệ thống |
 |---|---|---|
 | 1 | Chọn tạo mới/sửa | Mở form trống hoặc nạp bản nháp sau khi kiểm tra quyền |
-| 2 | Nhập chất liệu, màu, hình dáng, kích thước, số lượng và ghi chú | Hiển thị dữ liệu đang nhập |
-| 3 | Chọn ảnh tham khảo nếu có | Nhận/tải ảnh và gắn tham chiếu hợp lệ vào bản nháp |
+| 2 | Nhập mô tả sản phẩm custom và số lượng | Hiển thị description, đếm tối đa 4.000 từ và cảnh báo khi vượt giới hạn |
+| 3 | Chọn ảnh tham khảo nếu có | Upload qua dịch vụ ảnh rồi gắn URL kết quả vào danh sách `imageUrls` |
 | 4 | Bấm “Lưu bản nháp” | Validate định dạng, ownership và dữ liệu được gửi |
 | 5 | — | Lưu bản nháp của user; trả định danh, nội dung, thời điểm cập nhật |
 | 6 | Tiếp tục sửa hoặc rời màn hình | Bản nháp vẫn được lưu, chưa tạo Order |
@@ -77,7 +77,9 @@ Luồng thay thế và ngoại lệ:
 
 - User có thể tạo bản nháp khác; không giới hạn một bản nháp cho mỗi tài khoản trong yêu cầu hiện tại.
 - Dữ liệu sai định dạng/số lượng không hợp lệ: trả lỗi đúng trường, không lưu bản cập nhật lỗi.
-- Upload ảnh thất bại: thông báo ảnh chưa tải thành công; không gắn ảnh lỗi như một attachment hợp lệ.
+- Upload ảnh thất bại: thông báo ảnh chưa tải thành công; không gắn URL lỗi vào `imageUrls`.
+- Description sau khi trim là bắt buộc và tối đa 4.000 từ. Đếm từ bằng cách tách theo một hoặc nhiều khoảng trắng Unicode; đúng 4.000 từ hợp lệ, 4.001 từ bị từ chối.
+- `imageUrls` luôn là danh sách trong API và có thể rỗng. Mỗi phần tử phải là URL tuyệt đối HTTP/HTTPS; backend không tải URL để kiểm tra nội dung trong transaction lưu draft.
 - Chưa gửi Order: không phát email/notification `PENDING_APPROVAL`, không tạo task manager review.
 - Nếu hỗ trợ sửa nội dung nguồn sau khi đã gửi, cập nhật đó không được thay snapshot của Order đã tạo. Chính sách cho phép sửa bản nguồn hay tạo bản sao là lựa chọn giao diện cần xác định; không biến cập nhật draft thành sửa Order.
 
@@ -100,8 +102,8 @@ Luồng thay thế và ngoại lệ:
 | 1 | Mở bản nháp muốn đặt | Kiểm tra quyền và hiển thị nội dung hiện tại |
 | 2 | Kiểm tra thông tin sản phẩm, số lượng và thông tin liên hệ/giao hàng | Hiển thị thông tin cần dùng cho Order; giá custom chưa phải giá đã chốt |
 | 3 | Bấm “Gửi yêu cầu tạo đơn” | Nhận `draftId`, thông tin xác nhận và khóa chống gửi trùng |
-| 4 | — | Xác định user từ JWT; kiểm tra ownership, dữ liệu, attachment và yêu cầu lặp |
-| 5 | — | Chụp spec/ảnh/số lượng và thông tin liên hệ vào dữ liệu đơn |
+| 4 | — | Xác định user từ JWT; kiểm tra ownership, description tối đa 4.000 từ, từng URL ảnh, quantity và yêu cầu lặp |
+| 5 | — | Chụp description, toàn bộ `imageUrls`, số lượng và thông tin liên hệ vào dữ liệu đơn |
 | 6 | — | Trong transaction: tạo Order loại CUSTOM, trạng thái PENDING_APPROVAL; tạo một loại OrderItem; liên kết draft với Order và lưu dấu vết tạo đơn |
 | 7 | — | Commit transaction; đăng ký khởi chạy manager review và sự kiện ORDER_CREATED |
 | 8 | Nhận kết quả | Trả orderId, orderType, status và thông tin để mở trang Order |
@@ -129,14 +131,14 @@ Bước 10 là xử lý bất đồng bộ: phản hồi API không cần đợi
 | Dữ liệu | Ý nghĩa/điều kiện |
 |---|---|
 | draftId | Định danh bản nháp; bắt buộc khi đọc/sửa/gửi bản đã lưu |
-| Spec | Chất liệu, màu, hình dáng, kích thước và ghi chú yêu cầu |
+| description | Mô tả sản phẩm custom; bắt buộc sau trim, tối đa 4.000 từ theo khoảng trắng Unicode |
 | quantity | Số nguyên dương khi gửi tạo Order; số lượng của cùng một loại custom |
-| Attachments | Ảnh tham khảo hợp lệ thuộc yêu cầu, không tham chiếu tùy ý ảnh riêng của người khác |
+| imageUrls | Danh sách chuỗi URL ảnh minh họa; có thể rỗng; mỗi URL phải tuyệt đối và dùng HTTP/HTTPS. Backend lưu tham chiếu, không fetch URL trong transaction |
 | Contact snapshot | Họ tên, email, điện thoại, địa chỉ và ghi chú dùng cho đơn |
 | Idempotency key | Khóa cho một lần gửi; server kiểm tra cùng user/bản nháp/nội dung |
 | userId | Backend lấy từ JWT; không dùng userId client tự khai để cấp quyền |
 
-`target.txt` liệt kê các trường spec/ảnh nhưng chưa chốt trường nào bắt buộc theo từng loại custom, số ảnh, dung lượng hoặc định dạng. Đội triển khai cần chốt schema validation trước nghiệm thu form; không tự ghi con số hoặc coi tất cả trường đều bắt buộc. Có thể tách validation lưu nháp và gửi đơn, nhưng mức cho phép thiếu ở bản nháp phải được thống nhất.
+API ghi mới dùng `description: string` và `imageUrls: string[]`; không bắt client gửi một chuỗi JSON trong trường `attachments`. Chưa có giới hạn nghiệp vụ về số ảnh hoặc allowlist host, vì vậy không tự đặt con số/domain cố định. Hệ thống vẫn áp giới hạn kích thước request chung và không được dereference URL phía server trong transaction. Database và `OrderItem.specSnapshot` dùng `LONGTEXT` để đủ chứa description 4.000 từ UTF-8 cùng danh sách URL; tên cột legacy được giữ trong giai đoạn tương thích.
 
 Đầu ra lưu nháp: `draftId`, dữ liệu đã lưu và thời điểm cập nhật.
 
@@ -169,6 +171,8 @@ Bước 10 là xử lý bất đồng bộ: phản hồi API không cần đợi
 | BR10 | Chỉ khởi timer custom PT24H sau manager duyệt; không khởi ở lưu nháp/gửi đơn |
 | BR11 | Tạo Order phát email + notification cho user; lưu draft không phát thông báo tạo Order |
 | BR12 | Retry không tạo thêm Order, task hay thông báo nghiệp vụ trùng |
+| BR13 | Description tối đa 4.000 từ; giới hạn được kiểm tra thống nhất ở create, update và submit |
+| BR14 | `imageUrls` là danh sách URL HTTP/HTTPS có thể rỗng; snapshot giữ nguyên thứ tự và nội dung danh sách tại thời điểm submit |
 
 ## 8. Nội dung thông báo
 
@@ -201,5 +205,8 @@ User có quyền hủy trước ORDER_ACCEPTED theo use case hủy; WF01 không 
 | TC10 | Gửi custom thành công | Email + notification có nội dung chờ duyệt, không phải đã nhận làm |
 | TC11 | Chỉ lưu draft | Không gửi email PENDING_APPROVAL, không mở task duyệt |
 | TC12 | Đơn vừa được gửi | Chưa payment, chưa chat/phân công, chưa production và chưa timer 24 giờ |
+| TC13 | Description đúng 4.000 từ và 4.001 từ | 4.000 từ lưu/submit được; 4.001 từ trả lỗi validation và không ghi dữ liệu |
+| TC14 | `imageUrls` rỗng, nhiều URL hợp lệ và URL sai scheme/tương đối | Danh sách rỗng/multiple HTTP(S) được giữ đúng kiểu/thứ tự; URL sai bị từ chối |
+| TC15 | Sửa draft sau submit | Description và `imageUrls` trong OrderItem snapshot không thay đổi |
 
-Các yêu cầu chi tiết validation spec/attachment tại mục 6 cần được chốt để bổ sung test dữ liệu bắt buộc. Những quyết định đó không thay đổi quyền sở hữu, trạng thái hoặc ranh giới workflow đã mô tả.
+Số ảnh tối đa và allowlist domain chưa được chốt; đây là cấu hình/policy bổ sung trước production, không làm thay đổi contract danh sách URL, giới hạn description, quyền sở hữu, trạng thái hoặc ranh giới workflow đã mô tả.

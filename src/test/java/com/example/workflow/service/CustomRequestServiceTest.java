@@ -1,8 +1,8 @@
 package com.example.workflow.service;
 
-import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.dto.CreateCustomRequest;
 import com.example.workflow.dto.CustomRequestDTO;
+import com.example.workflow.dto.CustomRequestSubmissionDTO;
 import com.example.workflow.dto.SubmitCustomRequest;
 import com.example.workflow.dto.UpdateCustomRequest;
 import com.example.workflow.entity.CustomRequest;
@@ -13,7 +13,7 @@ import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapperImpl;
-import com.example.workflow.mapper.CheckoutResponseMapperImpl;
+import com.example.workflow.mapper.CustomRequestSubmissionMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.OrderItemProductionStatus;
 import com.example.workflow.nume.OrderItemSourceType;
@@ -34,8 +34,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -44,7 +46,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,12 +72,13 @@ class CustomRequestServiceTest {
                 customRequestRepository,
                 orderRepository,
                 new CustomRequestMapperImpl(),
-                new CheckoutResponseMapperImpl(),
+                new CustomRequestSubmissionMapperImpl(),
                 new CustomOrderFactory(objectMapper),
                 durableRequests,
                 eventPublisher,
                 objectMapper
         );
+        lenient().when(userService.requireActiveUser(anyString())).thenReturn(owner());
     }
 
     @Test
@@ -82,7 +87,11 @@ class CustomRequestServiceTest {
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
 
         CustomRequestDTO result = service.create(
-                new CreateCustomRequest("  nhẫn bạc khắc tên  ", " [\"image-1\"] ", 2),
+                new CreateCustomRequest(
+                        "  nhẫn bạc khắc tên  ",
+                        List.of(" https://cdn.example.com/image-1.jpg "),
+                        2
+                ),
                 null
         );
 
@@ -90,7 +99,8 @@ class CustomRequestServiceTest {
         verify(customRequestRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getOwnerId()).isEqualTo("user-1");
         assertThat(captor.getValue().getStatus()).isEqualTo(CustomRequestStatus.DRAFT);
-        assertThat(captor.getValue().getSpec()).isEqualTo("nhẫn bạc khắc tên");
+        assertThat(captor.getValue().getDescription()).isEqualTo("nhẫn bạc khắc tên");
+        assertThat(captor.getValue().getImageUrls()).containsExactly("https://cdn.example.com/image-1.jpg");
         assertThat(result.id()).isEqualTo(41L);
         assertThat(result.editable()).isTrue();
         verify(orderRepository, never()).saveAndFlush(any());
@@ -105,11 +115,11 @@ class CustomRequestServiceTest {
 
         assertThatThrownBy(() -> service.update(
                 41L,
-                new UpdateCustomRequest(1L, "new spec", null, 3)
+                new UpdateCustomRequest(1L, "new description", List.of(), 3)
         )).isInstanceOfSatisfying(AppException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ConstantErrorCode.CUSTOM_REQUEST_VERSION_CONFLICT));
 
-        assertThat(draft.getSpec()).isEqualTo("custom spec");
+        assertThat(draft.getDescription()).isEqualTo("custom description");
         verify(customRequestRepository, never()).saveAndFlush(any());
     }
 
@@ -122,9 +132,9 @@ class CustomRequestServiceTest {
         User owner = owner();
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findOwnedByIdForUpdate(41L, "user-1")).thenReturn(Optional.of(draft));
-        when(userService.requireUser("user-1", ConstantErrorCode.USER_NOT_FOUND)).thenReturn(owner);
+        when(userService.requireActiveUser("user-1")).thenReturn(owner);
 
-        CheckoutResponseDTO result = service.submit(
+        CustomRequestSubmissionDTO result = service.submit(
                 41L,
                 new SubmitCustomRequest(2L, null, null, null, null, "Giao giờ hành chính"),
                 "submit-41"
@@ -149,13 +159,15 @@ class CustomRequestServiceTest {
             assertThat(item.getProductionStatus()).isEqualTo(OrderItemProductionStatus.WAITING_ASSIGNMENT);
         });
         JsonNode snapshot = objectMapper.readTree(order.getItems().getFirst().getSpecSnapshot());
-        assertThat(snapshot.get("spec").asText()).isEqualTo("custom spec");
-        assertThat(snapshot.get("attachments").asText()).isEqualTo("[\"image-1\"]");
+        assertThat(snapshot.get("description").asText()).isEqualTo("custom description");
+        assertThat(snapshot.get("imageUrls")).extracting(JsonNode::asText)
+                .containsExactly("https://cdn.example.com/image-1.jpg");
         assertThat(draft.getStatus()).isEqualTo(CustomRequestStatus.SUBMITTED);
         assertThat(draft.getLinkedOrderId()).isEqualTo(900L);
-        assertThat(result.getOrderId()).isEqualTo(900L);
-        assertThat(result.getStatus()).isEqualTo("PENDING_APPROVAL");
-        assertThat(result.getFinalPrice()).isNull();
+        assertThat(result.draftId()).isEqualTo(41L);
+        assertThat(result.orderId()).isEqualTo(900L);
+        assertThat(result.orderType()).isEqualTo("CUSTOM");
+        assertThat(result.status()).isEqualTo("PENDING_APPROVAL");
         verify(eventPublisher).publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(900L));
     }
 
@@ -167,19 +179,21 @@ class CustomRequestServiceTest {
         Order existing = new Order();
         existing.setId(900L);
         existing.setVersion(3L);
+        existing.setOrderType(OrderType.CUSTOM);
         existing.setStatus(OrderStatus.PENDING_APPROVAL);
         existing.setPaymentStatus(PaymentStatus.NOT_DUE);
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         when(customRequestRepository.findOwnedByIdForUpdate(41L, "user-1")).thenReturn(Optional.of(submitted));
         when(orderRepository.findById(900L)).thenReturn(Optional.of(existing));
 
-        CheckoutResponseDTO result = service.submit(
+        CustomRequestSubmissionDTO result = service.submit(
                 41L,
                 new SubmitCustomRequest(2L, "Changed", "other@example.com", "1", "Other", null),
                 "another-key"
         );
 
-        assertThat(result.getOrderId()).isEqualTo(900L);
+        assertThat(result.draftId()).isEqualTo(41L);
+        assertThat(result.orderId()).isEqualTo(900L);
         verify(orderRepository, never()).saveAndFlush(any());
         verify(eventPublisher, never()).publishAfterCommit(anyString(), any());
     }
@@ -209,14 +223,55 @@ class CustomRequestServiceTest {
                 });
     }
 
+    @Test
+    void acceptsExactlyFourThousandWordsAndRejectsFourThousandAndOne() {
+        stubDraftSave();
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
+        String accepted = "word ".repeat(4_000);
+
+        CustomRequestDTO result = service.create(new CreateCustomRequest(accepted, List.of(), 1), null);
+
+        assertThat(result.description()).isEqualTo(accepted.trim());
+        assertThatThrownBy(() -> service.create(
+                new CreateCustomRequest("word ".repeat(4_001), List.of(), 1), null
+        )).isInstanceOfSatisfying(AppException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ConstantErrorCode.CUSTOM_REQUEST_INVALID));
+    }
+
+    @Test
+    void rejectsRelativeOrNonHttpImageUrls() {
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
+
+        assertThatThrownBy(() -> service.create(
+                new CreateCustomRequest("description", List.of("/image.jpg"), 1), null
+        )).isInstanceOf(AppException.class);
+        assertThatThrownBy(() -> service.create(
+                new CreateCustomRequest("description", List.of("file:///tmp/image.jpg"), 1), null
+        )).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void softDeletedUserIsRejectedBeforeDraftAccess() {
+        when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
+        when(userService.requireActiveUser("user-1")).thenThrow(
+                new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.USER_NOT_FOUND_WITH_ID, "user-1")
+        );
+
+        assertThatThrownBy(() -> service.create(
+                new CreateCustomRequest("description", List.of(), 1), null
+        )).isInstanceOf(AppException.class);
+
+        verifyNoInteractions(customRequestRepository);
+    }
+
     private CustomRequest draft() {
         CustomRequest draft = new CustomRequest();
         draft.setId(41L);
         draft.setVersion(2L);
         draft.setOwnerId("user-1");
         draft.setStatus(CustomRequestStatus.DRAFT);
-        draft.setSpec("custom spec");
-        draft.setAttachments("[\"image-1\"]");
+        draft.setDescription("custom description");
+        draft.setImageUrls(List.of("https://cdn.example.com/image-1.jpg"));
         draft.setQuantity(2);
         draft.setCreatedAt(LocalDateTime.of(2026, 10, 7, 9, 0));
         draft.setUpdatedAt(draft.getCreatedAt());

@@ -106,10 +106,10 @@ class CustomRequestRepositoryTest {
         assertThat(saved.isEditable()).isTrue();
     }
 
-    private CustomRequest draft(String ownerId, String spec, LocalDateTime updatedAt) {
+    private CustomRequest draft(String ownerId, String description, LocalDateTime updatedAt) {
         CustomRequest request = new CustomRequest();
         request.setOwnerId(ownerId);
-        request.setSpec(spec);
+        request.setDescription(description);
         request.setQuantity(1);
         request.setUpdatedAt(updatedAt);
         request.setCreatedAt(updatedAt);

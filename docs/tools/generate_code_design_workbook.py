@@ -223,6 +223,7 @@ for name, status, phase, purpose in [
     ("OrderMapper.java", "SỬA", "04-12", "Map giá custom null, snapshot và lifecycle mới."),
     ("CheckoutMapper.java", "TẠO MỚI", "04", "Map kết quả checkout; không tính tiền trong mapper."),
     ("CustomRequestMapper.java", "TẠO MỚI", "05", "Map draft/detail."),
+    ("CustomRequestSubmissionMapper.java", "TẠO MỚI", "05", "Map Order custom + draftId sang response submit chuyên biệt."),
     ("OrderAgreementMapper.java", "TẠO MỚI", "08", "Map agreement/version."),
     ("PaymentAttemptMapper.java", "TẠO MỚI", "09", "Ẩn provider payload nhạy cảm."),
     ("ProductionCheckpointMapper.java", "TẠO MỚI", "10", "Map checkpoint, ảnh, decision."),
@@ -234,10 +235,11 @@ dto_rows = [
     ["CheckoutRequest.java", "Request", "TẠO MỚI", "04", "selectedVariantIds, userVoucherId, paymentMethod, note", "USER checkout; actor lấy từ JWT."],
     ["GuestCheckoutRequest.java", "Request", "SỬA", "04", "selectedVariantIds, contact, guestVoucherCode, note", "Guest chỉ CATALOG + COD."],
     ["CheckoutResponseDTO.java", "Response", "SỬA", "04", "orderId, status, version, totals, paymentMethod", "Không trả payment URL trước review."],
-    ["CreateCustomRequest.java", "Request", "TẠO MỚI", "05", "name, description, quantity, images/spec", "Tạo draft."],
-    ["UpdateCustomRequest.java", "Request", "TẠO MỚI", "05", "version và trường draft", "Chỉ draft owner."],
+    ["CreateCustomRequest.java", "Request", "SỬA", "05", "description <= 4.000 từ, imageUrls: string[], quantity", "Tạo draft; imageUrls có thể rỗng, mỗi URL dùng HTTP/HTTPS."],
+    ["UpdateCustomRequest.java", "Request", "SỬA", "05", "expectedVersion, description, imageUrls, quantity", "Chỉ draft owner; cùng validation create."],
     ["SubmitCustomRequest.java", "Request", "TẠO MỚI", "05", "expectedVersion, contact/note", "Idempotency-Key ở header."],
     ["CustomRequestDTO.java", "Response", "TẠO MỚI", "05", "draft, status, orderId, version", "Không lộ draft user khác."],
+    ["CustomRequestSubmissionDTO.java", "Response", "TẠO MỚI", "05", "draftId, orderId, version, orderType, status, message", "Không trả giá custom chưa thỏa thuận."],
     ["ReviewOrderRequest.java", "Request", "TẠO MỚI", "07", "decision, reason, optional staffId, expectedVersion", "Manager review."],
     ["AssignOrderRequest.java", "Request", "TẠO MỚI", "07", "staffId, expectedVersion", "Manager assign."],
     ["OrderAssignmentDTO.java", "Response", "TẠO MỚI", "07", "orderId, staffId, source, status, timestamps", "Assignment cấp Order."],
@@ -283,7 +285,7 @@ endpoint_rows = [
     ["CR-03", "WF01", "GET", "/api/custom-requests/{id}", "USER", "Xem draft của chính mình.", "path", "CustomRequestDTO", "CustomRequestService", "-", "TẠO MỚI"],
     ["CR-04", "WF01", "PUT", "/api/custom-requests/{id}", "USER", "Cập nhật draft chưa submit.", "UpdateCustomRequest", "CustomRequestDTO", "CustomRequestService", "expectedVersion", "TẠO MỚI"],
     ["CR-05", "WF01", "DELETE", "/api/custom-requests/{id}", "USER", "Xóa draft chưa submit.", "path + expectedVersion", "204", "CustomRequestService", "Idempotency-Key", "TẠO MỚI"],
-    ["CR-06", "WF01", "POST", "/api/custom-requests/{id}/submit", "USER", "Chụp snapshot draft thành CUSTOM Order PENDING_APPROVAL đúng một lần.", "SubmitCustomRequest", "CheckoutResponseDTO", "CustomRequestService", "Bắt buộc Idempotency-Key", "TẠO MỚI"],
+    ["CR-06", "WF01", "POST", "/api/custom-requests/{id}/submit", "USER", "Chụp snapshot draft thành CUSTOM Order PENDING_APPROVAL đúng một lần.", "SubmitCustomRequest", "CustomRequestSubmissionDTO", "CustomRequestService", "Bắt buộc Idempotency-Key", "TẠO MỚI"],
     ["ORD-01", "Order query", "GET", "/api/orders/me", "USER", "Danh sách Order của USER theo filter trạng thái.", "page/status/type", "OrderListDTO page", "OrderQueryService", "-", "SỬA"],
     ["ORD-02", "Order query", "GET", "/api/orders/{id}", "USER/STAFF/MANAGER", "Xem Order theo access policy; không suy quyền chat.", "path", "OrderDTO", "OrderQueryService", "-", "SỬA"],
     ["ORD-03", "Order query", "GET", "/api/orders/{id}/history", "USER/STAFF/MANAGER", "Xem lịch sử nghiệp vụ đã được phép hiển thị.", "path/page", "OrderStatusHistoryDTO page", "OrderQueryService", "-", "SỬA"],
@@ -341,12 +343,12 @@ entity_fields = {
         ["id", "Long", "Y", "PK", "Định danh dòng hàng"], ["orderId/order", "Long/Order", "Y", "FK", "Order cha"],
         ["sourceType", "OrderItemSourceType", "Y", "CATALOG/CUSTOM", "Nguồn item"], ["quantity", "int", "Y", ">0", "Số lượng đặt"],
         ["price", "Double", "N", "CUSTOM chưa chốt=null", "Đơn giá snapshot"], ["productNameSnapshot", "String", "N", "catalog", "Tên sản phẩm tại checkout"],
-        ["variantNameSnapshot", "String", "N", "catalog", "Tên biến thể"], ["specSnapshot", "TEXT/JSON", "Y", "immutable snapshot", "Thông số catalog/custom"],
+        ["variantNameSnapshot", "String", "N", "catalog", "Tên biến thể"], ["specSnapshot", "LONGTEXT/JSON", "Y", "immutable snapshot", "Custom giữ description + imageUrls; catalog giữ thông số snapshot"],
         ["madeDaySnapshot", "Double", "N", "catalog >=2", "madeDay tại checkout"], ["productionDurationDays", "Integer", "N", "computed", "Số ngày sản xuất item"],
         ["computedCompletionAt", "LocalDateTime", "N", "at ORDER_CREATING", "Hạn item"], ["durationRuleVersion", "String", "N", "versioned", "Truy vết công thức"],
         ["exportedQuantity", "Integer", "N", "0..quantity", "Bàn giao"], ["receivedQuantity", "Integer", "N", "0..exported", "Thực nhận"],
     ],
-    "CustomRequest": [["id", "Long", "Y", "PK", "Draft"], ["version", "Long", "Y", "@Version", "Concurrency"], ["userId", "Long", "Y", "owner", "Chỉ USER"], ["status", "CustomRequestStatus", "Y", "DRAFT/SUBMITTED/...", "Vòng đời request"], ["name/description/spec", "String/TEXT", "Y", "validated", "Thông tin custom"], ["quantity", "int", "Y", ">0", "Số lượng"], ["attachments", "JSON/ref", "N", "safe URLs", "Ảnh yêu cầu"], ["submittedOrderId", "Long", "N", "unique after submit", "Chống tạo nhiều Order"]],
+    "CustomRequest": [["id", "Long", "Y", "PK", "Draft"], ["version", "Long", "Y", "@Version", "Concurrency"], ["userId", "String", "Y", "owner", "Chỉ USER"], ["status", "CustomRequestStatus", "Y", "DRAFT/SUBMITTED", "Vòng đời request"], ["description", "String/LONGTEXT", "Y", "1..4.000 từ", "Mô tả sản phẩm custom"], ["quantity", "int", "Y", ">0", "Số lượng"], ["imageUrls", "List<String>/JSON", "Y", "list có thể rỗng; URL HTTP(S)", "Ảnh minh họa, không fetch server-side"], ["submittedOrderId", "Long", "N", "unique after submit", "Chống tạo nhiều Order"]],
     "OrderAssignment": [["id", "Long", "Y", "PK", "Assignment"], ["orderId", "Long", "Y", "unique active", "Order"], ["staffId", "Long", "Y", "unique active", "Staff"], ["source", "AssignmentSource", "Y", "MANAGER_ASSIGN/SELF_CLAIM", "Nguồn"], ["status", "AssignmentStatus", "Y", "ACTIVE/RELEASED", "Tình trạng"], ["activeOrderId/activeStaffId", "Long", "N", "DB unique", "Khóa nguyên tử"], ["assignedAt/releasedAt", "LocalDateTime", "Y/N", "server time", "Audit"], ["releaseReason", "AssignmentReleaseReason", "N", "QC_PASS/CANCELLED", "Lý do giải phóng"]],
     "OrderAgreement": [["id", "Long", "Y", "PK", "Agreement"], ["orderId", "Long", "Y", "FK", "Order"], ["agreementVersion", "Integer", "Y", "unique/order", "Phiên bản nghiệp vụ"], ["status", "OrderAgreementStatus", "Y", "DRAFT/SUBMITTED/CONFIRMED/REVISION", "Trạng thái"], ["itemSnapshot", "TEXT", "Y", "immutable", "Spec/quantity"], ["subtotal/discount/finalPrice", "Double", "N", "custom pre-confirm=null", "Giá đã trao đổi"], ["deadlineDays", "Integer", "N", ">0", "Số ngày chốt"], ["submittedBy/At", "String/time", "N", "owner user", "Người gửi"], ["confirmedBy/At", "String/time", "N", "assigned staff", "Người xác nhận"], ["decisionReason", "TEXT", "N", "required on revision", "Lý do"]],
     "PaymentAttempt": [["id", "Long", "Y", "PK", "Attempt"], ["version", "Long", "Y", "@Version", "Concurrency"], ["orderId", "Long", "Y", "FK", "Order"], ["provider", "String", "Y", "MOMO", "Nhà cung cấp"], ["requestReference", "String", "Y", "unique/provider", "Idempotency request"], ["providerTransactionId", "String", "N", "unique/provider", "Id giao dịch"], ["expectedAmount", "Double", "Y", "=Order.finalPrice", "Tiền kỳ vọng"], ["status", "PaymentAttemptStatus", "Y", "PENDING/PAID/FAILED/EXPIRED", "Kết quả"], ["openedAt/dueAt/paidAt", "LocalDateTime", "Y/Y/N", "due=+1h", "Mốc payment"], ["providerResult", "TEXT", "N", "protected", "Payload phục vụ audit"], ["reconciliationRequired", "boolean", "Y", "false", "Callback muộn/xung đột"]],
@@ -394,10 +396,10 @@ plan_rows = [
     ["01", "Baseline/gap", "VERIFIED", "Không sửa trong tài liệu này", "Báo cáo baseline"],
     ["02", "Domain + Liquibase expand", "VERIFIED", "Giữ changeset đã chạy bất biến", "Entity/enums/migration"],
     ["03", "Consistency infrastructure", "VERIFIED", "Dùng cho mọi command mới", "Transition/idempotency/outbox/token"],
-    ["04", "Catalog/cart/checkout", "NEXT", "Triển khai sau khi chốt workbook", "Duration, snapshot, checkout PENDING_APPROVAL"],
-    ["05", "Custom request", "NOT_STARTED", "Sau 04", "Draft/submit"],
-    ["06", "Cancel kernel", "NOT_STARTED", "Trước review/timer", "CancelOrderService"],
-    ["07", "Review/assignment", "NOT_STARTED", "Sau 04-06", "WF02"],
+    ["04", "Catalog/cart/checkout", "VERIFIED", "Đã bàn giao", "Duration, snapshot, checkout PENDING_APPROVAL"],
+    ["05", "Custom request", "IMPLEMENTED", "Đã đồng bộ contract 09/10", "Description 4.000 từ, imageUrls[], migration legacy, draft/submit"],
+    ["06", "Cancel kernel", "IMPLEMENTED", "Chờ review/MySQL/BPMN cutover", "CancelOrderService"],
+    ["07", "Review/assignment", "IMPLEMENTED", "Chờ review/MySQL/BPMN cutover", "WF02"],
     ["08", "Chat/agreement/timer", "NOT_STARTED", "Sau 05-07", "WF03"],
     ["09", "Payment/start", "NOT_STARTED", "Sau 06-08", "WF04"],
     ["10", "Checkpoint/KCS", "NOT_STARTED", "Sau 07-09", "WF05"],
@@ -415,6 +417,7 @@ decision_rows = [
     ["D06", "Email trạng thái", "Bốn mốc: PENDING_APPROVAL, ORDER_ACCEPTED, ORDER_CREATING, READY_TO_SHIP.", "ĐÃ CHỐT", "Checkpoint/cancel là mail riêng"],
     ["D07", "Guest token TTL", "Thời hạn cụ thể, cấp lại link và guest refresh session.", "CẦN CHỐT TRƯỚC API GUEST", "Guard đã yêu cầu expiry"],
     ["D08", "Bàn giao thiếu", "Có bắt buộc exportedQuantity=ordered quantity hay cho 0..quantity.", "CẦN CHỐT TRƯỚC WF07", "WF07 hiện mô tả khoảng 0..quantity"],
+    ["D09", "Custom draft", "Description bắt buộc tối đa 4.000 từ; imageUrls là List<String> HTTP/HTTPS có thể rỗng; không fetch URL trong transaction.", "ĐÃ TRIỂN KHAI 09/10/2026", "Cột legacy giữ tên, nâng LONGTEXT; converter đọc JSON/raw/null"],
 ]
 
 test_rows = [
@@ -423,6 +426,9 @@ test_rows = [
     ["T04-03", "Checkout", "Chọn một phần giỏ", "Chỉ item chọn bị xóa; snapshot đầy đủ"],
     ["T04-04", "Checkout retry", "Cùng key/cùng payload", "Cùng Order; không dùng voucher lần hai"],
     ["T04-05", "Checkout conflict", "Cùng key/khác payload", "409 REQUEST_KEY_CONFLICT"],
+    ["T05-01", "Custom description", "Đúng 4.000 từ và 4.001 từ", "4.000 hợp lệ; 4.001 validation error, không ghi dữ liệu"],
+    ["T05-02", "Custom images", "List rỗng, nhiều URL HTTP(S), URL relative/sai scheme", "List hợp lệ giữ thứ tự; URL sai bị từ chối"],
+    ["T05-03", "Custom snapshot", "Sửa draft sau submit", "OrderItem description/imageUrls không thay đổi"],
     ["T07-01", "Assignment race", "Hai staff/manager đồng thời", "Một active assignment thắng"],
     ["T08-01", "Chat access", "Manager hoặc staff không phụ trách", "403 và không subscribe WS"],
     ["T08-02", "Timer race", "Submit form và timeout đồng thời", "Chỉ một kết quả commit"],
@@ -523,7 +529,7 @@ def build_workbook():
     ws_flow.freeze_panes = "A6"
 
     add_sheet(wb, "11_WF_MAPPING", "ÁNH XẠ WORKFLOW SANG CODE", "Traceability WF01–WF09", ["Workflow", "Nội dung", "Tác nhân", "Service/Controller chính", "Entity chính", "Kết quả", "Phần triển khai"], wf_rows, [12, 38, 34, 65, 55, 55, 18])
-    add_sheet(wb, "12_KE_HOACH", "KẾ HOẠCH TRIỂN KHAI", "Thứ tự dependency đã thống nhất; Phần 04 là phần tiếp theo sau khi duyệt báo cáo", ["Phần", "Phạm vi", "Trạng thái", "Điều kiện/Ghi chú", "Đầu ra"], plan_rows, [10, 45, 18, 70, 70])
+    add_sheet(wb, "12_KE_HOACH", "KẾ HOẠCH TRIỂN KHAI", "Thứ tự dependency đã thống nhất; PHẦN 05 đang mở lại theo quyết định custom ngày 09/10/2026", ["Phần", "Phạm vi", "Trạng thái", "Điều kiện/Ghi chú", "Đầu ra"], plan_rows, [10, 45, 18, 70, 70])
     add_sheet(wb, "13_QUYET_DINH", "QUYẾT ĐỊNH VÀ ĐIỂM CẦN CHỐT", "Không tự biến đề xuất kỹ thuật chưa duyệt thành policy nghiệp vụ", ["Mã", "Chủ đề", "Quyết định/Nội dung", "Trạng thái", "Tác động"], decision_rows, [10, 28, 100, 28, 60])
     add_sheet(wb, "14_KIEM_THU", "KỊCH BẢN KIỂM THỬ CHẤP NHẬN", "Danh sách tối thiểu; mỗi phase bổ sung unit/integration/concurrency/security test", ["Mã", "Nhóm", "Dữ liệu/Tình huống", "Kết quả bắt buộc"], test_rows, [14, 24, 75, 95])
 
@@ -561,4 +567,3 @@ if __name__ == "__main__":
     objects_count, endpoints_count = verify_workbook()
     print(f"Created: {OUTPUT}")
     print(f"Objects: {objects_count}; Endpoints: {endpoints_count}")
-

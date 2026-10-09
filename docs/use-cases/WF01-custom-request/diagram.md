@@ -45,7 +45,7 @@ flowchart TD
     F --> G[User chọn bản nháp]
     G --> H{Tồn tại và thuộc user?}
     H -->|Không| I[Trả lỗi, không tiết lộ nội dung]
-    H -->|Có| J[Hiển thị spec, số lượng, ảnh và ghi chú]
+    H -->|Có| J[Hiển thị description, quantity, imageUrls và ghi chú]
     J --> K([Kết thúc: xem được chi tiết])
     E --> L([Kết thúc: chưa có bản nháp])
     X --> M([Kết thúc: không được truy cập])
@@ -65,19 +65,19 @@ flowchart TD
     C -->|Sửa| E{Bản nháp tồn tại và thuộc user?}
     E -->|Không| Y[Trả lỗi, không thay đổi dữ liệu]
     E -->|Có| F[Nạp nội dung bản nháp]
-    D --> G[User nhập spec, số lượng, ghi chú]
+    D --> G[User nhập description tối đa 4.000 từ và quantity]
     F --> G
-    G --> H{Có chọn ảnh tham khảo?}
+    G --> H{Có URL ảnh tham khảo?}
     H -->|Không| I[User bấm Lưu bản nháp]
-    H -->|Có| J[Tải ảnh và kiểm tra attachment]
-    J --> K{Ảnh hợp lệ và tải thành công?}
-    K -->|Không| L[Hiển thị lỗi ảnh để sửa hoặc bỏ ảnh lỗi]
+    H -->|Có| J[Upload ảnh và thêm URL vào imageUrls]
+    J --> K{Mọi URL là HTTP/HTTPS hợp lệ?}
+    K -->|Không| L[Hiển thị lỗi URL để sửa hoặc bỏ mục lỗi]
     L --> G
     K -->|Có| I
     I --> M{Dữ liệu lưu hợp lệ?}
     M -->|Không| N[Hiển thị lỗi trường, chưa lưu thay đổi]
     N --> G
-    M -->|Có| O[Lưu draft và attachment hợp lệ]
+    M -->|Có| O[Lưu draft với description và imageUrls dạng danh sách]
     O --> P{Lưu thành công?}
     P -->|Không| Q[Trả lỗi, không ghi đè dữ liệu bằng bản lỗi]
     P -->|Có| R[Trả draftId, nội dung và thời điểm cập nhật]
@@ -98,7 +98,7 @@ flowchart TD
     B -->|Có| C{Yêu cầu đã được xử lý?}
     C -->|Cùng yêu cầu đã thành công| D[Trả orderId đã tạo]
     C -->|Key trùng nhưng nội dung khác| E[Trả lỗi xung đột]
-    C -->|Yêu cầu mới| F{Spec, số lượng, ảnh và contact hợp lệ?}
+    C -->|Yêu cầu mới| F{Description <= 4.000 từ, imageUrls, quantity và contact hợp lệ?}
     F -->|Không| G[Trả lỗi trường, cho user chỉnh sửa]
     F -->|Có| H[Transaction tạo Order CUSTOM và một loại OrderItem]
     H --> I[Lưu snapshot, liên kết draft, trạng thái PENDING_APPROVAL]
@@ -131,7 +131,7 @@ Kết quả nghiệp vụ: một Order CUSTOM ở PENDING_APPROVAL; chưa manage
 ```mermaid
 flowchart TD
     A[User mở yêu cầu custom] --> B[Tạo hoặc chọn bản nháp]
-    B --> C[Nhập spec, số lượng và ảnh]
+    B --> C[Nhập description tối đa 4.000 từ, quantity và imageUrls]
     C --> D[Lưu bản nháp]
     D --> E{User chọn gửi tạo đơn?}
     E -->|Chưa| F[Bản nháp được lưu]

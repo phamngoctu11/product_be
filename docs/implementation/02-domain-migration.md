@@ -1,5 +1,7 @@
 # PHẦN 02 — Domain contract và Liquibase expand migration
 
+> Cập nhật 09/10/2026: quyết định mới của PHẦN 05 yêu cầu CustomRequest có description tối đa 4.000 từ và `imageUrls: string[]`. Skeleton `spec/attachments` dùng `TEXT` của PHẦN 02 là hiện trạng expand ban đầu, không còn là schema đích cho custom. PHẦN 05 phải thêm migration tương thích sang kiểu đủ chứa 4.000 từ UTF-8 và JSON list; không sửa checksum changeset PHẦN 02 đã chạy.
+
 Ngày thực hiện: 06/10/2026. Quyết định của người dùng: Liquibase và tiền `double/Double`.
 
 ## Phạm vi triển khai

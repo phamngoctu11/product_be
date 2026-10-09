@@ -63,6 +63,7 @@ public class OrderService {
     private final OrderLookupService orderLookupService;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderCancellationService orderCancellationService;
+    private final OrderLookupTokenService orderLookupTokenService;
 
     private void assertCurrentUserCanViewOrder(Order order) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -609,6 +610,56 @@ public class OrderService {
 
     public InventoryReservationService getInventoryReservationService() {
         return inventoryReservationService;
+    }
+
+    @Transactional(readOnly = true)
+    public OrderDTO getGuestOrder(Long orderId, String token) {
+        Order order = orderLookupService.require(orderId);
+        orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.READ);
+        return orderDetailsAssembler.toDto(order);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderStatusHistoryDTO> getGuestOrderHistory(Long orderId, String token) {
+        Order order = orderLookupService.require(orderId);
+        orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.READ);
+        return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
+                .stream().map(historyMapper::toDto).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public ReceiptConfirmResponse confirmGuestReceipt(Long orderId, String token, ReceiptConfirmRequest request) {
+        Order order = orderLookupService.require(orderId);
+        orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.CONFIRM_RECEIPT);
+        Task task = findCustomerReceiptTask(orderId);
+
+        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
+        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
+        if (!mismatches.isEmpty() && !request.isAcceptMismatch()) {
+            return new ReceiptConfirmResponse(
+                    false,
+                    false,
+                    "So luong thuc nhan khong khop voi so luong da xuat. Vui long xac nhan co muon khieu nai hay khong.",
+                    mismatches
+            );
+        }
+
+        applyReceivedQuantities(order, receivedByVariant);
+
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setEndOrderTime(LocalDateTime.now());
+
+        saveOrderAndAuditStatusChange(order, oldStatus, null); // Guest has no changerId
+        eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
+
+        taskService.complete(task.getId());
+
+        boolean matched = mismatches.isEmpty();
+        String message = matched
+                ? "Xac nhan nhan hang thanh cong. Cam on ban!"
+                : "Xac nhan nhan hang thanh cong voi so luong thuc nhan bi lech da duoc chap nhan.";
+        return new ReceiptConfirmResponse(matched, true, message, mismatches);
     }
 }
 

@@ -1,7 +1,9 @@
 package com.example.workflow.entity;
 
+import com.example.workflow.entity.converter.StringListJsonConverter;
 import com.example.workflow.nume.CustomRequestStatus;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -19,6 +21,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Entity
@@ -53,11 +57,12 @@ public class CustomRequest {
     @Column(name = "status", nullable = false, columnDefinition = "varchar(24)")
     private CustomRequestStatus status = CustomRequestStatus.DRAFT;
 
-    @Column(name = "spec", nullable = false, columnDefinition = "text")
-    private String spec;
+    @Column(name = "spec", nullable = false, columnDefinition = "longtext")
+    private String description;
 
-    @Column(name = "attachments", nullable = true, columnDefinition = "text")
-    private String attachments;
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "attachments", nullable = false, columnDefinition = "longtext")
+    private List<String> imageUrls = new ArrayList<>();
 
     @Column(name = "quantity", nullable = false, columnDefinition = "int")
     private Integer quantity;

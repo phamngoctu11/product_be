@@ -4,13 +4,14 @@ import com.example.workflow.nume.CustomRequestStatus;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record CustomRequestDTO(
         Long id,
         Long version,
         CustomRequestStatus status,
-        String spec,
-        String attachments,
+        String description,
+        List<String> imageUrls,
         Integer quantity,
         Long linkedOrderId,
         Long sourceOrderId,

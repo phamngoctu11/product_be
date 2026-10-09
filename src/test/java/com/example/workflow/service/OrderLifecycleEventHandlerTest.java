@@ -87,7 +87,7 @@ class OrderLifecycleEventHandlerTest {
         Order order = userOrder();
         order.setOrderType(OrderType.CUSTOM);
         OrderItem item = new OrderItem();
-        item.setSpecSnapshot("{\"spec\":\"Khắc tên An\"}");
+        item.setSpecSnapshot("{\"description\":\"Khắc tên An\",\"imageUrls\":[]}");
         item.setQuantity(2);
         order.setItems(List.of(item));
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
@@ -95,7 +95,26 @@ class OrderLifecycleEventHandlerTest {
         handler.handleOrderCreated(new OrderCreatedEvent(10L));
 
         verify(emailService).sendCustomOrderConfirmationEmail(
-                "user@example.com", "User One", 10L, "Khắc tên An", 2
+                "user@example.com", "User One", 10L, "Khắc tên An", 2,
+                "http://localhost:4200/orders/10"
+        );
+    }
+
+    @Test
+    void customOrderCreatedReadsLegacySpecSnapshot() {
+        Order order = userOrder();
+        order.setOrderType(OrderType.CUSTOM);
+        OrderItem item = new OrderItem();
+        item.setSpecSnapshot("{\"spec\":\"Legacy description\",\"attachments\":\"[]\"}");
+        item.setQuantity(1);
+        order.setItems(List.of(item));
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+
+        handler.handleOrderCreated(new OrderCreatedEvent(10L));
+
+        verify(emailService).sendCustomOrderConfirmationEmail(
+                "user@example.com", "User One", 10L, "Legacy description", 1,
+                "http://localhost:4200/orders/10"
         );
     }
 

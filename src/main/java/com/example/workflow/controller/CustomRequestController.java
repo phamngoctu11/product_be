@@ -1,9 +1,9 @@
 package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
-import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.dto.CreateCustomRequest;
 import com.example.workflow.dto.CustomRequestDTO;
+import com.example.workflow.dto.CustomRequestSubmissionDTO;
 import com.example.workflow.dto.SubmitCustomRequest;
 import com.example.workflow.dto.UpdateCustomRequest;
 import com.example.workflow.nume.CustomRequestStatus;
@@ -80,13 +80,13 @@ public class CustomRequestController {
     }
 
     @PostMapping("/{id}/submit")
-    public ResponseEntity<ApiResponse<CheckoutResponseDTO>> submit(
+    public ResponseEntity<ApiResponse<CustomRequestSubmissionDTO>> submit(
             @Positive @PathVariable Long id,
             @Valid @RequestBody SubmitCustomRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
-        CheckoutResponseDTO response = customRequestService.submit(id, request, idempotencyKey);
+        CustomRequestSubmissionDTO response = customRequestService.submit(id, request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse<>(true, HttpStatus.CREATED.value(), response.getMessage(), response));
+                .body(new ApiResponse<>(true, HttpStatus.CREATED.value(), response.message(), response));
     }
 }

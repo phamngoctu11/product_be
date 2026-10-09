@@ -42,7 +42,7 @@ sequenceDiagram
                 S-->>C: Lỗi truy cập, không trả nội dung
                 C-->>UI: Lỗi
             else Đúng chủ sở hữu
-                S-->>C: Spec, quantity, note, attachments
+                S-->>C: description, quantity, note, imageUrls[]
                 C-->>UI: Chi tiết bản nháp
                 UI-->>U: Hiển thị nội dung
             end
@@ -63,8 +63,8 @@ sequenceDiagram
     participant A as Xác thực và phân quyền
     participant S as CustomRequestService
     participant DB as Database
-    U->>UI: Nhập hoặc chỉnh spec, quantity, note và ảnh
-    Note over UI,S: Upload lỗi phải được xử lý trước khi gắn attachment hợp lệ
+    U->>UI: Nhập/chỉnh description, quantity và danh sách ảnh
+    Note over UI,S: Description tối đa 4.000 từ; imageUrls là list URL HTTP/HTTPS, có thể rỗng
     U->>UI: Lưu bản nháp
     UI->>C: saveDraft(draftId nếu sửa, payload, JWT)
     C->>A: Kiểm tra JWT và role USER
@@ -78,13 +78,13 @@ sequenceDiagram
             S->>DB: Tìm draft thuộc user
             DB-->>S: Draft hoặc không có quyền sở hữu
         end
-        S->>S: Kiểm tra ownership, dữ liệu và attachment
+        S->>S: Kiểm tra ownership, giới hạn từ, quantity và từng URL
         alt Không hợp lệ hoặc không đúng chủ
             S-->>C: Lỗi cụ thể, không lưu
             C-->>UI: Lỗi trường hoặc quyền
             UI-->>U: Chỉnh sửa thông tin
         else Hợp lệ
-            S->>DB: Transaction lưu draft và liên kết attachment
+            S->>DB: Transaction lưu description và imageUrls dạng JSON/list
             alt Lưu thất bại
                 DB-->>S: Rollback, lỗi
                 S-->>C: Không lưu được
@@ -100,7 +100,7 @@ sequenceDiagram
     Note over S,DB: Không tạo Order, payment, email tạo đơn hoặc task manager ở UC này
 ```
 
-Upload/attachment là dữ liệu đầu vào đã được xác minh; quy trình lưu trữ ảnh chi tiết không được áp đặt thêm vào nghiệp vụ WF01. Validation lưu nháp thực hiện theo schema đã thống nhất, không tự coi tất cả trường của đơn đều bắt buộc ngay khi lưu nháp.
+Ảnh được upload trước qua dịch vụ dùng chung; WF01 chỉ nhận và lưu danh sách URL. Backend không fetch URL trong transaction. Số ảnh tối đa/allowlist host chưa được chốt, nhưng kiểu API `imageUrls: string[]`, URL HTTP/HTTPS và description tối đa 4.000 từ là contract bắt buộc.
 
 ## UC01.3 — Gửi bản nháp tạo đơn custom
 
@@ -133,7 +133,7 @@ sequenceDiagram
             S-->>C: Lỗi, không tạo đơn mới
             C-->>UI: Thông tin cần sửa hoặc lỗi quyền
         else Yêu cầu mới hợp lệ
-            S->>S: Chuẩn bị spec và contact snapshot
+            S->>S: Chuẩn bị description, imageUrls và contact snapshot
             S->>DB: Transaction tạo Order, item, liên kết draft và kết quả idempotency
             Note over S,DB: CUSTOM, một loại item, status PENDING_APPROVAL; chống gửi đồng thời ở transaction
             alt Transaction thất bại

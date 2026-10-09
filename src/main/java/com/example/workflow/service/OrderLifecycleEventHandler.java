@@ -51,7 +51,8 @@ public class OrderLifecycleEventHandler {
                         order.getRecipientName(),
                         order.getId(),
                         customSpec(item),
-                        item == null ? null : item.getQuantity()
+                        item == null ? null : item.getQuantity(),
+                        authenticatedOrderUrl(order.getId())
                 );
             } else {
                 emailService.sendOrderConfirmationEmail(
@@ -251,11 +252,23 @@ public class OrderLifecycleEventHandler {
         }
         try {
             JsonNode snapshot = objectMapper.readTree(item.getSpecSnapshot());
-            JsonNode spec = snapshot.get("spec");
-            return spec == null || spec.isNull() ? null : spec.asText();
+            JsonNode description = snapshot.get("description");
+            if (description == null || description.isNull()) {
+                description = snapshot.get("spec");
+            }
+            return description == null || description.isNull() ? null : description.asText();
         } catch (JsonProcessingException ignored) {
             return item.getSpecSnapshot();
         }
+    }
+
+    private String authenticatedOrderUrl(Long orderId) {
+        return UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path("/orders/")
+                .path(orderId.toString())
+                .build()
+                .encode()
+                .toUriString();
     }
 
     private String paymentLabel(Order order) {

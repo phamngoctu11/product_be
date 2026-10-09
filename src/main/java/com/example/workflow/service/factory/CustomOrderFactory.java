@@ -59,8 +59,8 @@ public class CustomOrderFactory {
 
     private String snapshot(CustomRequest draft) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("spec", draft.getSpec());
-        snapshot.put("attachments", draft.getAttachments());
+        snapshot.put("description", draft.getDescription());
+        snapshot.put("imageUrls", draft.getImageUrls());
         return JsonUtils.write(objectMapper, snapshot, "custom request data");
     }
 }

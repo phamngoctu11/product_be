@@ -7,11 +7,11 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 ## 1. Trạng thái hiện tại
 
 ```text
-Tài liệu nghiệp vụ:       HOÀN THÀNH WF01–WF09
-Tái triển khai code:      PHẦN 07 ĐÃ IMPLEMENTED, CHỜ REVIEW
-Phần đang thực hiện:      PHẦN 07 — Bàn giao manager review và assignment
-Phần hoàn thành gần nhất: PHẦN 07 — Manager review và assignment, WF02
-Ngày cập nhật gần nhất:   08/10/2026
+Tài liệu nghiệp vụ:       WF01 ĐÃ CẬP NHẬT CONTRACT CUSTOM NGÀY 09/10; WF02–WF09 GIỮ NGUYÊN
+Tái triển khai code:      PHẦN 05 ĐÃ IMPLEMENTED THEO CONTRACT DESCRIPTION/IMAGE URL MỚI
+Phần đang thực hiện:      REVIEW/BÀN GIAO PHẦN 05
+Phần hoàn thành gần nhất: PHẦN 05 — Custom request, WF01 (contract 09/10/2026)
+Ngày cập nhật gần nhất:   09/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -196,24 +196,27 @@ Phạm vi chính:
 
 ### PHẦN 05 — Custom request, WF01
 
-Trạng thái: `IMPLEMENTED` — entity/repository/mapper/migration, service/controller/API và transaction idempotent đã hoàn thành; còn nghiệm thu MySQL thực tế và nối process Camunda mới ở PHẦN 13.
+Trạng thái: `IMPLEMENTED` — contract description tối đa 4.000 từ và `imageUrls: string[]`, migration tương thích, API, snapshot, email và test atomicity đã hoàn thành. Còn nghiệm thu MySQL thực tế và nối process Camunda mới ở PHẦN 13.
 
 Phạm vi chính:
 
 - USER tạo/sửa/xem nhiều CustomRequest draft.
 - Guest không được tạo custom.
+- Draft ghi mới dùng `description` bắt buộc tối đa 4.000 từ và `imageUrls` là danh sách URL HTTP/HTTPS có thể rỗng; không dùng `attachments` dạng chuỗi làm API contract chính.
+- Database và OrderItem snapshot dùng `LONGTEXT` để chứa description 4.000 từ UTF-8 cùng danh sách URL; migration giữ tên cột vật lý và converter hỗ trợ đọc dữ liệu legacy `spec/attachments`.
 - Submit một draft tạo một Order CUSTOM `PENDING_APPROVAL` và snapshot dữ liệu.
 - Chưa có giá chính thức trước khi staff xác nhận agreement.
 - Submit idempotent và liên kết draft–Order.
 - Email + notification chỉ khi Order được tạo, không gửi khi chỉ lưu draft.
 - API `/api/custom-requests` chỉ nhận JWT có authority `USER`; owner luôn lấy từ JWT.
-- Submit ghi Order, OrderItem, liên kết draft, kết quả durable request và ba outbox event trong cùng transaction.
+- Submit ghi Order, OrderItem, liên kết draft, kết quả durable request và một parent outbox `ORDER_CREATED` trong cùng transaction; consumer fan-out email/notification sau commit.
 - Không gọi process `ApproveCartProcess` legacy. `ORDER_CREATED` đã được ghi bền vững; điểm bắt đầu manager-review của BPMN mục tiêu sẽ được nối khi cutover workflow ở PHẦN 13.
 
 Đầu ra bắt buộc:
 
 - API, authorization, migration và test theo UC01.
 - Draft không bị biến thành Order nhiều lần.
+- Boundary test description 4.000/4.001 từ, list URL rỗng/nhiều phần tử/URL sai, snapshot bất biến và tương thích dữ liệu legacy.
 
 ### PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09
 
@@ -376,7 +379,7 @@ Phạm vi chính:
 
 Đầu ra bắt buộc:
 
-- Bộ test acceptance bám AC01–AC42 trong target.
+- Bộ test acceptance bám AC01–AC44 trong target.
 - Không còn endpoint/BPMN cũ có thể đi vòng qua state transition mới.
 - Migration thử thành công trên bản sao dữ liệu phù hợp trước production.
 
@@ -445,6 +448,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 08/10/2026 | 06 | `IMPLEMENTED` | Hoàn tất kernel hủy Order dùng chung cho USER, Guest, manager reject và system timeout/failure; API mutation idempotent, Guest GET chỉ đọc, token scope/rate/version, penalty, hoàn voucher, release assignment và `ORDER_CANCELLED` outbox; loại hoàn stock/refund và xóa thô process khỏi đường hủy | `.\mvnw.cmd test`: 232 test chạy, 0 failure/error, 6 MySQL opt-in skipped; atomicity test chứng minh một transition audit và một `ORDER_CANCELLED`; [bàn giao](implementation/06-order-cancellation.md) | Review PHẦN 06; sau đó triển khai PHẦN 07 manager review và assignment dùng kernel hủy cho nhánh reject |
 | 08/10/2026 | 07 | `IN_PROGRESS` | Bắt đầu chuẩn hóa manager review và assignment WF02; giữ database là nguồn nghiệp vụ, reject tái sử dụng kernel PHẦN 06 | Đang đối chiếu target/WF02 với API, service, repository và transition hiện tại | Triển khai contract review/assign/claim, khóa cạnh tranh và test nguyên tử |
 | 08/10/2026 | 07 | `IMPLEMENTED` | Thay API review/assign/claim legacy bằng `ManagerOrderReviewService` và kernel `OrderAssignmentService`; actor từ JWT, version/idempotency, Order/staff lock, active unique, CUSTOM due +24h, Guest CATALOG sang ORDER_ACCEPTED và manager reject dùng PHẦN 06 | `.\mvnw.cmd test`: 244 test chạy, 0 failure/error, 6 MySQL opt-in skipped; migration legacy lặp đạt; atomicity test chứng minh một decision/assignment/transition; [bàn giao](implementation/07-manager-review-assignment.md) | Review PHẦN 07; sau đó triển khai PHẦN 08 chat, agreement và timer CUSTOM PT24H |
+| 09/10/2026 | 05 | `IN_PROGRESS` | Người dùng chốt custom draft gồm description tối đa 4.000 từ và `imageUrls` dạng danh sách URL; rà soát xác nhận code hiện dùng `spec/attachments` String và schema `TEXT` nên chưa đạt contract mới | Cập nhật target, WF01 và báo cáo; chưa sửa code. Test review trước quyết định: 26 test PHẦN 05 đạt trên H2, Docker/MySQL không sẵn sàng | Sửa migration/entity/DTO/mapper/service/snapshot/test PHẦN 05 trước khi bắt đầu PHẦN 08 |
+| 09/10/2026 | 05 | `IMPLEMENTED` | Hoàn tất API/domain `description` + `imageUrls`, giới hạn 4.000 từ, URL HTTP/HTTPS, migration LONGTEXT tương thích cột legacy, snapshot mới/fallback cũ, response `draftId/orderType`, link email và chặn user soft-delete | `.\mvnw.cmd test`: 254 test, 0 failure/error, 7 MySQL opt-in skipped; test đồng thời chỉ tạo 1 Order và fault injection xác nhận rollback toàn transaction; `git diff --check` đạt | Review PHẦN 05, chạy MySQL opt-in khi Docker sẵn sàng, sau đó bắt đầu PHẦN 08 |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -487,14 +492,13 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 - Code còn complaint receipt dù target đã loại bỏ complaint workflow.
 - Endpoint checkout mới đã tạo `PENDING_APPROVAL/NOT_DUE`; code checkout/payment legacy vẫn còn và phải được loại/cutover ở PHẦN 13.
 - Repo có nhiều BPMN cho user/guest; cần tránh duy trì hai lifecycle process cạnh tranh cho cùng Order.
+- PHẦN 05 đã dùng `description` và `List<String> imageUrls` ở API/domain, validate 4.000 từ và URL. Tên cột vật lý `spec/attachments` được giữ để tương thích nhưng đã nâng `LONGTEXT`; Agreement PHẦN 08 phải đọc snapshot mới và fallback snapshot legacy.
 - Trước mọi lần sửa, phải giữ nguyên các thay đổi chưa commit không thuộc phần đang làm. Tại thời điểm tạo file này, worktree đã có thay đổi ở tài liệu use case và file cấu hình ứng dụng; cần chạy lại `git status` vì trạng thái này có thể thay đổi ở phiên sau.
 
 ## 12. Hành động tiếp theo chính xác
 
-Review [bàn giao PHẦN 07](implementation/07-manager-review-assignment.md), đặc biệt state sau assignment, cách suy `AVAILABLE`, compatibility mirror `warehouseStaff` và ranh giới BPMN chưa cutover. Sau khi được duyệt, bắt đầu **PHẦN 08 — Chat, agreement và timer custom, WF03**:
+Review/bàn giao **PHẦN 05 — Custom request, WF01** theo quyết định ngày 09/10/2026:
 
-1. Chuẩn hóa ChatThread theo `orderId`, tạo đúng một lần sau assignment cho nhánh USER cần trao đổi; MANAGER không có quyền đọc/gửi chat.
-2. Chỉ owner USER và assigned STAFF được dùng REST/WebSocket; membership luôn đối chiếu assignment hiện hành trong database.
-3. Xây Agreement versioned: USER gửi form, staff confirm hoặc yêu cầu sửa; CATALOG không được thay giá snapshot, CUSTOM chốt spec/quantity/price/duration/voucher.
-4. Chuyển `DISCUSSING → WAITING_STAFF_CONFIRMATION → ORDER_ACCEPTED` qua application service có version/idempotency và event sau commit.
-5. Triển khai timer CUSTOM PT24H tuyệt đối từ `managerApprovedAt`; form hợp lệ dừng timer ngay, timeout gọi kernel hủy PHẦN 06 và test submit–timeout race.
+1. Khi Docker sẵn sàng, chạy bộ MySQL opt-in để nghiệm thu changeset `06-custom-request-content.xml` trên MySQL thực tế.
+2. Sau khi review PHẦN 05 và PHẦN 07, bắt đầu PHẦN 08 — ChatThread, Agreement versioned và timer CUSTOM PT24H.
+3. Agreement PHẦN 08 phải đọc snapshot `{description,imageUrls}` mới và fallback `{spec,attachments}` legacy; không đổi snapshot OrderItem đã tạo.

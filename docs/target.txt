@@ -64,7 +64,10 @@ CATALOG:
 CUSTOM:
 - Tạo từ một CustomRequest user chọn gửi.
 - Có một loại CustomItem, có thể có quantity lớn hơn một.
-- Nội dung/ảnh được chụp vào đơn, không phụ thuộc việc sửa bản nháp sau đó.
+- Nội dung draft gồm `description` mô tả sản phẩm custom và `imageUrls` là danh sách URL ảnh minh họa. `description` bắt buộc, tối đa 4.000 từ sau khi trim; cách đếm từ là tách chuỗi theo một hoặc nhiều ký tự khoảng trắng Unicode. Mốc 4.000 là giới hạn tối đa, không phải độ dài bắt buộc.
+- `imageUrls` là mảng/list chuỗi, không phải một chuỗi attachment ghép dấu phân cách. Danh sách có thể rỗng; mỗi phần tử nếu có phải là URL tuyệt đối dùng `http` hoặc `https`, được trim và giữ đúng thứ tự. Backend chỉ lưu tham chiếu, không tự tải nội dung URL trong transaction tạo/sửa/submit draft.
+- Số ảnh tối đa và allowlist host chưa được đặt thành chính sách nghiệp vụ. Không tự đặt một con số hoặc domain cố định trong code; giới hạn kích thước request chung vẫn phải bảo vệ hệ thống.
+- Description và toàn bộ danh sách URL ảnh được chụp vào OrderItem snapshot khi submit, không phụ thuộc việc sửa bản nháp sau đó.
 - Giá thương lượng chỉ thành giá chính thức khi staff xác nhận bản thông tin user gửi.
 - Trước khi chốt, giá phải được biểu diễn là chưa xác định; không coi số 0 mặc định là giá thanh toán hợp lệ.
 
@@ -287,12 +290,12 @@ Yêu cầu kết quả:
 
 F05. CUSTOM DRAFT VÀ GỬI ORDER
 Người thực hiện: USER.
-Đầu vào: chất liệu, màu, hình dáng, kích thước, quantity, ghi chú và ảnh.
+Đầu vào: `description` mô tả sản phẩm custom tối đa 4.000 từ, `imageUrls` là danh sách URL ảnh minh họa, quantity và ghi chú giao hàng khi submit.
 Hoạt động:
-1. User tạo, sửa, xem danh sách bản nháp của mình.
+1. User tạo, sửa, xem danh sách bản nháp của mình; API trả `description` và `imageUrls` dưới đúng kiểu dữ liệu, không yêu cầu client tự parse một chuỗi attachment.
 2. Lưu nhiều request chưa đặt.
 3. User chọn một bản và xác nhận gửi yêu cầu tạo đơn.
-4. Backend kiểm tra chủ sở hữu và thông tin, chụp dữ liệu custom vào một Order CUSTOM ở PENDING_APPROVAL.
+4. Backend kiểm tra chủ sở hữu, quantity, giới hạn 4.000 từ và cú pháp từng URL; chụp description cùng danh sách URL vào một Order CUSTOM ở PENDING_APPROVAL. Không gọi HTTP tới URL ảnh để validate nội dung trong transaction.
 5. Liên kết bản nháp nguồn với đơn; hiển thị đơn trên MyOrder và danh sách manager.
 6. Bắt đầu manager review, gửi email và notification tạo đơn thành công ở PENDING_APPROVAL cho USER. Lưu bản nháp chưa tạo Order không gửi thông báo này. Sau khi manager duyệt, bắt đầu timer CUSTOM_CONFIRMATION PT24H theo F09b.
 Đầu ra: draftId khi lưu nháp; orderId khi gửi thành đơn.
@@ -302,7 +305,9 @@ Yêu cầu kết quả:
 - Chưa có giá chính thức thì không mở payment.
 - Bản nháp khác không tự chuyển thành đơn.
 - Gửi lặp một yêu cầu không sinh thêm Order ngoài ý muốn.
-- Snapshot không bị thay đổi bởi sửa bản nháp.
+- Description 4.000 từ được chấp nhận; từ thứ 4.001 bị từ chối bằng lỗi validation ổn định ở create/update/submit.
+- `imageUrls` rỗng được chấp nhận; phần tử rỗng, URL tương đối hoặc scheme khác HTTP/HTTPS bị từ chối. Chưa đặt giới hạn số ảnh cho đến khi có quyết định mới.
+- Snapshot description/imageUrls không bị thay đổi bởi sửa bản nháp.
 - Không cần một cart giả để dùng chung logic tiếp nhận đơn.
 
 F06. MANAGER DUYỆT KHẢ NĂNG THỰC HIỆN
@@ -571,7 +576,7 @@ CATALOG:
 Kết quả: addedItems/skippedItems; chưa tạo Order hoặc charge.
 Yêu cầu: checkout mới dùng giá catalog và voucher hiện hành, không kiểm tra stock.
 CUSTOM:
-1. Kiểm tra owner và lấy snapshot spec/quantity/ảnh tham khảo của đơn nguồn.
+1. Kiểm tra owner và lấy snapshot description/imageUrls/quantity của đơn nguồn; với dữ liệu legacy đọc fallback spec/attachments.
 2. Tạo CustomRequest mới ở DRAFT thuộc user, liên kết sourceOrderId để truy vết.
 3. Trả draftId để user chỉnh sửa và gửi một quy trình mới.
 Kết quả: một bản nháp mới, không phải Order đã duyệt/đã chốt.
@@ -700,7 +705,7 @@ OrderItem(sourceType, productVariantId nullable cho custom, specSnapshot, unitPr
 OrderLookupToken(hash, scope, expiry/revocation theo cấu hình) hoặc trường tương đương trong Order.
 
 Nhóm custom/agreement:
-CustomRequest(ownerId, draft status, spec, attachments, linkedOrderId).
+CustomRequest(ownerId, draft status, description LONGTEXT, imageUrls JSON/LONGTEXT, quantity, linkedOrderId). API dùng `List<String> imageUrls`; nếu database chưa dùng kiểu JSON thì backend tự serialize/deserialize JSON có kiểm soát, không nhận một chuỗi JSON tùy ý từ client. `description` và trường snapshot tương ứng phải dùng kiểu đủ chứa chắc chắn 4.000 từ UTF-8; không giữ MySQL `TEXT` 64 KiB như một bảo đảm ngầm.
 OrderAgreement(orderId, version, submittedBy/At, confirmedBy/At, state, item prices/spec, duration/deadline).
 Một version xác nhận phải liên kết được tới snapshot Order đã áp dụng.
 Lưu productionDurationDays, productionStartedAt, computedCompletionAt, expectedShippingDays=2, plannedStartAt nếu có và lateStartReason. Deadline chỉ tính từ ORDER_CREATING. Lưu managerApprovedAt/confirmationDueAt, userSubmittedAt và trạng thái bước chờ để timer custom 24 giờ dừng ngay khi form hợp lệ được gửi.
@@ -735,6 +740,7 @@ Tên URL cụ thể có thể thiết kế theo cấu trúc repo; hành vi bắt
 - Cart CRUD: chủ giỏ xác định từ token/header.
 - Checkout: trả Order đã tạo chờ review, không trả payment URL trước điều kiện.
 - Custom draft list/create/update/submit: chỉ owner, submit idempotent.
+- Contract create/update custom dùng `description: string`, `imageUrls: string[]`, `quantity: integer`; response trả lại danh sách URL đúng kiểu. Trong giai đoạn tương thích có thể đọc dữ liệu legacy `spec/attachments`, nhưng endpoint ghi mới không nhận `attachments` dạng chuỗi làm contract chính.
 - Manager review: decision/reason/staffId tùy chọn.
 - Assign/claim: trả assignment và trạng thái, lỗi conflict khi staff/Order đã được nhận.
 - Agreement submit: version/spec/deadline; CUSTOM có giá, CATALOG giá chỉ đọc.
@@ -828,6 +834,8 @@ AC39: Manager cấu hình madeDay; CATALOG tính đúng hai nhánh q <= 5 và q 
 AC40: Tạo/cập nhật catalog thiếu madeDay, không phải số hữu hạn hoặc madeDay < 2 bị từ chối ở backend; frontend có validation tương ứng. madeDay=2 được chấp nhận.
 AC41: Order nhiều loại tính thời lượng riêng trong vòng lặp từng OrderItem; không gộp quantity hoặc cộng thời lượng các loại vào công thức một item.
 AC42: Bắt đầu thứ Bảy với thời lượng đã tính 2 ngày cho hạn thứ Ba nếu thứ Hai/thứ Ba không là ngày nghỉ; không tính ngày bắt đầu, bỏ Chủ nhật. Nếu thứ Hai được cấu hình là ngày nghỉ thì hạn là thứ Tư.
+AC43: Custom draft nhận description tối đa 4.000 từ theo quy tắc tách khoảng trắng Unicode; đúng 4.000 từ lưu/submit được, 4.001 từ bị từ chối và không làm thay đổi draft/Order hiện có.
+AC44: Custom draft đọc/ghi `imageUrls` dưới dạng danh sách URL; danh sách rỗng hợp lệ, URL tương đối/scheme ngoài HTTP(S) bị từ chối, và submit chụp nguyên description/imageUrls vào OrderItem snapshot không đổi theo draft về sau.
 Các kịch bản phụ thuộc Oxx chỉ nghiệm thu sau khi quyết định tương ứng được xác nhận.
 
 L. PHÂN CHIA CÔNG VIỆC TRIỂN KHAI

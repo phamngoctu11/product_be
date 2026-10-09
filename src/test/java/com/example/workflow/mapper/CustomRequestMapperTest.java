@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,8 +22,8 @@ class CustomRequestMapperTest {
         assertThat(result.id()).isEqualTo(12L);
         assertThat(result.version()).isEqualTo(3L);
         assertThat(result.status()).isEqualTo(CustomRequestStatus.DRAFT);
-        assertThat(result.spec()).isEqualTo("{\"material\":\"wood\"}");
-        assertThat(result.attachments()).isEqualTo("[\"reference-1\"]");
+        assertThat(result.description()).isEqualTo("Wood ring");
+        assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/reference-1.jpg");
         assertThat(result.quantity()).isEqualTo(2);
         assertThat(result.editable()).isTrue();
         assertThat(result.linkedOrderId()).isNull();
@@ -48,8 +49,8 @@ class CustomRequestMapperTest {
         request.setVersion(3L);
         request.setOwnerId("owner-1");
         request.setStatus(status);
-        request.setSpec("{\"material\":\"wood\"}");
-        request.setAttachments("[\"reference-1\"]");
+        request.setDescription("Wood ring");
+        request.setImageUrls(List.of("https://cdn.example.com/reference-1.jpg"));
         request.setQuantity(2);
         request.setSourceOrderId(11L);
         request.setCreatedAt(LocalDateTime.of(2026, 10, 7, 9, 0));

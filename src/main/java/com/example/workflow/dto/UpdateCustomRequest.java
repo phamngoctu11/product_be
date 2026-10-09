@@ -5,11 +5,14 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
+import java.util.List;
+
 public record UpdateCustomRequest(
         @NotNull(message = "Expected version is required")
         @PositiveOrZero(message = "Expected version must not be negative") Long expectedVersion,
-        @NotBlank(message = "Custom specification is required") String spec,
-        String attachments,
+        @NotBlank(message = "Custom description is required") String description,
+        @NotNull(message = "Image URLs are required; use an empty list when there are no images")
+        List<@NotBlank(message = "Image URL must not be blank") String> imageUrls,
         @NotNull(message = "Quantity is required")
         @Positive(message = "Quantity must be positive") Integer quantity
 ) {

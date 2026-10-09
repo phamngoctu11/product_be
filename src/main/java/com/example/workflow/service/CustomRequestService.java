@@ -1,8 +1,8 @@
 package com.example.workflow.service;
 
-import com.example.workflow.dto.CheckoutResponseDTO;
 import com.example.workflow.dto.CreateCustomRequest;
 import com.example.workflow.dto.CustomRequestDTO;
+import com.example.workflow.dto.CustomRequestSubmissionDTO;
 import com.example.workflow.dto.SubmitCustomRequest;
 import com.example.workflow.dto.UpdateCustomRequest;
 import com.example.workflow.entity.CustomRequest;
@@ -14,7 +14,7 @@ import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapper;
-import com.example.workflow.mapper.CheckoutResponseMapper;
+import com.example.workflow.mapper.CustomRequestSubmissionMapper;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
@@ -34,19 +34,27 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class CustomRequestService {
+    private static final int MAX_DESCRIPTION_WORDS = 4_000;
+    private static final Pattern WORD_PATTERN = Pattern.compile("(?U)\\S+");
 
     private final CurrentUserService currentUserService;
     private final UserService userService;
     private final CustomRequestRepository customRequestRepository;
     private final OrderRepository orderRepository;
     private final CustomRequestMapper customRequestMapper;
-    private final CheckoutResponseMapper checkoutResponseMapper;
+    private final CustomRequestSubmissionMapper customRequestSubmissionMapper;
     private final CustomOrderFactory customOrderFactory;
     private final DurableRequestExecutor durableRequests;
     private final DomainEventPublisher eventPublisher;
@@ -54,14 +62,14 @@ public class CustomRequestService {
 
     public CustomRequestDTO create(CreateCustomRequest request, String idempotencyKey) {
         requireCreateRequest(request);
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = requireActiveOwnerId();
         if (!StringUtils.hasText(idempotencyKey)) {
             return createDraft(ownerId, request);
         }
 
         Map<String, Object> canonical = new LinkedHashMap<>();
-        canonical.put("spec", normalizeRequired(request.spec(), "spec"));
-        canonical.put("attachments", TextNormalizer.optional(request.attachments()));
+        canonical.put("description", normalizeDescription(request.description()));
+        canonical.put("imageUrls", normalizeImageUrls(request.imageUrls()));
         canonical.put("quantity", request.quantity());
         String result = durableRequests.execute(
                 "custom-request:create:" + ownerId,
@@ -74,7 +82,7 @@ public class CustomRequestService {
 
     @Transactional(readOnly = true)
     public Page<CustomRequestDTO> list(CustomRequestStatus status, Pageable pageable) {
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = requireActiveOwnerId();
         Pageable bounded = boundedPage(pageable);
         Page<CustomRequest> requests = status == null
                 ? customRequestRepository.findAllByOwnerIdOrderByUpdatedAtDescIdDesc(ownerId, bounded)
@@ -84,7 +92,7 @@ public class CustomRequestService {
 
     @Transactional(readOnly = true)
     public CustomRequestDTO get(Long requestId) {
-        return customRequestMapper.toDto(findOwned(requestId, currentUserService.requireCurrentUserId()));
+        return customRequestMapper.toDto(findOwned(requestId, requireActiveOwnerId()));
     }
 
     @Transactional
@@ -92,18 +100,18 @@ public class CustomRequestService {
         if (request == null) {
             throw invalid("Update body is required.");
         }
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = requireActiveOwnerId();
         CustomRequest draft = findOwned(requestId, ownerId);
         ensureEditable(draft);
         ensureVersion(draft, request.expectedVersion());
-        draft.setSpec(normalizeRequired(request.spec(), "spec"));
-        draft.setAttachments(TextNormalizer.optional(request.attachments()));
+        draft.setDescription(normalizeDescription(request.description()));
+        draft.setImageUrls(normalizeImageUrls(request.imageUrls()));
         draft.setQuantity(requirePositive(request.quantity()));
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
 
     public void delete(Long requestId, Long expectedVersion, String idempotencyKey) {
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = requireActiveOwnerId();
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("requestId", requestId);
         canonical.put("expectedVersion", expectedVersion);
@@ -122,11 +130,11 @@ public class CustomRequestService {
         );
     }
 
-    public CheckoutResponseDTO submit(Long requestId, SubmitCustomRequest request, String idempotencyKey) {
+    public CustomRequestSubmissionDTO submit(Long requestId, SubmitCustomRequest request, String idempotencyKey) {
         if (request == null) {
             throw invalid("Submit body is required.");
         }
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = requireActiveOwnerId();
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("requestId", requestId);
         canonical.put("expectedVersion", request.expectedVersion());
@@ -142,33 +150,33 @@ public class CustomRequestService {
                 JsonUtils.write(objectMapper, canonical, "custom request data"),
                 () -> JsonUtils.write(objectMapper, submitDraft(requestId, ownerId, request), "custom request data")
         );
-        return JsonUtils.read(objectMapper, result, CheckoutResponseDTO.class, "custom request submission");
+        return JsonUtils.read(objectMapper, result, CustomRequestSubmissionDTO.class, "custom request submission");
     }
 
     private CustomRequestDTO createDraft(String ownerId, CreateCustomRequest request) {
         CustomRequest draft = new CustomRequest();
         draft.setOwnerId(ownerId);
         draft.setStatus(CustomRequestStatus.DRAFT);
-        draft.setSpec(normalizeRequired(request.spec(), "spec"));
-        draft.setAttachments(TextNormalizer.optional(request.attachments()));
+        draft.setDescription(normalizeDescription(request.description()));
+        draft.setImageUrls(normalizeImageUrls(request.imageUrls()));
         draft.setQuantity(requirePositive(request.quantity()));
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
 
-    private CheckoutResponseDTO submitDraft(Long requestId, String ownerId, SubmitCustomRequest request) {
+    private CustomRequestSubmissionDTO submitDraft(Long requestId, String ownerId, SubmitCustomRequest request) {
         CustomRequest draft = lockOwned(requestId, ownerId);
         if (!draft.isEditable()) {
             if (draft.getLinkedOrderId() != null) {
                 Order existing = orderRepository.findById(draft.getLinkedOrderId())
                         .orElseThrow(() -> new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_NOT_EDITABLE));
-                return submissionResponse(existing);
+                return submissionResponse(requestId, existing);
             }
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_NOT_EDITABLE);
         }
         ensureVersion(draft, request.expectedVersion());
         validateForSubmission(draft);
 
-        User owner = userService.requireUser(ownerId, ConstantErrorCode.USER_NOT_FOUND);
+        User owner = userService.requireActiveUser(ownerId);
         OrderContactSnapshot contact = resolveContact(owner, request);
         Order order = customOrderFactory.create(owner, draft, contact);
         Order saved = orderRepository.saveAndFlush(order);
@@ -176,7 +184,7 @@ public class CustomRequestService {
         customRequestRepository.saveAndFlush(draft);
 
         eventPublisher.publishAfterCommit(EventTypes.ORDER_CREATED, new OrderCreatedEvent(saved.getId()));
-        return submissionResponse(saved);
+        return submissionResponse(requestId, saved);
     }
 
     private OrderContactSnapshot resolveContact(User owner, SubmitCustomRequest request) {
@@ -193,13 +201,20 @@ public class CustomRequestService {
         );
     }
 
-    private CheckoutResponseDTO submissionResponse(Order order) {
-        return checkoutResponseMapper.toCustomResponse(order);
+    private CustomRequestSubmissionDTO submissionResponse(Long draftId, Order order) {
+        return customRequestSubmissionMapper.toDto(draftId, order);
     }
 
     private void validateForSubmission(CustomRequest draft) {
-        normalizeRequired(draft.getSpec(), "spec");
+        normalizeDescription(draft.getDescription());
+        normalizeImageUrls(draft.getImageUrls());
         requirePositive(draft.getQuantity());
+    }
+
+    private String requireActiveOwnerId() {
+        String ownerId = currentUserService.requireCurrentUserId();
+        userService.requireActiveUser(ownerId);
+        return ownerId;
     }
 
     private CustomRequest findOwned(Long requestId, String ownerId) {
@@ -234,11 +249,40 @@ public class CustomRequestService {
         }
     }
 
-    private String normalizeRequired(String value, String field) {
+    private String normalizeDescription(String value) {
         if (!StringUtils.hasText(value)) {
-            throw invalid(field + " is required.");
+            throw invalid("Description is required.");
         }
-        return value.trim();
+        String normalized = value.trim();
+        long wordCount = WORD_PATTERN.matcher(normalized).results().count();
+        if (wordCount > MAX_DESCRIPTION_WORDS) {
+            throw invalid("Description must not exceed " + MAX_DESCRIPTION_WORDS + " words.");
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeImageUrls(List<String> imageUrls) {
+        if (imageUrls == null) {
+            throw invalid("Image URLs are required; use an empty list when there are no images.");
+        }
+        List<String> normalized = new ArrayList<>(imageUrls.size());
+        for (String value : imageUrls) {
+            if (!StringUtils.hasText(value)) {
+                throw invalid("Image URL must not be blank.");
+            }
+            String url = value.trim();
+            try {
+                URI uri = new URI(url);
+                String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
+                if (!("http".equals(scheme) || "https".equals(scheme)) || !StringUtils.hasText(uri.getHost())) {
+                    throw invalid("Each image URL must be an absolute HTTP or HTTPS URL.");
+                }
+            } catch (URISyntaxException exception) {
+                throw invalid("Each image URL must be an absolute HTTP or HTTPS URL.");
+            }
+            normalized.add(url);
+        }
+        return List.copyOf(normalized);
     }
 
     private Integer requirePositive(Integer value) {

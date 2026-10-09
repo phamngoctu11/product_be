@@ -4,9 +4,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
+import java.util.List;
+
 public record CreateCustomRequest(
-        @NotBlank(message = "Custom specification is required") String spec,
-        String attachments,
+        @NotBlank(message = "Custom description is required") String description,
+        @NotNull(message = "Image URLs are required; use an empty list when there are no images")
+        List<@NotBlank(message = "Image URL must not be blank") String> imageUrls,
         @NotNull(message = "Quantity is required")
         @Positive(message = "Quantity must be positive") Integer quantity
 ) {

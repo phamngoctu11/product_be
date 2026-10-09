@@ -59,11 +59,15 @@ public class EmailService {
             String customerName,
             Long orderId,
             String customSpec,
-            Integer quantity
+            Integer quantity,
+            String orderAccessUrl
     ) {
         eventPublisher.publishAfterCommit(
                 EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
-                new OrderConfirmationEmailRequestedEvent(toEmail, customerName, orderId, customSpec, quantity)
+                new OrderConfirmationEmailRequestedEvent(
+                        toEmail, customerName, orderId, null, null,
+                        orderAccessUrl, null, customSpec, quantity
+                )
         );
     }
 

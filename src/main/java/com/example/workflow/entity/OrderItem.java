@@ -48,7 +48,7 @@ public class OrderItem {
     @Column(name = "variant_name_snapshot")
     private String variantNameSnapshot;
 
-    @Column(name = "spec_snapshot", columnDefinition = "TEXT")
+    @Column(name = "spec_snapshot", columnDefinition = "LONGTEXT")
     private String specSnapshot;
 
     @Column(name = "made_day_snapshot")

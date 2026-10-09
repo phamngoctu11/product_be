@@ -4,11 +4,17 @@ import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.CancelOrderRequest;
 import com.example.workflow.dto.GuestOrderCancellationViewDTO;
 import com.example.workflow.dto.OrderCancellationResultDTO;
+import com.example.workflow.dto.OrderDTO;
+import com.example.workflow.dto.OrderStatusHistoryDTO;
+import com.example.workflow.dto.ReceiptConfirmRequest;
+import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.service.OrderCancellationService;
+import com.example.workflow.service.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -27,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class GuestOrderController {
     private final OrderCancellationService cancellationService;
+    private final OrderService orderService;
 
     /** Safe link target: reading an email link never mutates the order. */
     @GetMapping("/{orderId}/cancellation")
@@ -46,5 +53,31 @@ public class GuestOrderController {
     ) {
         OrderCancellationResultDTO result = cancellationService.cancelByGuest(orderId, token, request, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.success("Don hang da duoc huy.", result));
+    }
+
+    @GetMapping("/{orderId}")
+    public ResponseEntity<ApiResponse<OrderDTO>> getGuestOrder(
+            @Positive @PathVariable Long orderId,
+            @NotBlank @RequestParam("token") String token
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getGuestOrder(orderId, token)));
+    }
+
+    @GetMapping("/{orderId}/history")
+    public ResponseEntity<ApiResponse<List<OrderStatusHistoryDTO>>> getGuestOrderHistory(
+            @Positive @PathVariable Long orderId,
+            @NotBlank @RequestParam("token") String token
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getGuestOrderHistory(orderId, token)));
+    }
+
+    @PostMapping("/{orderId}/confirm-receipt")
+    public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> confirmGuestReceipt(
+            @Positive @PathVariable Long orderId,
+            @NotBlank @RequestParam("token") String token,
+            @Valid @RequestBody ReceiptConfirmRequest request
+    ) {
+        ReceiptConfirmResponse result = orderService.confirmGuestReceipt(orderId, token, request);
+        return ResponseEntity.ok(ApiResponse.success(result.getMessage(), result));
     }
 }
