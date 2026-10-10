@@ -16,7 +16,7 @@ Tên enum trung gian và trạng thái kết thúc trong bảng trạng thái l�
 B. MỤC TIÊU, PHẠM VI VÀ TÁC NHÂN
 
 B1. Mục tiêu
-Xây dựng shop handmade đa danh mục theo mô hình made-to-order. Catalog là mẫu thiết kế, ảnh sản phẩm là ảnh mẫu. Sản phẩm được làm sau khi đơn đủ điều kiện và staff bấm bắt đầu.
+Xây dựng shop handmade đa danh mục theo mô hình made-to-order. Catalog là mẫu thiết kế, ảnh sản phẩm là ảnh mẫu; shop không bán thành phẩm làm sẵn. Mọi sản phẩm CATALOG và CUSTOM đều được chế tác sau khi đơn đủ điều kiện và staff bấm bắt đầu.
 Khách có thể đặt theo mẫu catalog hoặc, nếu có tài khoản, tạo yêu cầu custom.
 Mỗi đơn do một staff phụ trách cả giao tiếp và sản xuất. Staff chỉ có một assignment sản xuất đang hoạt động; assignment kết thúc khi toàn đơn qua KCS checkpoint 2 hoặc đơn bị hủy.
 
@@ -56,6 +56,8 @@ C. DỮ LIỆU VÀ CÁC QUY TẮC CHUNG
 C1. Phân loại đơn
 CATALOG:
 - Tạo từ các mục được chọn trong cart.
+- Một Order CATALOG có thể có nhiều loại/OrderItem; mỗi OrderItem đại diện một loại mẫu/biến thể và có quantity nguyên dương riêng, có thể lớn hơn một.
+- CATALOG chỉ cho biết thiết kế do shop cung cấp, không có nghĩa là hàng làm sẵn. Mọi OrderItem CATALOG vẫn phải đi qua triển khai sản xuất handmade.
 - Backend lấy giá catalog và lưu snapshot vào OrderItem khi tạo đơn.
 - User/staff không sửa hoặc thương lượng đơn giá trong chat, form xác nhận hoặc ChangeRequest.
 - Thay đổi giá catalog sau khi đặt không cập nhật ngược giá OrderItem.
@@ -63,7 +65,7 @@ CATALOG:
 
 CUSTOM:
 - Tạo từ một CustomRequest user chọn gửi.
-- Có một loại CustomItem, có thể có quantity lớn hơn một.
+- Có đúng một loại CustomItem, được lưu thành đúng một OrderItem; quantity của OrderItem đó có thể lớn hơn một.
 - Nội dung draft gồm `description` mô tả sản phẩm custom và `imageUrls` là danh sách URL ảnh minh họa. `description` bắt buộc, tối đa 4.000 từ sau khi trim; cách đếm từ là tách chuỗi theo một hoặc nhiều ký tự khoảng trắng Unicode. Mốc 4.000 là giới hạn tối đa, không phải độ dài bắt buộc.
 - `imageUrls` là mảng/list chuỗi, không phải một chuỗi attachment ghép dấu phân cách. Danh sách có thể rỗng; mỗi phần tử nếu có phải là URL tuyệt đối dùng `http` hoặc `https`, được trim và giữ đúng thứ tự. Backend chỉ lưu tham chiếu, không tự tải nội dung URL trong transaction tạo/sửa/submit draft.
 - Số ảnh tối đa và allowlist host chưa được đặt thành chính sách nghiệp vụ. Không tự đặt một con số hoặc domain cố định trong code; giới hạn kích thước request chung vẫn phải bảo vệ hệ thống.
@@ -78,6 +80,9 @@ C2. Số lượng và khả năng nhận đơn
 - Không dùng các trường này làm tồn kho.
 - Product availability: ACCEPTING_ORDERS, PAUSED, DISCONTINUED.
 - Chỉ mẫu ACCEPTING_ORDERS được thêm mới, checkout hoặc reorder.
+- Availability chỉ biểu thị mẫu catalog có nhận Order mới hay không: ACCEPTING_ORDERS tương ứng available; PAUSED/DISCONTINUED tương ứng không nhận Order mới. Đây không phải tồn kho và không quyết định item có cần sản xuất hay không.
+- Việc mẫu chuyển PAUSED/DISCONTINUED không hủy hoặc đổi snapshot của Order đã tạo hợp lệ; Order hiện hữu tiếp tục theo vòng đời của nó.
+- Không dùng cờ/gateway `handmade`, `hasHandmadeItems` hoặc `production NOT_REQUIRED` để bỏ qua sản xuất. Trong phạm vi hệ thống này, mọi OrderItem đều là handmade/made-to-order; khi cần phân nhánh chỉ dùng CATALOG/CUSTOM cho nguồn thiết kế và quy trình chốt thông tin.
 - Quota voucher là giới hạn phát hành/sử dụng voucher, phải được kiểm soát độc lập.
 
 C3. Định danh, liên hệ và giá trị tiền
@@ -836,6 +841,9 @@ AC41: Order nhiều loại tính thời lượng riêng trong vòng lặp từng
 AC42: Bắt đầu thứ Bảy với thời lượng đã tính 2 ngày cho hạn thứ Ba nếu thứ Hai/thứ Ba không là ngày nghỉ; không tính ngày bắt đầu, bỏ Chủ nhật. Nếu thứ Hai được cấu hình là ngày nghỉ thì hạn là thứ Tư.
 AC43: Custom draft nhận description tối đa 4.000 từ theo quy tắc tách khoảng trắng Unicode; đúng 4.000 từ lưu/submit được, 4.001 từ bị từ chối và không làm thay đổi draft/Order hiện có.
 AC44: Custom draft đọc/ghi `imageUrls` dưới dạng danh sách URL; danh sách rỗng hợp lệ, URL tương đối/scheme ngoài HTTP(S) bị từ chối, và submit chụp nguyên description/imageUrls vào OrderItem snapshot không đổi theo draft về sau.
+AC45: Custom Order luôn có đúng một OrderItem nhưng quantity có thể lớn hơn một; Catalog Order có thể có nhiều OrderItem và mỗi item có quantity riêng.
+AC46: CATALOG và CUSTOM đều đi qua sản xuất handmade; không có nhánh hàng làm sẵn, `hasHandmadeItems=false` hoặc production `NOT_REQUIRED` cho Order mới.
+AC47: Mẫu PAUSED/DISCONTINUED bị chặn khi thêm mới/checkout/reorder nhưng không làm hủy hoặc sửa snapshot của Order đã tạo khi mẫu còn ACCEPTING_ORDERS.
 Các kịch bản phụ thuộc Oxx chỉ nghiệm thu sau khi quyết định tương ứng được xác nhận.
 
 L. PHÂN CHIA CÔNG VIỆC TRIỂN KHAI

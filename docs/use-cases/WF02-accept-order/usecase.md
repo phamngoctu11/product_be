@@ -11,6 +11,8 @@ WF02 có hai đầu vào:
 - **CATALOG:** user/guest chọn mục trong giỏ và checkout; WF02 tạo Order cùng snapshot ở `PENDING_APPROVAL`.
 - **CUSTOM:** nhận `orderId` đã được tạo ở `PENDING_APPROVAL` tại WF01. Không tạo lại Order, không đưa custom vào cart giả và không phát lại email tạo đơn.
 
+CATALOG ở đây là mẫu thiết kế của shop, không phải hàng thành phẩm có sẵn. Một Order CATALOG có thể chứa nhiều OrderItem và mỗi item có quantity riêng; tất cả vẫn phải được sản xuất. Availability `ACCEPTING_ORDERS/PAUSED/DISCONTINUED` chỉ quyết định có nhận Order mới, không phải tồn kho hoặc điều kiện bỏ qua assignment/sản xuất.
+
 Manager xem toàn bộ yêu cầu/số lượng và quyết định cửa hàng có nhận làm được hay không. Manager có thể chọn staff khi duyệt hoặc để đơn chờ staff claim. Kiểm tra và lưu assignment phải dùng chung quy tắc của WF03, không xây một cơ chế phân công khác.
 
 WF02 kết thúc khi quyết định được lưu và bước workflow được bàn giao nhất quán:

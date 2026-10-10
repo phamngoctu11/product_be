@@ -2,6 +2,8 @@
 
 Trước khi tạo hoặc sửa tài liệu, đọc [TUTORIAL.md](TUTORIAL.md). Nguồn nghiệp vụ: [target.txt](../target.txt).
 
+Quy tắc xuyên suốt: shop không bán thành phẩm làm sẵn. CATALOG là mẫu thiết kế của shop và CUSTOM là thiết kế riêng; cả hai đều handmade/made-to-order. CUSTOM Order có đúng một OrderItem nhưng quantity có thể lớn hơn một; CATALOG Order có thể có nhiều OrderItem, mỗi item có quantity riêng. Availability catalog chỉ kiểm soát nhận Order mới, không phải tồn kho hoặc cờ bỏ qua sản xuất.
+
 | Workflow | Nội dung | Mở tài liệu |
 |---|---|---|
 | WF01 — Custom Request | Bản nháp và gửi yêu cầu tạo đơn custom | [Folder tài liệu](WF01-custom-request/README.md) |

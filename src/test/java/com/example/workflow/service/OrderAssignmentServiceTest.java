@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class OrderAssignmentServiceTest {
@@ -66,6 +67,7 @@ class OrderAssignmentServiceTest {
         assertThat(order.getAssignedStaff()).isSameAs(staff);
         assertThat(order.getWarehouseStaff()).isSameAs(staff);
         verify(assignmentRepository).saveAndFlush(any(OrderAssignment.class));
+        verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_ASSIGNED), any());
         verify(eventPublisher, never()).publishAfterCommit(eq(EventTypes.ORDER_ACCEPTED), any());
     }
 
@@ -81,6 +83,7 @@ class OrderAssignmentServiceTest {
         );
 
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.ORDER_ACCEPTED);
+        verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_ASSIGNED), any());
         verify(eventPublisher).publishAfterCommit(eq(EventTypes.ORDER_ACCEPTED), any());
     }
 
@@ -127,6 +130,21 @@ class OrderAssignmentServiceTest {
 
         verify(userRepository, never()).findByIdForUpdate("staff-new");
         verify(transitionService, never()).apply(anyLong(), anyLong(), any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void inactiveManagerCannotListAssignableStaff() {
+        User manager = user("manager-inactive", Role.MANAGER, false);
+        when(currentUserService.requireCurrentUser(
+                Role.MANAGER,
+                com.example.workflow.exception.ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
+        )).thenReturn(manager);
+
+        assertThatThrownBy(() -> service.listAvailableStaff(org.springframework.data.domain.Pageable.unpaged()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("khóa hoặc xóa");
+
+        verifyNoInteractions(userRepository);
     }
 
     private void prepareAvailable(Order order, User staff) {

@@ -55,6 +55,7 @@ public enum ConstantErrorCode {
     REVIEWER_MANAGER_ROLE_REQUIRED("Người duyệt phải có vai trò quản lý"),
     CURRENT_USER_MANAGER_ROLE_REQUIRED("Người dùng hiện tại phải có vai trò quản lý"),
     CURRENT_USER_STAFF_ROLE_REQUIRED("Người dùng hiện tại phải có vai trò nhân viên"),
+    CURRENT_USER_INACTIVE("Tài khoản hiện tại đã bị khóa hoặc xóa"),
     STAFF_NOT_FOUND("Không tìm thấy nhân viên có mã: %s"),
     ACTIVE_STAFF_REQUIRED("Người được phân công phải là nhân viên đang hoạt động"),
     STAFF_NOT_AVAILABLE("Nhân viên không khả dụng hoặc đang phụ trách một đơn khác"),

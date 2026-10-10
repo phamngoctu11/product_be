@@ -16,7 +16,7 @@ public class GuestPurchaseWorkflowStateService {
     private final OrderRepository orderRepository;
     private final OrderLookupService orderLookupService;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void markStarted(Long orderId, String processInstanceId) {
         Order order = getGuestOrderForUpdate(orderId);
         order.setGuestWorkflowStatus(GuestWorkflowStatus.STARTED);

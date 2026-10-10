@@ -2,6 +2,7 @@ package com.example.workflow.bpmn;
 
 import com.example.workflow.delegate.WorkflowTaskDelegate;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.service.OrderWorkflowService;
 import com.example.workflow.workflow.WorkflowTaskHandlerRegistry;
 import com.example.workflow.workflow.handler.PublishWorkflowEventTaskHandler;
 import org.camunda.bpm.engine.ProcessEngine;
@@ -90,6 +91,25 @@ class GuestPurchaseFlowBpmnTest {
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
             assertThat(engine.getRuntimeService().createProcessInstanceQuery()
                     .processInstanceId(instance.getId()).count()).isEqualTo(1);
+        } finally {
+            engine.close();
+        }
+    }
+
+    @Test
+    void applicationWorkflowBridgeCompletesReviewAndAssignmentTasks() {
+        DomainEventPublisher publisher = mock(DomainEventPublisher.class);
+        ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
+        try {
+            var instance = start(engine, true, 204L);
+            var workflow = new OrderWorkflowService(engine.getRuntimeService(), engine.getTaskService());
+
+            assertThat(workflow.completeManagerReview(204L, true, "manager-1")).isTrue();
+            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignHandmadeItems");
+            assertThat(workflow.advanceAfterAssignment(204L, "staff-1")).isTrue();
+
+            assertThat(engine.getRuntimeService().createProcessInstanceQuery()
+                    .processInstanceId(instance.getId()).count()).isZero();
         } finally {
             engine.close();
         }

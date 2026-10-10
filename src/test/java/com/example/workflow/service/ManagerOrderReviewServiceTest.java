@@ -47,11 +47,12 @@ class ManagerOrderReviewServiceTest {
     private final ManagerReviewMapper reviewMapper = new ManagerReviewMapper() { };
     private final OrderAssignmentMapper assignmentMapper = new OrderAssignmentMapper() { };
     private final ApplicationCacheService cacheService = mock(ApplicationCacheService.class);
+    private final OrderWorkflowService orderWorkflowService = mock(OrderWorkflowService.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final ManagerOrderReviewService service = new ManagerOrderReviewService(
             orderRepository, assignmentRepository, currentUserService, durableRequests,
             transitionService, cancellationService, assignmentService, historyService,
-            detailsAssembler, reviewMapper, assignmentMapper, cacheService, objectMapper
+            detailsAssembler, reviewMapper, assignmentMapper, cacheService, orderWorkflowService, objectMapper
     );
 
     @BeforeEach
@@ -82,6 +83,7 @@ class ManagerOrderReviewServiceTest {
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.PENDING_ASSIGNMENT);
         assertThat(order.getManager()).isSameAs(manager);
         assertThat(order.getConfirmationDueAt()).isEqualTo(order.getManagerApprovedAt().plusHours(24));
+        verify(orderWorkflowService).completeManagerReview(10L, true, "manager-1");
         verify(assignmentService, never()).assignApprovedOrderWithinTransaction(anyLong(), anyLong(), anyString(), anyString());
     }
 
@@ -120,6 +122,26 @@ class ManagerOrderReviewServiceTest {
         verify(cancellationService).cancelByManagerReject(
                 eq(20L), eq(0L), anyString(), eq("manager-2"), anyString(), eq("reject-key")
         );
+        verify(orderWorkflowService).completeManagerReview(20L, false, "manager-2");
+    }
+
+    @Test
+    void inactiveManagerCannotReview() {
+        User manager = user("manager-inactive", Role.MANAGER);
+        manager.setIsActive(false);
+        when(currentUserService.requireCurrentUser(
+                Role.MANAGER,
+                com.example.workflow.exception.ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
+        )).thenReturn(manager);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.review(
+                30L,
+                new ManagerReviewRequest(0L, true, null, null),
+                "inactive-manager"
+        )).isInstanceOf(com.example.workflow.exception.AppException.class)
+                .hasMessageContaining("khóa hoặc xóa");
+
+        verify(orderRepository, never()).findByIdForUpdate(anyLong());
     }
 
     private Order order(Long id, OrderType type) {

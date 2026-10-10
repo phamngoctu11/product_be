@@ -2,6 +2,8 @@
 
 Ngày cập nhật: 09/10/2026.
 
+Trạng thái sau rà soát domain: `IN_PROGRESS`. Phần API/service/transaction bên dưới đã được triển khai, nhưng Guest BPMN còn gateway legacy `hasHandmadeItems` cho phép đi theo nhánh không cần assignment/sản xuất. Nhánh này trái target vì shop không bán hàng làm sẵn; phải sửa trước khi coi PHẦN 07 hoàn tất.
+
 ## Kết quả
 
 PHẦN 07 đã thay đường manager review/assign và staff claim legacy bằng hai application service:
@@ -12,6 +14,8 @@ PHẦN 07 đã thay đường manager review/assign và staff claim legacy bằn
 API chi tiết Order hiện trả thêm `description` và `imageUrls` đã parse trên từng `OrderItemDTO` CUSTOM. FE không phải tự parse `specSnapshot`; trường snapshot thô vẫn được giữ tạm để tương thích client cũ. Mapper đọc cả snapshot mới `{description,imageUrls}` và snapshot legacy `{spec,attachments}`.
 
 Actor không còn lấy từ `changerId` do client gửi. Mọi thao tác lấy MANAGER/STAFF từ JWT qua `CurrentUserService`, bắt buộc `orderVersion` và `Idempotency-Key`.
+
+MANAGER đã bị khóa (`isActive=false`) hoặc soft-delete bị từ chối ở cả review, danh sách staff khả dụng và assignment, kể cả khi JWT cũ vẫn còn hiệu lực.
 
 Các endpoint cũ `/admin/pending`, `/manager/review-order/{orderId}` và `/manager/assign-staff/{orderId}` đã bị loại khỏi controller; ba hàm ghi legacy tương ứng cũng đã được xóa khỏi `OrderService`.
 
@@ -75,6 +79,10 @@ Sau assignment:
 - Guest CATALOG chuyển thẳng `ORDER_ACCEPTED`, không tạo chat hoặc chờ guest xác nhận design.
 - Order có USER chuyển `DISCUSSING`; WF03 quyết định việc tạo chat và thỏa thuận theo loại Order.
 - CUSTOM được manager approve có `confirmationDueAt = managerApprovedAt + 24 giờ`. Retry trả kết quả đã commit, không kéo dài deadline.
+- Guest checkout sau khi outbox `GUEST_ORDER_CREATED` được consume sẽ khởi chạy `GuestPurchaseFlow`; retry tra business key `guest-order-{orderId}` để không tạo process trùng.
+- Manager review hoàn thành Camunda task `manager_approve_order` nếu Order đã có process. Assignment hoàn thành task Guest hiện hành hoặc correlate message `ORDER_ASSIGNED` của BPMN mục tiêu.
+
+Quy tắc bắt buộc khi hiệu chỉnh BPMN: CATALOG chỉ là nguồn thiết kế do shop cung cấp, không phải hàng có sẵn. Guest CATALOG được manager duyệt phải luôn chờ một staff nhận Order rồi mới đạt `ORDER_ACCEPTED`; không dùng `hasHandmadeItems`, `OrderItem.handmade` hoặc `productionStatus=NOT_REQUIRED` để bỏ qua bước này.
 
 Không tạo payment URL trong PHẦN 07.
 
@@ -111,12 +119,13 @@ Các trường `managerApprovedAt`, `confirmationDueAt`, `assignedStaffId` và b
 ## Event, email và notification
 
 - Gán thành công tạo notification cho đúng staff thông qua outbox của `NotificationService`.
+- Mọi assignment phát parent event `ORDER_ASSIGNED`, chứa Order, staff, nguồn assign, trạng thái mới và cờ cần trao đổi. Consumer dùng event này để bàn giao workflow; PHẦN 08 có thể bổ sung tạo ChatThread mà không dò trạng thái DB.
 - Guest CATALOG đạt `ORDER_ACCEPTED` phát một parent event `ORDER_ACCEPTED`.
-- Handler của event gửi email trạng thái cho chủ đơn; USER nhận thêm notification hệ thống, Guest không có notification tài khoản.
+- Handler của event gửi email trạng thái cho chủ đơn; USER nhận thêm notification hệ thống, Guest không có notification tài khoản. Email Guest CATALOG gồm mẫu snapshot, giá, tổng số lượng, thời lượng và signed READ-only link hết hạn sau 30 ngày.
 - Không gửi email trung gian ở `PENDING_ASSIGNMENT` hoặc `DISCUSSING`.
 - Manager reject tái sử dụng `ORDER_CANCELLED` của PHẦN 06 nên không nhân đôi email, voucher restore hoặc assignment release.
 
-Guest đã nhận secure lookup link trong email tạo đơn. Event `ORDER_ACCEPTED` hiện không thể chèn lại raw token vì hệ thống chỉ lưu hash. Việc hỗ trợ một secure link mới trong mọi email milestone cần token table nhiều token hoặc signed-link policy và được giữ cho PHẦN 13; không lưu raw token để giải quyết tạm.
+Signed milestone token dùng HMAC, bị ràng buộc với `orderId`, chỉ có scope READ và không xoay/thu hồi token checkout cũ. Production bắt buộc cấu hình `ORDER_LINK_SIGNING_SECRET` tối thiểu 32 ký tự; không dùng fallback development khi chạy profile `prod`.
 
 ## Kiểm thử
 
@@ -131,21 +140,34 @@ Guest đã nhận secure lookup link trong email tạo đơn. Event `ORDER_ACCEP
 - snapshot CUSTOM mới/legacy đều trả `description` và `imageUrls` có kiểu rõ ràng cho màn hình manager;
 - `warehouseStaff` legacy không thể bị endpoint assign mới ghi đè;
 - retry cùng key chỉ có một assignment, một transition audit và một notification;
+- hai manager chạy đồng thời trên một Order chỉ tạo một assignment/audit;
+- hai Order chạy đồng thời tranh cùng staff chỉ một Order chiếm được staff;
+- bridge Camunda thật hoàn thành chuỗi Guest manager review → assignment và không tạo process trùng khi retry;
+- manager inactive/soft-delete không thể review hoặc xem danh sách staff khả dụng;
+- contract controller giữ `MANAGER` authority và `Idempotency-Key` bắt buộc trên hai write API;
 - migration chạy lặp trên schema legacy;
 - `ORDER_ACCEPTED` được consumer định tuyến đúng và không tạo notification hệ thống cho Guest.
 
 ```text
 .\mvnw.cmd test
-244 test chạy, 0 failure, 0 error, 6 MySQL opt-in test skipped
+269 test chạy, 0 failure, 0 error, 7 MySQL opt-in test skipped
 BUILD SUCCESS
 ```
 
 ## Ranh giới chưa thuộc PHẦN 07
 
-- Chưa tạo ChatThread và chưa xử lý agreement/form/timer PT24H; thuộc PHẦN 08.
+- Chưa tạo ChatThread và chưa xử lý agreement/form/timer PT24H; `ORDER_ASSIGNED` đã là contract bàn giao cho PHẦN 08.
 - Chưa tạo payment hoặc timer PT1H; thuộc PHẦN 09.
 - Chưa thay production/KCS legacy dùng `warehouseStaff`; thuộc PHẦN 10.
-- Chưa cutover manager user task, assignment message correlation và process lifecycle BPMN; thuộc PHẦN 13. Database/outbox vẫn là nguồn nghiệp vụ chính.
+- Guest flow đã start/complete manager task và assignment task thật. USER/CUSTOM chưa có process lifecycle mục tiêu; full cutover và thiết kế lại `approve-cart.bpmn` vẫn thuộc PHẦN 13. Với Order chưa có process, database/outbox tiếp tục là nguồn nghiệp vụ chính.
 - MySQL opt-in chưa chạy trong checkpoint này; H2 và migration legacy đã đạt.
+
+## Gap phải đóng trước khi bàn giao
+
+- Bỏ tham số/process variable `hasHandmadeItems` khỏi đường start Guest workflow.
+- Bỏ gateway “contains handmade items” và nhánh kết thúc dành cho hàng làm sẵn; sau manager approval, Guest CATALOG luôn đến assignment task.
+- Không đổi tên helper thành `hasCustomItem`: Guest không tạo CUSTOM và `orderType` đã là nguồn phân biệt CATALOG/CUSTOM.
+- Nếu đổi task key, bridge phải tiếp tục hoàn tất được task key cũ cho process instance đang chạy trong giai đoạn chuyển tiếp.
+- Bổ sung BPMN/service test với catalog item có giá trị `handmade=false` legacy nhưng vẫn bắt buộc chờ assignment, chứng minh field legacy không còn điều khiển nghiệp vụ mới.
 
 Hành động tiếp theo: review PHẦN 07, sau đó triển khai PHẦN 08 — chat, agreement và timer CUSTOM PT24H.

@@ -20,11 +20,11 @@ Ba loại thông tin được phân biệt:
 
 ### 2.1. Mô tả sử dụng trong báo cáo
 
-Hệ thống là nền tảng bán sản phẩm handmade đa danh mục theo mô hình made-to-order. Các sản phẩm xuất hiện trên website chủ yếu là mẫu thiết kế do cửa hàng xây dựng. Hình ảnh thể hiện mẫu tham khảo; sản phẩm được chế tác sau khi có đơn và đủ điều kiện bắt đầu sản xuất. Giao diện phải thông báo rõ đặc điểm này.
+Hệ thống là nền tảng bán sản phẩm handmade đa danh mục theo mô hình made-to-order và không bán thành phẩm làm sẵn. Catalog là các mẫu thiết kế do cửa hàng xây dựng; hình ảnh chỉ thể hiện mẫu tham khảo. Cả Order CATALOG và CUSTOM đều được chế tác sau khi có đơn và đủ điều kiện bắt đầu sản xuất. Giao diện phải thông báo rõ đặc điểm này.
 
-Khách hàng có thể đặt sản phẩm theo mẫu của cửa hàng. Khách có tài khoản còn được lưu nhiều custom draft gồm description và danh sách URL ảnh minh họa; submit một draft tạo Order CUSTOM ở PENDING_APPROVAL, sau đó mới đi qua manager review, phân staff và xác nhận agreement/giá. Khách vãng lai được sử dụng giỏ hàng theo phiên, đặt hàng bằng thông tin liên hệ và theo dõi đơn qua liên kết bảo mật.
+Khách hàng có thể đặt nhiều loại mẫu catalog trong cùng một Order, mỗi OrderItem có quantity riêng. Khách có tài khoản còn được lưu nhiều custom draft gồm description, quantity và danh sách URL ảnh minh họa; submit một draft tạo Order CUSTOM ở PENDING_APPROVAL với đúng một loại OrderItem nhưng quantity có thể lớn hơn một, sau đó mới đi qua manager review, phân staff và xác nhận agreement/giá. Khách vãng lai được sử dụng giỏ hàng theo phiên, đặt hàng bằng thông tin liên hệ và theo dõi đơn qua liên kết bảo mật.
 
-Mỗi đơn có một nhân viên chính do quản lý phân công. Người này là đầu mối trao đổi với khách và theo dõi tiến độ toàn đơn. Quản lý đồng thời phân công người trực tiếp sản xuất từng dòng sản phẩm trong đơn. Hai vai trò có thể do cùng một người đảm nhiệm nhưng được lưu và kiểm soát riêng.
+Mỗi đơn có đúng một staff phụ trách do quản lý phân công hoặc staff tự nhận. Người này vừa là đầu mối trao đổi với khách vừa thực hiện sản xuất các OrderItem của toàn đơn. Quy trình/checkpoint vẫn tách theo từng OrderItem, nhưng không tạo phân công staff riêng cho từng item và không cho nhiều staff đồng thời chia việc trong một Order.
 
 Hệ thống tính thời gian sản xuất tham khảo theo mẫu và số lượng. Nhân viên chính lập đề xuất thời hạn có cấu trúc, khách xác nhận đề xuất để hình thành cam kết. Chỉ bắt đầu sản xuất khi đơn hợp lệ, điều kiện thanh toán/checkout được đáp ứng và phiên bản thời hạn hiện hành đã được xác nhận.
 
@@ -40,7 +40,7 @@ Trong phạm vi: catalog đa danh mục; tìm kiếm/lọc; tài khoản; giỏ 
 
 Các chức năng cũ có thể kế thừa như wishlist, đánh giá sản phẩm, reputation, tư vấn trước bán và báo cáo hoa hồng được coi là phân hệ hỗ trợ. Không mặc định áp dụng cơ chế hoa hồng tư vấn cho phân công sản xuất; chính sách đó cần được xác định riêng.
 
-Ngoài phạm vi hiện tại: tồn kho thành phẩm, giữ/trừ/hoàn tồn thành phẩm, quản lý nguyên vật liệu chi tiết, lập lịch tối ưu theo công suất xưởng, nhiều staff chính đồng thời trên một đơn. Tích hợp hãng vận chuyển, hoàn tiền tự động và giải quyết tranh chấp đầy đủ chưa được target.txt xác định.
+Ngoài phạm vi hiện tại: tồn kho thành phẩm, giữ/trừ/hoàn tồn thành phẩm, quản lý nguyên vật liệu chi tiết, lập lịch tối ưu theo công suất xưởng và nhiều staff đồng thời chia việc sản xuất trong một Order. Tích hợp hãng vận chuyển, hoàn tiền tự động và giải quyết tranh chấp đầy đủ chưa được target.txt xác định.
 
 ## 3. Tác nhân và ranh giới hệ thống
 
@@ -48,26 +48,25 @@ Ngoài phạm vi hiện tại: tồn kho thành phẩm, giữ/trừ/hoàn tồn 
 |---|---|
 | Khách vãng lai — Guest | Xem/lọc/tìm mẫu; quản lý giỏ theo phiên; dùng public voucher; checkout; tra cứu đơn và xác nhận deadline qua link bảo mật; nhận checkpoint bằng email |
 | Khách có tài khoản — USER | Các chức năng mua theo mẫu; ví voucher và reputation; custom request; chấp nhận báo giá; chat theo đơn; xác nhận deadline; theo dõi/phản hồi checkpoint |
-| Staff chính của đơn | Đầu mối khách hàng; trao đổi yêu cầu; lập đề xuất thời hạn; theo dõi tiến độ toàn đơn |
-| Staff sản xuất item | Thực hiện item được giao; nộp ảnh/checkpoint; xử lý rework |
-| Quản lý — MANAGER | Quản lý catalog; review custom và báo giá; phân công staff chính/item; duyệt thay đổi lớn; review checkpoint/final QC theo policy |
+| Staff phụ trách Order | Đầu mối khách hàng; trao đổi yêu cầu; lập đề xuất thời hạn; sản xuất mọi item trong Order; nộp checkpoint và xử lý rework |
+| Quản lý — MANAGER | Quản lý catalog; review khả năng thực hiện; phân một staff cho Order; duyệt thay đổi lớn; review checkpoint/final QC theo policy |
 | Quản trị viên — ADMIN | Quản trị kỹ thuật và cấu hình theo phân quyền; không mặc nhiên thay thế vai trò quản lý nghiệp vụ |
 | Cổng thanh toán | Xử lý giao dịch online, trả callback; MoMo là tích hợp hiện có |
 | Dịch vụ email | Chuyển email xác nhận, deadline, checkpoint, liên kết bảo mật |
 | Dịch vụ định danh | Xác thực tài khoản/token; Keycloak là nền tảng hiện có |
 
-Staff chính và staff sản xuất là hai trách nhiệm nghiệp vụ của vai trò STAFF, không nhất thiết là hai loại tài khoản. Guest không phải một giá trị enum Role.
+Một assigned STAFF đảm nhiệm cả trao đổi và sản xuất trong phạm vi Order. Guest không phải một giá trị enum Role.
 
 Trong Use Case Diagram toàn hệ thống, database, Redis và Camunda nằm trong ranh giới hệ thống. Trong Sequence Diagram kỹ thuật, có thể biểu diễn chúng bằng participant riêng.
 
-**Quyền truy cập mục tiêu:** khách chỉ truy cập đơn của mình; guest chỉ truy cập đơn được token cho phép; staff chính chỉ thao tác đơn được giao; staff sản xuất chỉ thao tác item được giao. Theo target.txt, phòng chat Order dành cho khách sở hữu đơn, staff chính và manager. Staff sản xuất không tự động có quyền đọc chat nếu không đồng thời là staff chính.
+**Quyền truy cập mục tiêu:** khách chỉ truy cập đơn của mình; guest chỉ truy cập đơn được token cho phép; assigned STAFF chỉ thao tác Order và các OrderItem của đơn được giao. Phòng chat Order chỉ dành cho USER sở hữu đơn và assigned STAFF; MANAGER không được đọc, gửi hoặc subscribe, và không suy quyền từ assignment item legacy.
 
 ## 4. Quy tắc nghiệp vụ chuẩn hóa
 
 | Mã | Quy tắc |
 |---|---|
-| BR01 | Catalog mặc định là MADE_TO_ORDER; ảnh là ảnh mẫu, không thể hiện hàng có sẵn |
-| BR02 | Chỉ mẫu ACCEPTING_ORDERS được thêm mới vào giỏ/checkout/reorder; PAUSED và DISCONTINUED không nhận đơn mới |
+| BR01 | CATALOG và CUSTOM đều là handmade/MADE_TO_ORDER; catalog chỉ là nguồn thiết kế của shop, không có nhánh hàng làm sẵn |
+| BR02 | Chỉ mẫu ACCEPTING_ORDERS được thêm mới vào giỏ/checkout/reorder; PAUSED và DISCONTINUED không nhận đơn mới nhưng không hủy/đổi Order snapshot đã tạo |
 | BR03 | Không kiểm tra, giữ, trừ hay hoàn tồn kho thành phẩm ở giỏ, checkout, hủy đơn hoặc reorder |
 | BR04 | Giữ CartItem.quantity, OrderItem.quantity, exportedQuantity, receivedQuantity và quota voucher |
 | BR05 | Giỏ user gắn userId; giỏ guest gắn guestSessionId; định danh phiên giỏ không thay thế quyền truy cập đơn |
@@ -75,8 +74,8 @@ Trong Use Case Diagram toàn hệ thống, database, Redis và Camunda nằm tro
 | BR07 | Guest order có userId rỗng, contact snapshot và token tra cứu |
 | BR08 | Chỉ user được tạo custom request; guest phải đăng nhập/đăng ký |
 | BR09 | User dùng voucher cá nhân/reputation; guest chỉ dùng public/campaign voucher theo điều kiện |
-| BR10 | Mỗi Order có một staff chính đang phụ trách; mỗi item có phân công sản xuất riêng |
-| BR11 | Staff chính và staff sản xuất có thể là cùng người nhưng không đồng nhất hai quan hệ |
+| BR10 | Mỗi Order có một active assignment tới đúng một staff; staff đó phụ trách sản xuất mọi OrderItem của Order |
+| BR11 | Checkpoint và thời lượng tách theo OrderItem/loại, nhưng không tạo assignment riêng hoặc nhiều staff theo item |
 | BR12 | Thời gian tính tự động là tham khảo, không phải cam kết |
 | BR13 | Deadline phải được đề xuất, lưu phiên bản và khách xác nhận có cấu trúc |
 | BR14 | Thay deadline đã đề xuất/xác nhận làm xác nhận cũ mất hiệu lực; phải xác nhận phiên bản mới |
@@ -88,6 +87,8 @@ Trong Use Case Diagram toàn hệ thống, database, Redis và Camunda nằm tro
 | BR20 | Thay đổi lớn về spec/giá/deadline phải tạo OrderItemChangeRequest, không chỉ sửa bằng chat |
 | BR21 | Mọi item phải sẵn sàng mới đưa toàn Order sang READY_TO_SHIP; báo cáo dùng giao toàn đơn, không mặc định giao từng phần |
 | BR22 | Database là nguồn dữ liệu chính; cache, event và chat không thay thế dữ liệu nghiệp vụ |
+| BR23 | CUSTOM có đúng một OrderItem với quantity có thể lớn hơn một; CATALOG có thể có nhiều OrderItem, mỗi item có quantity riêng |
+| BR24 | Availability không phải stock/handmade flag; không dùng `hasHandmadeItems` hoặc `NOT_REQUIRED` để bỏ qua sản xuất |
 
 ### 4.1. Thời gian sản xuất và deadline
 
@@ -140,18 +141,18 @@ Một checkpoint lưu stage, attemptNumber, người nộp, thời gian, ghi ch�
 | UC05 | Sử dụng voucher phù hợp | Guest, USER |
 | UC06 | Thanh toán trực tuyến và tiếp nhận kết quả | Khách đủ điều kiện, cổng thanh toán |
 | UC07 | Gửi/bổ sung custom request | USER |
-| UC08 | Review custom request và lập báo giá | MANAGER |
-| UC09 | Chấp nhận/từ chối báo giá | USER |
-| UC10 | Phân công/đổi staff chính của đơn | MANAGER |
-| UC11 | Trao đổi trong phòng chat đơn | USER, staff chính, MANAGER |
-| UC12 | Lập/điều chỉnh deadline proposal | Staff chính |
+| UC08 | Review khả năng thực hiện custom | MANAGER |
+| UC09 | Gửi và xác nhận agreement/giá custom | USER, assigned STAFF |
+| UC10 | Phân công/đổi staff phụ trách Order | MANAGER |
+| UC11 | Trao đổi trong phòng chat đơn | USER, assigned STAFF |
+| UC12 | Lập/điều chỉnh deadline proposal | Assigned STAFF |
 | UC13 | Xác nhận deadline hiện hành | USER, Guest qua link |
-| UC14 | Phân công sản xuất từng item | MANAGER |
-| UC15 | Bắt đầu sản xuất item | Staff sản xuất |
-| UC16 | Nộp checkpoint và ảnh | Staff sản xuất |
+| UC14 | Khởi tạo/theo dõi nhánh sản xuất theo từng OrderItem | Hệ thống, assigned STAFF |
+| UC15 | Bắt đầu sản xuất Order/item | Assigned STAFF |
+| UC16 | Nộp checkpoint và ảnh | Assigned STAFF |
 | UC17 | Review checkpoint/final QC | MANAGER theo policy |
 | UC18 | Xem/phản hồi checkpoint | USER; Guest nhận email, phản hồi theo policy cần chốt |
-| UC19 | Thực hiện rework và nộp lại | Staff sản xuất |
+| UC19 | Thực hiện rework và nộp lại | Assigned STAFF |
 | UC20 | Đề nghị/xử lý thay đổi spec, giá, deadline | USER, staff, MANAGER theo bước |
 | UC21 | Tra cứu đơn và tiến độ | USER, Guest có token |
 | UC22 | Chuẩn bị giao và ghi nhận số lượng giao | Staff được cấp quyền |
@@ -166,7 +167,7 @@ Quan hệ đề xuất:
 
 - UC04 include kiểm tra giỏ, kiểm tra khả năng nhận đơn, tính tiền, lưu đơn/snapshot. UC05 extend UC04 khi chọn voucher.
 - Checkout user và checkout guest là hai biến thể của UC04; thanh toán online là luồng có điều kiện, không bắt buộc cho COD.
-- UC09 chấp nhận báo giá bao gồm tạo đơn từ báo giá hợp lệ; không bắt buộc đi qua cart.
+- UC09 không tạo Order mới: Order CUSTOM đã được tạo khi submit draft; agreement chỉ chốt spec, quantity, giá và thời lượng trên Order đó.
 - UC13 include kiểm tra phiên bản proposal và quyền xác nhận.
 - UC15 include kiểm tra điều kiện bắt đầu sản xuất.
 - UC16 include lưu checkpoint/ảnh; review không phải bước bắt buộc cho mọi checkpoint mà do policy lựa chọn.
@@ -181,8 +182,7 @@ left to right direction
 actor "Khách mua hàng" as Buyer
 actor "Guest" as Guest
 actor "User" as User
-actor "Staff chính" as Lead
-actor "Staff sản xuất" as Maker
+actor "Assigned Staff" as Staff
 actor "Manager" as Manager
 actor "Cổng thanh toán" as Payment
 actor "Dịch vụ email" as Mail
@@ -195,7 +195,7 @@ rectangle "Shop handmade made-to-order" {
   usecase "Gửi custom request" as Custom
   usecase "Review và báo giá" as Quote
   usecase "Chấp nhận báo giá" as Accept
-  usecase "Phân staff chính / item" as Assign
+  usecase "Phân một staff cho Order" as Assign
   usecase "Chat theo Order" as Chat
   usecase "Đề xuất deadline" as Propose
   usecase "Xác nhận deadline" as Confirm
@@ -218,15 +218,14 @@ User -- Accept
 Manager -- Quote
 Manager -- Assign
 User -- Chat
-Lead -- Chat
-Manager -- Chat
-Lead -- Propose
-Maker -- Start
+Staff -- Chat
+Staff -- Propose
+Staff -- Start
 Start ..> Guard : <<include>>
-Maker -- Submit
+Staff -- Submit
 Manager -- Review
 User -- Change
-Lead -- Change
+Staff -- Change
 Manager -- Change
 Mail -- Email
 @enduml
@@ -248,7 +247,7 @@ Việc sơ đồ online nối USER phản ánh phạm vi hiện có được k�
 6. Tạo Order và OrderItem; guest được cấp token tra cứu, database lưu bản băm token.
 7. Ghi nhận sử dụng voucher và loại các mục đã checkout khỏi giỏ. Nếu checkout toàn giỏ thì giỏ trở thành rỗng.
 8. Commit dữ liệu; khởi tạo luồng xử lý sau đặt hàng và gửi xác nhận bất đồng bộ.
-9. Chuyển sang phân staff chính/thỏa thuận thời hạn; xử lý thanh toán theo phương thức đã chọn.
+9. Chuyển sang manager review rồi phân một staff phụ trách Order; xử lý thỏa thuận/thanh toán theo loại đơn và phương thức đã chọn.
 
 **Ngoại lệ:** giỏ rỗng; mẫu ngừng nhận đơn; dữ liệu liên hệ thiếu; voucher không hợp lệ; checkout trùng. Đề xuất idempotency trả lại kết quả của cùng yêu cầu hợp lệ thay vì tạo đơn mới; cùng key nhưng dữ liệu khác phải được phát hiện.
 
@@ -271,18 +270,18 @@ Giá custom chưa tồn tại tại WF01 và phải là `null`, không dùng 0 l
 
 ### UC10–UC14 — Phân công và thỏa thuận deadline
 
-**Tác nhân:** MANAGER, staff chính, khách. **Tiền điều kiện:** đơn tồn tại và được tiếp nhận.
+**Tác nhân:** MANAGER, assigned STAFF, khách. **Tiền điều kiện:** đơn tồn tại và được tiếp nhận.
 
-1. Manager phân một staff chính; hệ thống lưu người phân công và thời gian.
+1. Manager phân một staff phụ trách toàn Order; hệ thống lưu người phân công và thời gian.
 2. Với user, mở phòng chat theo Order và kiểm soát thành viên. Với guest, dùng email/liên kết bảo mật.
 3. Staff xem yêu cầu, số lượng và thời gian tham khảo từng item.
 4. Staff tạo proposal có thời hạn từng item và toàn đơn, kèm version.
 5. Hệ thống gửi proposal bằng realtime cho user hoặc email cho guest.
 6. Khách xác nhận đúng proposal hiện hành bằng nút chức năng/liên kết bảo mật.
 7. Hệ thống lưu người, thời điểm, phiên bản cam kết và gửi email xác nhận.
-8. Manager phân staff sản xuất từng item; hệ thống kiểm tra đủ điều kiện trước khi bắt đầu.
+8. Hệ thống tạo/theo dõi nhánh sản xuất cho từng OrderItem dưới cùng assigned STAFF và kiểm tra đủ điều kiện trước khi bắt đầu.
 
-Phân item có thể thực hiện trước hoặc sau xác nhận deadline nhưng phải hoàn tất trước khi item bắt đầu. Chọn một thứ tự trên Activity Diagram không có nghĩa các bước độc lập luôn bị khóa cứng theo thứ tự đó.
+Không có bước phân staff riêng theo item. Việc tách nhánh theo OrderItem chỉ phục vụ thời lượng, checkpoint và điều kiện hội tụ; tất cả vẫn thuộc một active assignment cấp Order.
 
 **Ngoại lệ:** khách khác xác nhận; token hết hạn/sai mục đích; proposal cũ; thao tác xác nhận lặp; staff không được giao đơn. Proposal thay đổi phải tạo phiên bản mới và vô hiệu hóa xác nhận cũ.
 
@@ -290,7 +289,7 @@ Phân item có thể thực hiện trước hoặc sau xác nhận deadline như
 
 ### UC15–UC19 — Sản xuất, checkpoint và rework
 
-**Tác nhân:** staff sản xuất, manager, khách theo policy. **Tiền điều kiện:** item được phân công, đơn đủ điều kiện checkout/thanh toán, deadline hiện hành đã xác nhận.
+**Tác nhân:** assigned STAFF, manager, khách theo policy. **Tiền điều kiện:** Order đã được giao cho staff, đơn đủ điều kiện checkout/thanh toán, deadline hiện hành đã xác nhận.
 
 1. Staff bắt đầu item, lưu productionStartedAt.
 2. Staff nộp INITIAL_SHAPE với ảnh, ghi chú và attempt.
@@ -345,17 +344,16 @@ flowchart TD
     C --> D[Checkout user hoặc guest]
     D --> E[Kiểm tra thông tin, availability, voucher]
     E --> F[Tạo Order và snapshot, không xử lý stock]
-    B -->|Custom| G[Đăng nhập và gửi CustomRequest]
-    G --> H[Manager review và báo giá]
-    H --> I{User chấp nhận?}
-    I -->|Không| J[Đóng hoặc thương lượng lại request]
-    I -->|Có| F
-    F --> K[Manager phân staff chính]
-    K --> L[Trao đổi yêu cầu và đề xuất deadline]
-    L --> M{Khách xác nhận version hiện hành?}
-    M -->|Chưa| L
-    M -->|Có| N[Manager phân staff theo item]
-    N --> O{Checkout hoặc thanh toán hợp lệ?}
+    B -->|Custom| G[Đăng nhập và submit CustomRequest]
+    G --> H[Tạo Order CUSTOM và đúng một OrderItem]
+    F --> K[Manager review khả năng thực hiện]
+    H --> K
+    K -->|Từ chối| J[Hủy với lý do manager từ chối]
+    K -->|Duyệt| L[Phân một staff phụ trách toàn Order]
+    L --> M{Cần agreement theo loại đơn?}
+    M -->|Có| N[Trao đổi và xác nhận version hiện hành]
+    M -->|Không, Guest CATALOG| O{Checkout hoặc thanh toán hợp lệ?}
+    N --> O
     O -->|Chưa| P[Chờ xử lý thanh toán theo policy]
     P --> O
     O -->|Có| Q[Sản xuất từng item]
@@ -378,11 +376,11 @@ Sơ đồ trên thể hiện happy path và rework cơ bản. ChangeRequest ph�
 
 ### 7.2. Cấu trúc BPMN đề xuất
 
-Pool khách và pool cửa hàng; phía cửa hàng có lane backend tự động, manager, staff chính, staff sản xuất. Email/cổng thanh toán là participant ngoài hệ thống khi cần biểu diễn giao tiếp. User và guest là hai kênh tương tác, không phải hai quy trình sản xuất hoàn toàn khác nhau.
+Pool khách và pool cửa hàng; phía cửa hàng có lane backend tự động, manager và assigned staff. Email/cổng thanh toán là participant ngoài hệ thống khi cần biểu diễn giao tiếp. User và guest là hai kênh tương tác, không phải hai quy trình sản xuất hoàn toàn khác nhau.
 
 - Checkout và tạo dữ liệu ban đầu xử lý đồng bộ trong transaction database.
 - Sau commit, bắt đầu process xử lý Order; có trạng thái start/retry nếu Camunda lỗi.
-- User task: phân staff chính, đề xuất/xác nhận deadline, phân item, review, xử lý thay đổi.
+- User task: phân một staff cho Order, đề xuất/xác nhận deadline, thao tác checkpoint theo item, review và xử lý thay đổi.
 - Chờ khách/thanh toán bằng user task hoặc message catch phù hợp với cách tích hợp.
 - Subprocess/call activity sản xuất nhiều instance theo OrderItem; không tạo một production task duy nhất cho toàn đơn nhiều item.
 - Gateway chọn review policy; vòng lặp rework giữ stage và tăng attempt.
@@ -398,7 +396,7 @@ Không dồn thanh toán, thỏa thuận, sản xuất và giao hàng vào một
 | Xử lý Order | PENDING_ASSIGNMENT, DISCUSSING, WAITING_CUSTOMER_CONFIRMATION, CONFIRMED, IN_PRODUCTION, READY_TO_SHIP, SHIPPING, COMPLETED, CANCELLED | Vòng đời tổng thể |
 | Deadline proposal | PROPOSED, CONFIRMED, SUPERSEDED; REJECTED nếu có chức năng từ chối | Phiên bản cam kết |
 | Thanh toán | PENDING, PAID, FAILED; COD được biểu diễn bằng phương thức và điều kiện chấp nhận | Không đồng nhất COD hợp lệ với đã thu tiền |
-| Item production | WAITING_ASSIGNMENT, ASSIGNED, INITIAL_IN_PROGRESS, INITIAL_WAITING_REVIEW, INITIAL_REWORK_REQUIRED, FINAL_IN_PROGRESS, FINAL_WAITING_QC, FINAL_REWORK_REQUIRED, READY | Có thể kế thừa nhiều enum hiện có |
+| Item production | WAITING_ORDER_ASSIGNMENT, INITIAL_IN_PROGRESS, INITIAL_WAITING_REVIEW, INITIAL_REWORK_REQUIRED, FINAL_IN_PROGRESS, FINAL_WAITING_QC, FINAL_REWORK_REQUIRED, READY | Item dùng assignment cấp Order; có thể kế thừa các enum tiến độ hiện có sau migration |
 | Custom request | SUBMITTED, NEED_MORE_INFO, REJECTED, QUOTED, ACCEPTED, CLOSED | Cần tách lịch sử quote version |
 | Change request | SUBMITTED, UNDER_REVIEW, WAITING_CUSTOMER_ACCEPTANCE, APPROVED, REJECTED, APPLIED | Tên và thứ tự chi tiết là đề xuất |
 
@@ -407,7 +405,7 @@ Không dồn thanh toán, thỏa thuận, sản xuất và giao hàng vào một
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING_ASSIGNMENT: Đơn được tiếp nhận
-    PENDING_ASSIGNMENT --> DISCUSSING: Giao staff chính
+    PENDING_ASSIGNMENT --> DISCUSSING: Giao assigned staff
     DISCUSSING --> WAITING_CUSTOMER_CONFIRMATION: Gửi deadline proposal
     WAITING_CUSTOMER_CONFIRMATION --> DISCUSSING: Cần thương lượng lại
     WAITING_CUSTOMER_CONFIRMATION --> CONFIRMED: Xác nhận version hiện hành
@@ -435,13 +433,14 @@ stateDiagram-v2
 | Product / ProductVariant | Mẫu/biến thể, thuộc tính lọc, ảnh mẫu, availability, cấu hình thời gian; không dùng quantity làm tồn thành phẩm |
 | GuestSession | Phiên giỏ guest, thời hạn hoạt động; Redis quản lý TTL, database lưu liên kết cần thiết theo thiết kế |
 | Cart / CartItem | Chủ giỏ user hoặc guest; biến thể và số lượng |
-| Order | Chủ đơn nullable, staff chính, người phân công, thời điểm phân công, trạng thái, tổng tiền và deadline hiện hành |
+| Order | Chủ đơn nullable, assigned staff duy nhất, người phân công, thời điểm phân công, trạng thái, tổng tiền và deadline hiện hành |
 | OrderContactSnapshot | Họ tên, email, điện thoại, địa chỉ, ghi chú tại thời điểm đặt; có thể nhúng vào Order |
 | OrderLookupToken | Bản băm token/quyền tra cứu; có thể là trường trong Order thay vì bảng riêng |
 | OrderItem | Số lượng, giá và spec snapshot, nguồn catalog/custom, trạng thái sản xuất, số lượng giao/nhận |
 | OrderDeadlineProposal | Version, thời hạn toàn đơn, người đề xuất, quyết định xác nhận và thời điểm |
 | OrderDeadlineProposalItem | Đề xuất bảng con lưu thời hạn từng item theo version; tránh chỉ sửa trực tiếp deadline item và mất lịch sử |
-| OrderItemAssignment | Staff sản xuất và manager phân công, thời gian; giữ lịch sử phân công nếu cần |
+| OrderAssignment | Active assignment cấp Order tới một staff; thời điểm/nguồn phân công và releasedAt/releaseReason |
+| OrderItemAssignment | Dữ liệu legacy cần migrate/loại bỏ; không phải quan hệ phân công trong mô hình mục tiêu |
 | ProductionCheckpoint | Item, stage, attempt, ảnh, ghi chú, trạng thái, người nộp |
 | ProductionCheckpointImage | Ảnh minh chứng của checkpoint |
 | ProductionDecision | Quyết định review; kế thừa entity hiện có, mở rộng nếu cần nhiều người duyệt |
@@ -466,8 +465,8 @@ classDiagram
     OrderItem "1" --> "0..*" OrderDeadlineProposalItem
     Product "1" --> "0..*" ProductVariant
     ProductVariant "0..1" --> "0..*" OrderItem : catalog source
-    OrderItem "1" --> "0..1" OrderItemAssignment : active assignment
-    User "1" --> "0..*" OrderItemAssignment : maker
+    Order "1" --> "0..*" OrderAssignment : assignment history
+    User "1" --> "0..*" OrderAssignment : assigned staff
     OrderItem "1" *-- "0..*" ProductionCheckpoint
     ProductionCheckpoint "1" *-- "0..*" ProductionCheckpointImage
     ProductionCheckpoint "1" --> "0..*" ProductionDecision : target review history
@@ -555,7 +554,7 @@ WF01 kết thúc sau khi Order PENDING_APPROVAL được lưu. Manager review, c
 ```mermaid
 sequenceDiagram
     autonumber
-    actor T as Staff chính
+    actor T as Assigned Staff
     actor K as Khách
     participant C as DeadlineController
     participant S as DeadlineService
@@ -592,7 +591,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor T as Staff sản xuất
+    actor T as Assigned Staff
     actor M as Manager
     actor K as Khách
     participant S as ProductionService
@@ -645,7 +644,7 @@ Khi hai item cuối hoàn tất đồng thời, cập nhật tổng hợp Order 
 sequenceDiagram
     autonumber
     actor K as User
-    actor T as Staff chính
+    actor T as Assigned Staff
     actor M as Manager
     participant S as ChangeRequestService
     participant DB as Database
@@ -683,9 +682,9 @@ sequenceDiagram
 | WebSocket | Giao tiếp realtime và thông báo theo quyền của phòng Order | Bằng chứng duy nhất của deadline/spec được chấp thuận |
 | Email | Kênh cập nhật guest và gửi xác nhận chính thức | Dữ liệu trạng thái chính hoặc quyền truy cập chỉ dựa vào orderId |
 
-Sự kiện mục tiêu: ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, ORDER_STAFF_ASSIGNED, STAFF_ASSIGNED, ORDER_DEADLINE_PROPOSED, ORDER_DEADLINE_CONFIRMED, PRODUCTION_STARTED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED.
+Sự kiện mục tiêu: ORDER_CREATED, GUEST_ORDER_CREATED, CUSTOM_REQUEST_SUBMITTED, CUSTOM_REQUEST_APPROVED, ORDER_ASSIGNED, ORDER_DEADLINE_PROPOSED, ORDER_DEADLINE_CONFIRMED, PRODUCTION_STARTED, CHECKPOINT_SUBMITTED, CHECKPOINT_APPROVED, CHECKPOINT_REWORK_REQUIRED, EMAIL_REQUESTED, NOTIFICATION_REQUESTED.
 
-Đề xuất đặt `STAFF_ASSIGNED` thành tên rõ cấp item, hoặc dùng payload chứa assignmentType. Event nên có eventId, aggregateId, version và thời gian; consumer kiểm tra idempotency. Không gửi dữ liệu checkpoint đang chờ duyệt cho khách chỉ vì consumer nhìn thấy CHECKPOINT_SUBMITTED.
+`ORDER_ASSIGNED` luôn là assignment cấp Order, không có event phân công staff cấp item trong mô hình mục tiêu. Event nên có eventId, aggregateId, version và thời gian; consumer kiểm tra idempotency. Không gửi dữ liệu checkpoint đang chờ duyệt cho khách chỉ vì consumer nhìn thấy CHECKPOINT_SUBMITTED.
 
 ```mermaid
 flowchart LR
@@ -711,15 +710,15 @@ flowchart LR
 |---|---|---|
 | Trọng tâm đơn hàng | OrderService còn luồng duyệt–kho–KCS–nhận hàng | Điều phối phân công–deadline–sản xuất từng item–QC–giao |
 | Tồn thành phẩm | Còn InventoryReservationService, nhánh hoàn tồn khi hủy/payment fail, delegate tồn kho | Loại bỏ khỏi luồng made-to-order; không xóa quantity đơn/voucher |
-| Availability | CartService đã kiểm tra ACCEPTING_ORDERS | Dùng thống nhất cho thêm giỏ, checkout, reorder và quản lý catalog |
+| Availability | CartService đã kiểm tra ACCEPTING_ORDERS | Chỉ điều khiển nhận Order mới; không biểu diễn stock/handmade và không ảnh hưởng Order snapshot đã tạo |
 | Guest | Có giỏ guest, contact snapshot, token hash, checkout và workflow sau tạo đơn | Hoàn thiện tra cứu, xác nhận deadline và checkpoint qua email |
 | Staff cấp đơn | Hiện dùng warehouseStaff với ý nghĩa phụ trách kho | assignedStaff là đầu mối toàn đơn; không đổi tên mà bỏ qua thay đổi trách nhiệm |
-| Staff cấp item | Có entity OrderItemAssignment | Hoàn thiện API, quyền và workflow phân công/sản xuất |
+| Staff cấp item | Có entity OrderItemAssignment legacy | Migrate sang một OrderAssignment cấp Order; checkpoint vẫn tách theo item nhưng cùng assigned staff |
 | Deadline | Chưa thấy bộ entity/service/controller proposal đầy đủ | Thêm proposal version, xác nhận user/guest và điều kiện chặn sản xuất |
 | Custom | Đã triển khai draft/submit với description tối đa 4.000 từ, `imageUrls: string[]`, snapshot mới và đường đọc legacy | Chốt agreement ở workflow sau; nghiệm thu migration trên MySQL thực tế khi Docker sẵn sàng |
 | Chat | Có chat và consultation | Bổ sung phòng theo Order, membership theo phân công |
 | Checkpoint | Có entity/enum/repository, dữ liệu ảnh và decision | Hoàn thiện submit/review/rework/policy/notification và tổng hợp READY |
-| Guest BPMN runtime | Có publish event, manager review và task phân handmade item | Bổ sung staff chính, deadline, production multi-instance và final QC |
+| Guest BPMN runtime | Có publish event, manager review nhưng còn gateway/task legacy `hasHandmadeItems`/“handmade item” | Bỏ nhánh hàng làm sẵn; Guest CATALOG luôn chờ một staff nhận Order, sau đó production/checkpoint tách theo OrderItem |
 | Duyệt hiện tại | processAdminReview đang comment tìm task và complete task | Khi triển khai, đồng bộ transaction nghiệp vụ và bước workflow; không xem code tạm là thiết kế đích |
 | Giao và nhận | Có exportedQuantity, receivedQuantity, xác nhận và phản ánh user | Giữ đối soát số lượng, bỏ ý nghĩa trừ tồn; chốt thêm cơ chế guest |
 | Payment/hủy/reputation | Có MoMo, rule uy tín và hủy trước duyệt của mô hình cũ | Rà lại cho đơn đã cam kết/sản xuất; không mặc định kế thừa tiền phạt/hoàn tiền |
@@ -736,7 +735,7 @@ Các phase trong target.txt là kế hoạch triển khai theo giai đoạn, kh�
 2. Hủy đơn trước/sau chốt deadline hoặc bắt đầu sản xuất; chi phí đã làm, hoàn tiền và reputation.
 3. Quyền khách duyệt checkpoint, cách guest phản hồi, timeout phản hồi và phân loại rủi ro.
 4. Cách xử lý khi đổi deadline sau khi sản xuất đã bắt đầu: dừng item nào, ai được cho tiếp tục.
-5. Chính sách đổi staff chính; có cần xác nhận lại deadline nếu chỉ đổi người nhưng giữ cam kết không.
+5. Chính sách đổi assigned staff; có cần xác nhận lại deadline nếu chỉ đổi người nhưng giữ cam kết không.
 6. Cơ chế xác nhận giao hàng/hoàn tất cho guest, phản ánh thiếu hàng và xử lý bồi hoàn.
 7. Quote hết hạn, nhiều vòng báo giá, reorder custom và trộn catalog/custom trong cùng đơn.
 8. Thời gian tính theo ngày lịch/ngày làm việc; múi giờ và khoảng vận chuyển sau hoàn thành sản xuất.
@@ -770,7 +769,7 @@ Các mục này không cản trở vẽ happy path. Hãy đặt điều kiện `
 | Xác nhận proposal đã bị thay thế | Bị từ chối; phải xem version mới |
 | Deadline đã xác nhận nhưng điều kiện payment chưa đạt | Tiếp tục chờ, không sản xuất |
 | Staff không phụ trách đọc chat đơn | Bị từ chối theo membership |
-| Staff làm item nhưng không phải staff chính | Không tự có quyền chat Order |
+| Staff khác không phụ trách Order | Không được thao tác item hoặc truy cập chat Order |
 | Checkpoint bị rework | Giữ attempt cũ và tạo attempt mới khi nộp lại |
 | Guest final chưa qua manager QC | Chưa công bố final/giao hàng theo luồng đã chọn |
 | Một trong nhiều item chưa READY | Toàn đơn chưa READY_TO_SHIP |

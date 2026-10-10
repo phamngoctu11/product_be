@@ -10,6 +10,7 @@ import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
+import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
@@ -184,6 +185,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.PASSWORD_RESET_EMAIL_REQUESTED -> handlePasswordResetEmailRequested(payload);
             case EventTypes.WORKFLOW_EMAIL_REQUESTED -> handleWorkflowEmailRequested(payload);
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
+            case EventTypes.ORDER_ASSIGNED -> handleOrderAssigned(payload);
             case EventTypes.ORDER_ACCEPTED -> handleOrderAccepted(payload);
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
@@ -260,6 +262,10 @@ public class RedisStreamEventConsumer {
 
     private void handleOrderAccepted(String payload) {
         orderLifecycleEventHandler.handleOrderAccepted(readPayload(payload, OrderAcceptedEvent.class));
+    }
+
+    private void handleOrderAssigned(String payload) {
+        orderLifecycleEventHandler.handleOrderAssigned(readPayload(payload, OrderAssignedEvent.class));
     }
 
     private void handleWorkflowEmailRequested(String payload) {

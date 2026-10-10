@@ -72,16 +72,49 @@ public class EmailService {
     }
 
     public void sendOrderAcceptedEmail(String toEmail, String customerName, Long orderId) {
-        String htmlContent = "<html><body><p>Xin chào " + escapeHtml(customerName)
-                + ",</p><p>Đơn hàng #" + orderId
-                + " đã được chấp nhận và đang chờ bước tiếp theo.</p></body></html>";
+        sendOrderAcceptedEmail(toEmail, customerName, orderId, null, null, null, null, null);
+    }
+
+    public void sendOrderAcceptedEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            String orderAccessUrl,
+            String productSummary,
+            Double finalPrice,
+            Integer quantity,
+            Integer productionDurationDays
+    ) {
+        StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
+                .append(escapeHtml(customerName))
+                .append(",</p><p>Đơn hàng #")
+                .append(orderId)
+                .append(" đã được chấp nhận và đang chờ bước tiếp theo.</p>");
+        if (productSummary != null && !productSummary.isBlank()) {
+            html.append("<p>Mẫu sản phẩm: ").append(escapeHtml(productSummary)).append("</p>");
+        }
+        if (finalPrice != null) {
+            html.append("<p>Giá đã duyệt: ").append(finalPrice).append("</p>");
+        }
+        if (quantity != null) {
+            html.append("<p>Số lượng: ").append(quantity).append("</p>");
+        }
+        if (productionDurationDays != null) {
+            html.append("<p>Thời lượng dự kiến: ").append(productionDurationDays).append(" ngày</p>");
+        }
+        if (orderAccessUrl != null && !orderAccessUrl.isBlank()) {
+            html.append("<p><a href=\"")
+                    .append(escapeHtml(orderAccessUrl))
+                    .append("\">Xem thông tin đơn hàng</a></p>");
+        }
+        html.append("</body></html>");
         eventPublisher.publishAfterCommit(
                 EventTypes.WORKFLOW_EMAIL_REQUESTED,
                 new WorkflowEmailRequestedEvent(
                         "ORDER_ACCEPTED",
                         toEmail,
                         "Đơn hàng #" + orderId + " đã được chấp nhận",
-                        htmlContent,
+                        html.toString(),
                         orderId
                 )
         );

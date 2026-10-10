@@ -2,6 +2,8 @@ package com.example.workflow.service;
 
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
+import org.camunda.bpm.engine.runtime.ProcessInstanceQuery;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -20,6 +22,14 @@ class GuestPurchaseWorkflowServiceTest {
             runtimeService,
             stateService
     );
+
+    @BeforeEach
+    void noExistingProcess() {
+        ProcessInstanceQuery query = mock(ProcessInstanceQuery.class);
+        when(runtimeService.createProcessInstanceQuery()).thenReturn(query);
+        when(query.processInstanceBusinessKey(org.mockito.ArgumentMatchers.anyString())).thenReturn(query);
+        when(query.singleResult()).thenReturn(null);
+    }
 
     @Test
     void startsPostOrderProcessWithExpectedVariablesAndMarksOrderStarted() {
@@ -64,6 +74,24 @@ class GuestPurchaseWorkflowServiceTest {
         assertThat(result.started()).isFalse();
         assertThat(result.errorMessage()).isEqualTo("engine unavailable");
         verify(stateService).markStartFailed(201L, "engine unavailable");
+    }
+
+    @Test
+    void retryReusesExistingBusinessProcessInsteadOfStartingDuplicate() {
+        ProcessInstance existing = mock(ProcessInstance.class);
+        when(existing.getProcessInstanceId()).thenReturn("process-existing");
+        when(runtimeService.createProcessInstanceQuery().singleResult()).thenReturn(existing);
+
+        var result = service.startAfterOrderCreated(202L, "guest-session-0003", true);
+
+        assertThat(result.processInstanceId()).isEqualTo("process-existing");
+        verify(stateService).markStarted(202L, "process-existing");
+        org.mockito.Mockito.verify(runtimeService, org.mockito.Mockito.never())
+                .startProcessInstanceByKey(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyMap()
+                );
     }
 
     @SuppressWarnings("unchecked")

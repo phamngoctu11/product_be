@@ -126,7 +126,7 @@ def obj(kind, filename, package, status, phase, workflows, purpose, dependencies
 # Entity and persistence files. One public Java type per file; file name equals the contained type.
 for data in [
     ("Entity", "Order.java", "entity", "SỬA", "02,04-12", "WF01-WF09", "Aggregate gốc của vòng đời đơn; trạng thái, payment, staff, contact snapshot và các mốc thời gian.", "OrderItem, OrderAssignment"),
-    ("Entity", "OrderItem.java", "entity", "SỬA", "02,04,05,10,12", "WF01,WF05,WF07,WF08", "Dòng hàng; lưu snapshot catalog/custom, đơn giá nullable, quantity và thời lượng sản xuất.", "Order, ProductVariant"),
+    ("Entity", "OrderItem.java", "entity", "SỬA", "02,04,05,10,12", "WF01,WF05,WF07,WF08", "Dòng hàng made-to-order; CATALOG có thể nhiều item, CUSTOM đúng một item; mỗi item có quantity riêng, snapshot và thời lượng sản xuất.", "Order, ProductVariant"),
     ("Entity", "OrderContactSnapshot.java", "entity", "GIỮ", "04", "WF02,WF08,WF09", "Snapshot họ tên, email, điện thoại, địa chỉ và ghi chú tại thời điểm đặt.", "Order"),
     ("Entity", "OrderStatusHistory.java", "entity", "SỬA", "03,06-12", "WF02-WF09", "Lịch sử trạng thái hiển thị; actor, lý do, mốc thời gian và tham chiếu nghiệp vụ.", "OrderTransitionService"),
     ("Entity", "CustomRequest.java", "entity", "ĐÃ CÓ KHUNG", "05", "WF01", "Nhiều bản nháp custom của USER; snapshot nội dung/ảnh khi submit thành Order.", "User, Order"),
@@ -140,7 +140,7 @@ for data in [
     ("Entity", "ProductionDecision.java", "entity", "SỬA", "10", "WF05", "Quyết định KCS checkpoint 2: đạt hoặc yêu cầu làm lại, có lý do.", "ProductionCheckpoint"),
     ("Entity", "ChangeRequest.java", "entity", "ĐÃ CÓ KHUNG", "11", "WF06", "Yêu cầu đổi chi tiết chưa triển khai; không thay đổi giá/payment/deadline.", "Order, OrderItem"),
     ("Entity", "OrderReceipt.java", "entity", "ĐÃ CÓ KHUNG", "12", "WF08", "Snapshot số lượng thực nhận và xác nhận chênh lệch trước DELIVERED.", "Order"),
-    ("Entity", "Product.java", "entity", "SỬA", "04", "Catalog", "Mẫu catalog, availability và madeDay do manager nhập, madeDay >= 2.", "ProductVariant"),
+    ("Entity", "Product.java", "entity", "SỬA", "04", "Catalog", "Mẫu thiết kế catalog made-to-order; availability chỉ bật/tắt nhận Order mới, madeDay do manager nhập và >= 2.", "ProductVariant"),
     ("Entity", "ProductVariant.java", "entity", "SỬA", "04", "Catalog", "Biến thể và giá catalog chính thức dùng để tạo snapshot OrderItem.", "Product"),
     ("Entity", "Cart.java", "entity", "SỬA", "04", "Checkout", "Giỏ theo USER hoặc guestSessionId.", "CartItem"),
     ("Entity", "CartItem.java", "entity", "SỬA", "04", "Checkout", "Variant và quantity dương; checkout có thể chọn một phần giỏ.", "Cart, ProductVariant"),
@@ -176,7 +176,7 @@ for name, status, phase, purpose in [
 ]: obj("Repository", name, "repository", status, phase, "Theo phạm vi", purpose)
 
 for name, status, phase, wf, purpose, dep in [
-    ("ProductService.java", "SỬA", "04", "Catalog", "Quản lý catalog, madeDay và availability.", "ProductRepository"),
+    ("ProductService.java", "SỬA", "04", "Catalog", "Quản lý mẫu catalog, madeDay và availability nhận Order mới; không quản lý tồn thành phẩm.", "ProductRepository"),
     ("CatalogDurationCalculator.java", "TẠO MỚI", "04", "Checkout", "Tính thời lượng từng OrderItem đúng công thức và làm tròn đã chốt.", "Không truy cập DB"),
     ("ProductionCalendarService.java", "TẠO MỚI", "04,09", "WF04", "Cộng số ngày sản xuất, không tính ngày bắt đầu, Chủ nhật và ngày nghỉ cấu hình.", "Holiday source"),
     ("CartService.java", "SỬA", "04", "Checkout", "Chỉ quản lý thêm/sửa/xóa/đọc giỏ; tách checkout ra service riêng.", "CartRepository"),
@@ -275,7 +275,7 @@ endpoint_rows = [
     ["CAT-03", "Catalog", "POST", "/api/products", "MANAGER", "Tạo catalog; bắt buộc madeDay hữu hạn >= 2.", "CreateProductRequest", "ProductDTO", "ProductService", "Idempotency-Key khuyến nghị", "SỬA"],
     ["CAT-04", "Catalog", "PUT", "/api/products/{id}", "MANAGER", "Cập nhật catalog; giá mới không sửa ngược OrderItem snapshot.", "UpdateProductRequest", "ProductDTO", "ProductService", "expectedVersion", "SỬA"],
     ["CART-01", "Cart", "GET", "/api/cart", "USER/GUEST", "Đọc giỏ theo JWT hoặc guestSessionId.", "headers", "CartResDTO", "CartService", "-", "GIỮ"],
-    ["CART-02", "Cart", "POST", "/api/cart/items", "USER/GUEST", "Thêm variant ACCEPTING_ORDERS và quantity dương.", "AddCartItemRequest", "CartResDTO", "CartService", "Idempotency-Key tùy chọn", "SỬA"],
+    ["CART-02", "Cart", "POST", "/api/cart/items", "USER/GUEST", "Thêm mẫu variant ACCEPTING_ORDERS và quantity dương; availability không phải stock.", "AddCartItemRequest", "CartResDTO", "CartService", "Idempotency-Key tùy chọn", "SỬA"],
     ["CART-03", "Cart", "PUT", "/api/cart/items/{variantId}", "USER/GUEST", "Đổi quantity hoặc xóa khi policy cho phép.", "UpdateCartItemRequest", "CartResDTO", "CartService", "-", "SỬA"],
     ["CART-04", "Cart", "DELETE", "/api/cart/items/{variantId}", "USER/GUEST", "Xóa dòng khỏi đúng giỏ của actor.", "path", "204", "CartService", "-", "GIỮ"],
     ["CO-01", "Checkout", "POST", "/api/checkout", "USER", "Checkout các item được chọn, áp voucher, snapshot và tạo PENDING_APPROVAL; chưa tạo payment.", "CheckoutRequest", "CheckoutResponseDTO", "CheckoutService", "Bắt buộc Idempotency-Key", "TẠO MỚI"],
@@ -366,7 +366,7 @@ camunda_rows = [
     ["PaymentTimeoutDelegate.java", "TẠO MỚI", "WF04/WF09", "Timer PT1H", "Khóa Order/Attempt, không hồi sinh callback muộn", "Gọi CancelOrderService/reconciliation"],
     ["OrderWorkflowEventHandler.java", "TẠO MỚI", "WF02-WF05", "Nhận event đã commit", "Correlate message chống trùng", "DurableRequestExecutor"],
     ["approve-cart.bpmn", "MIGRATE", "Legacy", "Không dùng cho đơn mới sau cutover", "Có payment trước review và nghiệp vụ stock cũ", "Kế hoạch instance migration"],
-    ["guest-purchase-runtime.bpmn", "MIGRATE", "Legacy", "Không tạo lifecycle cạnh tranh", "Guest dùng cùng lifecycle Order", "Kế hoạch instance migration"],
+    ["guest-purchase-runtime.bpmn", "MIGRATE", "WF02", "Guest manager review rồi luôn chờ assignment", "Bỏ hasHandmadeItems/nhánh hàng làm sẵn; mọi CATALOG đều made-to-order", "Tương thích process instance cũ"],
 ]
 
 event_rows = [
@@ -399,7 +399,7 @@ plan_rows = [
     ["04", "Catalog/cart/checkout", "VERIFIED", "Đã bàn giao", "Duration, snapshot, checkout PENDING_APPROVAL"],
     ["05", "Custom request", "IMPLEMENTED", "Đã đồng bộ contract 09/10", "Description 4.000 từ, imageUrls[], migration legacy, draft/submit"],
     ["06", "Cancel kernel", "IMPLEMENTED", "Chờ review/MySQL/BPMN cutover", "CancelOrderService"],
-    ["07", "Review/assignment", "IMPLEMENTED", "Chờ review/MySQL/BPMN cutover", "WF02"],
+    ["07", "Review/assignment", "IN_PROGRESS", "Còn bỏ gateway hasHandmadeItems của Guest BPMN", "Guest CATALOG luôn chờ assignment"],
     ["08", "Chat/agreement/timer", "NOT_STARTED", "Sau 05-07", "WF03"],
     ["09", "Payment/start", "NOT_STARTED", "Sau 06-08", "WF04"],
     ["10", "Checkpoint/KCS", "NOT_STARTED", "Sau 07-09", "WF05"],
@@ -418,6 +418,7 @@ decision_rows = [
     ["D07", "Guest token TTL", "Thời hạn cụ thể, cấp lại link và guest refresh session.", "CẦN CHỐT TRƯỚC API GUEST", "Guard đã yêu cầu expiry"],
     ["D08", "Bàn giao thiếu", "Có bắt buộc exportedQuantity=ordered quantity hay cho 0..quantity.", "CẦN CHỐT TRƯỚC WF07", "WF07 hiện mô tả khoảng 0..quantity"],
     ["D09", "Custom draft", "Description bắt buộc tối đa 4.000 từ; imageUrls là List<String> HTTP/HTTPS có thể rỗng; không fetch URL trong transaction.", "ĐÃ TRIỂN KHAI 09/10/2026", "Cột legacy giữ tên, nâng LONGTEXT; converter đọc JSON/raw/null"],
+    ["D10", "Made-to-order và số loại item", "CATALOG và CUSTOM đều handmade, không có hàng làm sẵn. CUSTOM đúng một OrderItem nhưng quantity có thể lớn; CATALOG có thể nhiều OrderItem, mỗi item có quantity riêng.", "ĐÃ CHỐT 09/10/2026", "Bỏ hasHandmadeItems/NOT_REQUIRED khỏi logic mới; availability chỉ kiểm soát nhận Order mới"],
 ]
 
 test_rows = [
@@ -430,6 +431,7 @@ test_rows = [
     ["T05-02", "Custom images", "List rỗng, nhiều URL HTTP(S), URL relative/sai scheme", "List hợp lệ giữ thứ tự; URL sai bị từ chối"],
     ["T05-03", "Custom snapshot", "Sửa draft sau submit", "OrderItem description/imageUrls không thay đổi"],
     ["T07-01", "Assignment race", "Hai staff/manager đồng thời", "Một active assignment thắng"],
+    ["T07-02", "Guest made-to-order", "Catalog item mang handmade=false legacy", "Vẫn chờ assignment; field legacy không được bỏ qua sản xuất"],
     ["T08-01", "Chat access", "Manager hoặc staff không phụ trách", "403 và không subscribe WS"],
     ["T08-02", "Timer race", "Submit form và timeout đồng thời", "Chỉ một kết quả commit"],
     ["T09-01", "Webhook duplicate", "Provider gửi lại callback", "PAID/event đúng một lần theo milestone"],
@@ -529,7 +531,7 @@ def build_workbook():
     ws_flow.freeze_panes = "A6"
 
     add_sheet(wb, "11_WF_MAPPING", "ÁNH XẠ WORKFLOW SANG CODE", "Traceability WF01–WF09", ["Workflow", "Nội dung", "Tác nhân", "Service/Controller chính", "Entity chính", "Kết quả", "Phần triển khai"], wf_rows, [12, 38, 34, 65, 55, 55, 18])
-    add_sheet(wb, "12_KE_HOACH", "KẾ HOẠCH TRIỂN KHAI", "Thứ tự dependency đã thống nhất; PHẦN 05 đang mở lại theo quyết định custom ngày 09/10/2026", ["Phần", "Phạm vi", "Trạng thái", "Điều kiện/Ghi chú", "Đầu ra"], plan_rows, [10, 45, 18, 70, 70])
+    add_sheet(wb, "12_KE_HOACH", "KẾ HOẠCH TRIỂN KHAI", "Thứ tự dependency đã thống nhất; PHẦN 07 đang hiệu chỉnh để loại bỏ nhánh hàng làm sẵn legacy", ["Phần", "Phạm vi", "Trạng thái", "Điều kiện/Ghi chú", "Đầu ra"], plan_rows, [10, 45, 18, 70, 70])
     add_sheet(wb, "13_QUYET_DINH", "QUYẾT ĐỊNH VÀ ĐIỂM CẦN CHỐT", "Không tự biến đề xuất kỹ thuật chưa duyệt thành policy nghiệp vụ", ["Mã", "Chủ đề", "Quyết định/Nội dung", "Trạng thái", "Tác động"], decision_rows, [10, 28, 100, 28, 60])
     add_sheet(wb, "14_KIEM_THU", "KỊCH BẢN KIỂM THỬ CHẤP NHẬN", "Danh sách tối thiểu; mỗi phase bổ sung unit/integration/concurrency/security test", ["Mã", "Nhóm", "Dữ liệu/Tình huống", "Kết quả bắt buộc"], test_rows, [14, 24, 75, 95])
 

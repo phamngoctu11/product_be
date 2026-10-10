@@ -9,6 +9,7 @@
 3. Xác định điểm bắt đầu, kết thúc, tác nhân, các UC và những bước thuộc workflow kế tiếp.
 4. Dùng code để đối chiếu hiện trạng; không lấy hành vi code chưa cập nhật để thay yêu cầu mục tiêu.
 5. Ghi rõ điểm chưa quyết định. Không tự thêm quyền, thanh toán, timer, review hoặc trạng thái chưa được thống nhất.
+6. Luôn giữ invariant domain: không có hàng làm sẵn; CATALOG và CUSTOM đều made-to-order. Không vẽ gateway `handmade/ready-made`. CUSTOM có đúng một OrderItem với quantity tùy ý; CATALOG có thể nhiều OrderItem, mỗi item có quantity riêng; availability chỉ bật/tắt nhận Order catalog mới.
 
 ## 2. Cấu trúc bắt buộc
 

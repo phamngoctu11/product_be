@@ -11,6 +11,7 @@ Nguồn nghiệp vụ: `target.txt`, tài liệu `docs/use-cases/WF01-custom-req
 - Chưa có business cap số ảnh hoặc allowlist host; không tự hard-code con số/domain. Giới hạn request chung vẫn áp dụng.
 - API ghi mới không nhận `attachments` dạng chuỗi làm contract chính. Description và toàn bộ danh sách URL phải được snapshot bất biến vào OrderItem khi submit.
 - Database phải đủ chứa chắc chắn description 4.000 từ UTF-8 và danh sách URL. `TEXT` 64 KiB hiện tại không được coi là bảo đảm; migration cần dùng `LONGTEXT`/kiểu tương đương và có đường đọc dữ liệu legacy.
+- Mỗi Order CUSTOM có đúng một loại custom, lưu thành đúng một OrderItem; `quantity` có thể lớn hơn một và là số lượng của cùng loại đó, không phải số OrderItem.
 
 ### Đối chiếu triển khai
 

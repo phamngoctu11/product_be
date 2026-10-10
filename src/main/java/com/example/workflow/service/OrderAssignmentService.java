@@ -12,6 +12,7 @@ import com.example.workflow.entity.OrderAssignment;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
+import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.OrderAssignmentMapper;
@@ -62,7 +63,7 @@ public class OrderAssignmentService {
 
     @Transactional(readOnly = true)
     public Page<AvailableStaffDTO> listAvailableStaff(Pageable pageable) {
-        currentUserService.requireCurrentUser(Role.MANAGER, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED);
+        requireActiveManager();
         return userRepository.findAvailableStaff(PageableUtils.normalize(pageable, 20, 50))
                 .map(assignmentMapper::toAvailableStaff);
     }
@@ -86,10 +87,7 @@ public class OrderAssignmentService {
             String idempotencyKey
     ) {
         requireAssignRequest(request);
-        User manager = currentUserService.requireCurrentUser(
-                Role.MANAGER,
-                ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
-        );
+        User manager = requireActiveManager();
         Map<String, Object> canonical = assignmentPayload(orderId, request.orderVersion(), request.staffId());
         String result = durableRequests.execute(
                 "order-assignment:manager:" + manager.getId() + ":" + orderId,
@@ -228,6 +226,16 @@ public class OrderAssignmentService {
                 "/topic/user-notifications/" + staffId
         );
         cacheService.evictStaffAssigned(transitioned, expectedStatus, null, staffId);
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_ASSIGNED,
+                new OrderAssignedEvent(
+                        orderId,
+                        staffId,
+                        source,
+                        nextStatus,
+                        transitioned.getUser() != null
+                )
+        );
         if (nextStatus == OrderStatus.ORDER_ACCEPTED) {
             eventPublisher.publishAfterCommit(EventTypes.ORDER_ACCEPTED, new OrderAcceptedEvent(orderId));
         }
@@ -270,6 +278,17 @@ public class OrderAssignmentService {
         if (staff.getRole() != Role.STAFF || staff.isDelete() || !Boolean.TRUE.equals(staff.getIsActive())) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.STAFF_NOT_AVAILABLE);
         }
+    }
+
+    private User requireActiveManager() {
+        User manager = currentUserService.requireCurrentUser(
+                Role.MANAGER,
+                ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
+        );
+        if (manager.isDelete() || !Boolean.TRUE.equals(manager.getIsActive())) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_INACTIVE);
+        }
+        return manager;
     }
 
     private OrderStatus statusAfterAssignment(Order order) {

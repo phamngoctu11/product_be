@@ -4,6 +4,8 @@ Ngày hoàn thành: 07/10/2026. Nguồn nghiệp vụ: `target.txt`, WF02 và b�
 
 ## Kết quả
 
+- Catalog chỉ là tập mẫu thiết kế do shop cung cấp, không phải thành phẩm có sẵn. Một Order CATALOG có thể chứa nhiều OrderItem, mỗi item có quantity riêng; tất cả đều phải được sản xuất handmade sau khi đơn đủ điều kiện.
+- Availability `ACCEPTING_ORDERS/PAUSED/DISCONTINUED` chỉ kiểm soát nhận Order mới, không biểu diễn tồn kho hoặc nhu cầu sản xuất. Order đã tạo dùng snapshot nên không đổi theo availability cập nhật về sau.
 - Thêm `CatalogDurationCalculator` với rule `CATALOG_V1`, tính độc lập cho từng `OrderItem`: q=1/5/6/10 và madeDay=3 cho 5/14/16/22 ngày.
 - Thêm `ProductionCalendarService`: không tính ngày bắt đầu, bỏ Chủ nhật và các ngày ISO cấu hình tại `workflow.production.holidays`.
 - Thêm `POST /api/checkout` cho USER và chuyển `POST /api/guest-checkout` sang `CheckoutService`.

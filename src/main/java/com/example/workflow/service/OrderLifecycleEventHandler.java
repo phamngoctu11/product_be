@@ -6,10 +6,12 @@ import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
+import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentMethod;
+import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,6 +23,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.Duration;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 public class OrderLifecycleEventHandler {
@@ -30,6 +36,8 @@ public class OrderLifecycleEventHandler {
     private final NotificationService notificationService;
     private final ApplicationCacheService applicationCacheService;
     private final OrderWorkflowService orderWorkflowService;
+    private final GuestPurchaseWorkflowService guestPurchaseWorkflowService;
+    private final OrderLookupTokenService orderLookupTokenService;
     private final ObjectMapper objectMapper;
 
     @Value("${app.frontend-base-url:http://localhost:4200}")
@@ -88,7 +96,12 @@ public class OrderLifecycleEventHandler {
             emailService.sendOrderAcceptedEmail(
                     order.getEmail(),
                     order.getRecipientName(),
-                    order.getId()
+                    order.getId(),
+                    order.getUser() == null ? signedGuestOrderUrl(order) : authenticatedOrderUrl(order.getId()),
+                    catalogSummary(order),
+                    order.getFinalPrice(),
+                    totalQuantity(order),
+                    maximumDurationDays(order)
             );
         }
         if (order.getUser() != null) {
@@ -111,6 +124,11 @@ public class OrderLifecycleEventHandler {
         }
 
         applicationCacheService.evictOrderCreated(order);
+        guestPurchaseWorkflowService.startAfterOrderCreated(
+                order.getId(),
+                order.getGuestSessionId(),
+                hasHandmadeItems(order)
+        );
         String accessUrl = StringUtils.hasText(event.lookupToken())
                 ? UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
                         .path("/guest/orders/")
@@ -129,6 +147,15 @@ public class OrderLifecycleEventHandler {
                 accessUrl,
                 event.productionDurationDays()
         );
+    }
+
+    public void handleOrderAssigned(OrderAssignedEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_ASSIGNED");
+        if (order.getStatus() == OrderStatus.CANCELLED
+                || !Objects.equals(event.staffId(), assignedStaffId(order))) {
+            return;
+        }
+        orderWorkflowService.advanceAfterAssignment(order.getId(), event.staffId());
     }
 
     public void handleOrderDelivered(OrderDeliveredEvent event) {
@@ -269,6 +296,68 @@ public class OrderLifecycleEventHandler {
                 .build()
                 .encode()
                 .toUriString();
+    }
+
+    private String signedGuestOrderUrl(Order order) {
+        String token = orderLookupTokenService.issueSignedReadToken(order, Duration.ofDays(30));
+        return UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path("/guest/orders/")
+                .path(order.getId().toString())
+                .queryParam("token", token)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    private String catalogSummary(Order order) {
+        if (order.getItems() == null) {
+            return null;
+        }
+        String summary = order.getItems().stream()
+                .map(this::itemName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .limit(10)
+                .collect(Collectors.joining(", "));
+        return StringUtils.hasText(summary) ? summary : null;
+    }
+
+    private String itemName(OrderItem item) {
+        if (StringUtils.hasText(item.getProductNameSnapshot())) {
+            return StringUtils.hasText(item.getVariantNameSnapshot())
+                    ? item.getProductNameSnapshot() + " - " + item.getVariantNameSnapshot()
+                    : item.getProductNameSnapshot();
+        }
+        if (item.getProductVariant() == null) {
+            return null;
+        }
+        String variant = item.getProductVariant().getVariantName();
+        String product = item.getProductVariant().getProduct() == null
+                ? null
+                : item.getProductVariant().getProduct().getProductName();
+        return StringUtils.hasText(product) && StringUtils.hasText(variant)
+                ? product + " - " + variant
+                : StringUtils.hasText(product) ? product : variant;
+    }
+
+    private Integer totalQuantity(Order order) {
+        return order.getItems() == null
+                ? null
+                : order.getItems().stream().mapToInt(OrderItem::getQuantity).sum();
+    }
+
+    private Integer maximumDurationDays(Order order) {
+        return order.getItems() == null
+                ? null
+                : order.getItems().stream()
+                        .map(OrderItem::getProductionDurationDays)
+                        .filter(Objects::nonNull)
+                        .max(Integer::compareTo)
+                        .orElse(null);
+    }
+
+    private boolean hasHandmadeItems(Order order) {
+        return order.getItems() != null && order.getItems().stream().anyMatch(OrderItem::isHandmade);
     }
 
     private String paymentLabel(Order order) {

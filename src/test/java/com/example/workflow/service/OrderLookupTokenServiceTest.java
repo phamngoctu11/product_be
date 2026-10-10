@@ -2,11 +2,50 @@ package com.example.workflow.service;
 
 import com.example.workflow.entity.Order;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OrderLookupTokenServiceTest {
     private final OrderLookupTokenService service = new OrderLookupTokenService();
+
+    @Test
+    void signedReadTokenIsOrderBoundReadOnlyAndDoesNotRotateCheckoutToken() {
+        ReflectionTestUtils.setField(
+                service,
+                "signingSecret",
+                "test-order-link-signing-secret-with-at-least-32-characters"
+        );
+        var order = order(99L);
+        String checkoutToken = service.issueFor(
+                order,
+                java.util.Set.of(OrderLookupTokenService.Scope.READ, OrderLookupTokenService.Scope.CANCEL),
+                Duration.ofHours(1)
+        );
+        String originalHash = order.getOrderLookupTokenHash();
+
+        String signed = service.issueSignedReadToken(order, Duration.ofMinutes(5));
+
+        service.authorize(order, signed, OrderLookupTokenService.Scope.READ);
+        org.assertj.core.api.Assertions.assertThat(order.getOrderLookupTokenHash()).isEqualTo(originalHash);
+        service.authorize(order, checkoutToken, OrderLookupTokenService.Scope.CANCEL);
+
+        var anotherOrder = order(100L);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.authorize(
+                anotherOrder, signed, OrderLookupTokenService.Scope.READ
+        )).isInstanceOf(com.example.workflow.exception.AppException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.authorize(
+                order, signed, OrderLookupTokenService.Scope.CANCEL
+        )).isInstanceOf(com.example.workflow.exception.AppException.class);
+    }
+
+    private com.example.workflow.entity.Order order(Long id) {
+        var order = new com.example.workflow.entity.Order();
+        order.setId(id);
+        return order;
+    }
 
     @Test
     void issuesUniqueTokenAndPersistsOnlyHash() {

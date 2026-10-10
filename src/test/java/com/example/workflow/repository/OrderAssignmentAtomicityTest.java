@@ -20,6 +20,7 @@ import com.example.workflow.service.ManagerOrderReviewService;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.OrderAssignmentService;
 import com.example.workflow.service.OrderStatusHistoryService;
+import com.example.workflow.service.OrderWorkflowService;
 import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
@@ -48,6 +49,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,6 +108,7 @@ class OrderAssignmentAtomicityTest {
     @MockBean ApplicationCacheService cacheService;
     @MockBean OrderCancellationService cancellationService;
     @MockBean OrderDetailsAssembler orderDetailsAssembler;
+    @MockBean OrderWorkflowService orderWorkflowService;
 
     @BeforeEach
     void schema() throws Exception {
@@ -185,6 +191,10 @@ class OrderAssignmentAtomicityTest {
                 "SELECT COUNT(*) FROM workflow_outbox WHERE event_type='" + EventTypes.ORDER_ACCEPTED + "'",
                 Integer.class
         )).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM workflow_outbox WHERE event_type='" + EventTypes.ORDER_ASSIGNED + "'",
+                Integer.class
+        )).isEqualTo(1);
     }
 
     @Test
@@ -208,6 +218,77 @@ class OrderAssignmentAtomicityTest {
         assertThat(assignmentRepository.findByOrderIdOrderByAssignedAtDesc(fixture.orderId())).hasSize(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_requests", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_transition_audit", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentManagersCanCreateOnlyOneAssignmentForAnOrder() throws Exception {
+        Fixture fixture = saveFixture(false, OrderType.CATALOG);
+        when(currentUserService.requireCurrentUser(Role.MANAGER, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED))
+                .thenReturn(fixture.manager());
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        List<Boolean> results;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> attemptManagerAssignment(
+                    fixture.orderId(), fixture.staff().getId(), "manager-race-1", ready, start
+            ));
+            var second = executor.submit(() -> attemptManagerAssignment(
+                    fixture.orderId(), fixture.staff().getId(), "manager-race-2", ready, start
+            ));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        }
+
+        assertThat(results).containsExactlyInAnyOrder(true, false);
+        assertThat(assignmentRepository.findByOrderIdOrderByAssignedAtDesc(fixture.orderId())).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_transition_audit", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentOrdersCanOccupyAStaffOnlyOnce() throws Exception {
+        Fixture fixture = saveFixture(false, OrderType.CATALOG);
+        Long secondOrderId = saveOrder(fixture.owner(), OrderType.CATALOG);
+        when(currentUserService.requireCurrentUser(Role.MANAGER, ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED))
+                .thenReturn(fixture.manager());
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        List<Boolean> results;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> attemptManagerAssignment(
+                    fixture.orderId(), fixture.staff().getId(), "staff-race-1", ready, start
+            ));
+            var second = executor.submit(() -> attemptManagerAssignment(
+                    secondOrderId, fixture.staff().getId(), "staff-race-2", ready, start
+            ));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        }
+
+        assertThat(results).containsExactlyInAnyOrder(true, false);
+        assertThat(assignmentRepository.findAll()).hasSize(1);
+    }
+
+    private boolean attemptManagerAssignment(
+            Long orderId,
+            String staffId,
+            String key,
+            CountDownLatch ready,
+            CountDownLatch start
+    ) throws InterruptedException {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) {
+            return false;
+        }
+        try {
+            assignmentService.assignByManager(orderId, new AssignOrderRequest(0L, staffId), key);
+            return true;
+        } catch (RuntimeException expectedConflict) {
+            return false;
+        }
     }
 
     private Fixture saveFixture(boolean guest, OrderType type) {

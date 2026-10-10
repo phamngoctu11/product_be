@@ -60,6 +60,7 @@ public class ManagerOrderReviewService {
     private final ManagerReviewMapper reviewMapper;
     private final OrderAssignmentMapper assignmentMapper;
     private final ApplicationCacheService cacheService;
+    private final OrderWorkflowService orderWorkflowService;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -177,6 +178,7 @@ public class ManagerOrderReviewService {
                 ? approvedAt.plusHours(CUSTOM_CONFIRMATION_HOURS)
                 : null);
         Order saved = orderRepository.saveAndFlush(order);
+        orderWorkflowService.completeManagerReview(saved.getId(), true, manager.getId());
         cacheService.evictManagerReviewed(
                 saved,
                 true,
@@ -212,6 +214,7 @@ public class ManagerOrderReviewService {
         order.setManagerApprovedAt(null);
         order.setConfirmationDueAt(null);
         Order saved = orderRepository.saveAndFlush(order);
+        orderWorkflowService.completeManagerReview(saved.getId(), false, manager.getId());
         return result(saved, ManagerReviewDecision.REJECTED, manager, rejectedAt, normalizedReason, null);
     }
 
@@ -238,10 +241,14 @@ public class ManagerOrderReviewService {
     }
 
     private User requireManager() {
-        return currentUserService.requireCurrentUser(
+        User manager = currentUserService.requireCurrentUser(
                 Role.MANAGER,
                 ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
         );
+        if (manager.isDelete() || !Boolean.TRUE.equals(manager.getIsActive())) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CURRENT_USER_INACTIVE);
+        }
+        return manager;
     }
 
     private void ensurePendingReview(Order order, Long expectedVersion) {

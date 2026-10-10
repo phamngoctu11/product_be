@@ -30,11 +30,19 @@ public class GuestPurchaseWorkflowService {
         variables.put("hasHandmadeItems", hasHandmadeItems);
         variables.put("guestOrder", true);
 
+        String businessKey = "guest-order-" + orderId;
         ProcessInstance processInstance;
         try {
+            ProcessInstance existing = runtimeService.createProcessInstanceQuery()
+                    .processInstanceBusinessKey(businessKey)
+                    .singleResult();
+            if (existing != null) {
+                stateService.markStarted(orderId, existing.getProcessInstanceId());
+                return StartResult.started(existing.getProcessInstanceId());
+            }
             processInstance = runtimeService.startProcessInstanceByKey(
                     PROCESS_KEY,
-                    "guest-order-" + orderId,
+                    businessKey,
                     variables
             );
         } catch (RuntimeException ex) {

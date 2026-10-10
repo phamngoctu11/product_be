@@ -44,15 +44,15 @@
 
   <polygon class="decision" points="775,380 925,465 775,550 625,465"/>
   <text class="text" x="710" y="458">Nhu cầu?</text>
-  <text class="small" x="682" y="483">Mua thường / custom</text>
+  <text class="small" x="682" y="483">Catalog / custom</text>
   <path class="arrow" d="M775 330 L775 380"/>
 
   <rect class="guest" x="220" y="620" width="360" height="92"/>
-  <text class="text" x="290" y="653">Mua sản phẩm thường</text>
+  <text class="text" x="290" y="653">Đặt theo mẫu catalog</text>
   <text class="small" x="270" y="679">Thêm cart theo guestSessionId</text>
   <text class="small" x="270" y="700">Public voucher nếu hợp lệ</text>
   <path class="arrow-guest" d="M650 512 C550 590 470 620 400 620"/>
-  <text class="label" x="500" y="585">Mua thường</text>
+  <text class="label" x="500" y="585">Catalog</text>
 
   <rect class="manager" x="980" y="625" width="360" height="84"/>
   <text class="text" x="1045" y="658">Custom Request</text>
@@ -79,23 +79,23 @@
   <path class="arrow-email" d="M725 1050 L725 1100"/>
 
   <polygon class="decision" points="725,1235 875,1320 725,1405 575,1320"/>
-  <text class="text" x="668" y="1313">Loại item?</text>
-  <text class="small" x="640" y="1338">Có sẵn / handmade</text>
+  <text class="text" x="650" y="1313">Manager duyệt?</text>
+  <text class="small" x="640" y="1338">Khả năng thực hiện</text>
   <path class="arrow" d="M725 1182 L725 1235"/>
 
   <rect class="box" x="165" y="1280" width="350" height="78"/>
-  <text class="text" x="255" y="1313">Hàng có sẵn</text>
-  <text class="small" x="230" y="1339">Đóng gói / giao hàng</text>
+  <text class="text" x="255" y="1313">Từ chối Order</text>
+  <text class="small" x="220" y="1339">CANCELLED + email lý do</text>
   <path class="arrow" d="M575 1320 L515 1320"/>
 
   <rect class="manager" x="960" y="1270" width="390" height="95"/>
-  <text class="text" x="1035" y="1303">Manager phân staff</text>
-  <text class="small" x="1013" y="1330">Phân theo từng OrderItem handmade</text>
+  <text class="text" x="1010" y="1303">Manager phân một staff</text>
+  <text class="small" x="1015" y="1330">Assignment cấp Order</text>
   <path class="arrow-manager" d="M875 1320 L960 1320"/>
 
   <rect class="staff" x="960" y="1420" width="390" height="84"/>
-  <text class="text" x="1047" y="1453">Staff nhận item</text>
-  <text class="small" x="1030" y="1479">Thực hiện sản phẩm handmade</text>
+  <text class="text" x="1047" y="1453">Staff nhận Order</text>
+  <text class="small" x="1000" y="1479">Sản xuất/checkpoint theo từng item</text>
   <path class="arrow-staff" d="M1155 1365 L1155 1420"/>
 
   <rect class="staff" x="960" y="1545" width="390" height="84"/>
@@ -127,7 +127,6 @@
   <text class="text" x="260" y="1143">READY_TO_SHIP</text>
   <text class="small" x="238" y="1169">Giao hàng → Hoàn tất đơn</text>
   <path class="arrow" d="M340 1240 L340 1188"/>
-  <path class="arrow" d="M340 1280 L340 1188"/>
 
   <rect class="email" x="960" y="980" width="390" height="86"/>
   <text class="text" x="1018" y="1013">Mời tạo tài khoản</text>
