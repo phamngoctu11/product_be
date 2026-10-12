@@ -146,7 +146,6 @@ class OrderAssignmentAtomicityTest {
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.eq(fixture.orderId()),
                 org.mockito.ArgumentMatchers.eq(fixture.staff().getId()),
-                org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.anyString()
         );
     }

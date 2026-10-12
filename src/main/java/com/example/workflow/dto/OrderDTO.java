@@ -18,6 +18,8 @@ public class OrderDTO implements Serializable {
     private com.example.workflow.nume.PaymentMethod paymentMethodType;
     private LocalDateTime productionStartedAt;
     private Integer currentAgreementVersion;
+    private LocalDateTime confirmationDueAt;
+    private LocalDateTime userSubmittedAt;
     private String user_id;
     private String lastname;
     private String customerName;
@@ -41,6 +43,10 @@ public class OrderDTO implements Serializable {
     private String shippingAddress;
     private String approvedById;
     private String approvedByFullName;
+    private String staffId;
+    private String staffName;
+    private String managerId;
+    private String managerName;
 
     @Data
     @NoArgsConstructor

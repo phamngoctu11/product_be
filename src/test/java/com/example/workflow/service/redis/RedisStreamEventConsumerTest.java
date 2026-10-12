@@ -25,7 +25,6 @@ class RedisStreamEventConsumerTest {
     private final EmailService emailService = mock(EmailService.class);
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final OrderLifecycleEventHandler orderLifecycleEventHandler = mock(OrderLifecycleEventHandler.class);
-    private final StaffCommissionService staffCommissionService = mock(StaffCommissionService.class);
     private final OptionalCacheService optionalCacheService = mock(OptionalCacheService.class);
     private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests = mock(com.example.workflow.service.consistency.DurableRequestExecutor.class);
     private final RedisStreamRetryTemplate retryTemplate = mock(RedisStreamRetryTemplate.class);
@@ -36,7 +35,6 @@ class RedisStreamEventConsumerTest {
             emailService,
             orderRepository,
             orderLifecycleEventHandler,
-            staffCommissionService,
             optionalCacheService,
             durableRequests,
             retryTemplate

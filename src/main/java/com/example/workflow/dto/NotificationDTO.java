@@ -7,7 +7,6 @@ public record NotificationDTO(
         String title,
         String content,
         Long orderId,
-        Long consultationRequestId,
         boolean read,
         Instant createdAt
 ) {

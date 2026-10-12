@@ -863,16 +863,14 @@ Mỗi hạng mục bàn giao API contract, migration nếu có, BPMN tương ứ
 
 M. CÁC PHÂN HỆ HỖ TRỢ
 
-Các phân hệ tài khoản, wishlist, đánh giá, tư vấn trước bán và thống kê không được coi là yêu cầu ngầm “dev tự tìm hiểu”.
+Các phân hệ tài khoản, wishlist, đánh giá và thống kê không được coi là yêu cầu ngầm “dev tự tìm hiểu”.
 Phạm vi tích hợp trong đợt workflow này:
 - Tài khoản cung cấp userId, role, contact và reputation; đăng ký/đăng nhập/quên mật khẩu/cập nhật hồ sơ phục vụ truy cập.
 - Wishlist cho USER thêm/xóa/xem sản phẩm quan tâm; không tạo Order và không giữ stock.
 - Người mua catalog nhận quyền đánh giá sau DELIVERED; kiểm tra đơn/dòng hàng đã mua, guest dùng cơ chế chứng minh quyền qua link/token. Chưa phát triển đánh giá custom và complaint.
-- Consultation/chat trước bán là ngữ cảnh riêng, không gán nhầm quyền sang ChatThread ORDER.
-- ORDER_CREATED có thể kích hoạt ghi nhận đóng góp tư vấn; ORDER_DELIVERED xác nhận và ORDER_CANCELLED hủy ghi nhận.
-- Phân công sản xuất không tự sinh hoa hồng tư vấn.
+- Chỉ duy trì chat theo Order giữa USER sở hữu và STAFF được phân công. Chat tư vấn trước bán, ghi nhận đóng góp tư vấn và toàn bộ tính hoa hồng tư vấn bị loại khỏi hệ thống.
 - Báo cáo quản lý lấy trạng thái/giá trị chính thức từ database; không tính doanh thu chỉ từ Order vừa tạo chưa thanh toán/hoàn tất.
-Không có yêu cầu thay đổi công thức hoa hồng hoặc quy trình quản lý tài khoản trong phạm vi này; nếu mở rộng phải có đặc tả riêng về đầu vào, quyền và kết quả, không suy từ workflow Order.
+Nếu sau này cần tư vấn trước bán hoặc hoa hồng, phải đặc tả và triển khai như một phạm vi mới; không khôi phục ngầm từ code hoặc dữ liệu legacy.
 
 N. NGUỒN THAM CHIẾU TRIỂN KHAI
 - OrderService: hủy, nhận hàng, phản ánh số lượng, reorder, callback và lịch sử.

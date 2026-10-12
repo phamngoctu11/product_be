@@ -55,6 +55,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("cutoff") LocalDateTime cutoff
     );
 
+    @Query("SELECT o.id FROM Order o WHERE o.orderType = com.example.workflow.nume.OrderType.CUSTOM " +
+            "AND o.userSubmittedAt IS NULL AND o.confirmationDueAt IS NOT NULL AND o.confirmationDueAt <= :now " +
+            "AND o.status IN :statuses ORDER BY o.confirmationDueAt ASC")
+    List<Long> findCustomAgreementTimeoutCandidates(
+            @Param("now") LocalDateTime now,
+            @Param("statuses") List<OrderStatus> statuses,
+            Pageable pageable
+    );
+
     @EntityGraph(attributePaths = {"user"})
     Page<Order> findByStatusOrderByStartOrderTimeAscIdAsc(OrderStatus status, Pageable pageable);
 

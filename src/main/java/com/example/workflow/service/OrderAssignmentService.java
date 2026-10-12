@@ -236,7 +236,6 @@ public class OrderAssignmentService {
                 "Bạn đã nhận phụ trách đơn hàng #" + orderId + ".",
                 orderId,
                 staffId,
-                null,
                 "/topic/user-notifications/" + staffId
         );
         cacheService.evictStaffAssigned(transitioned, expectedStatus, null, staffId);

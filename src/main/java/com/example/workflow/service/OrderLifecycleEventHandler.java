@@ -7,6 +7,8 @@ import com.example.workflow.event.payload.OrderCancelledEvent;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.OrderAssignedEvent;
+import com.example.workflow.event.payload.OrderAgreementSubmittedEvent;
+import com.example.workflow.event.payload.OrderAgreementReviewedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.nume.OrderType;
@@ -31,11 +33,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderLifecycleEventHandler {
     private final OrderRepository orderRepository;
-    private final ConsultationAttributionService consultationAttributionService;
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final ApplicationCacheService applicationCacheService;
     private final OrderWorkflowService orderWorkflowService;
+    private final OrderChatService orderChatService;
     private final GuestPurchaseWorkflowService guestPurchaseWorkflowService;
     private final OrderLookupTokenService orderLookupTokenService;
     private final ObjectMapper objectMapper;
@@ -45,7 +47,6 @@ public class OrderLifecycleEventHandler {
 
     public void handleOrderCreated(OrderCreatedEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CREATED");
-        consultationAttributionService.recordOrderAttributions(order);
         applicationCacheService.evictOrderCreated(order);
 
         if (order.getUser() == null) {
@@ -85,7 +86,6 @@ public class OrderLifecycleEventHandler {
                 content,
                 order.getId(),
                 userId,
-                null,
                 "/topic/user-notifications/" + userId
         );
     }
@@ -111,7 +111,6 @@ public class OrderLifecycleEventHandler {
                     "Đơn hàng #" + order.getId() + " đã được chấp nhận và đang chờ bước tiếp theo.",
                     order.getId(),
                     userId,
-                    null,
                     "/topic/user-notifications/" + userId
             );
         }
@@ -154,12 +153,35 @@ public class OrderLifecycleEventHandler {
                 || !Objects.equals(event.staffId(), assignedStaffId(order))) {
             return;
         }
+        if (order.getUser() != null) {
+            orderChatService.ensureThreadForAssignedOrder(order.getId());
+        }
         orderWorkflowService.advanceAfterAssignment(order.getId(), event.staffId());
+    }
+
+    public void handleOrderAgreementSubmitted(OrderAgreementSubmittedEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_AGREEMENT_SUBMITTED");
+        if (order.getCurrentAgreementVersion() == null
+                || order.getCurrentAgreementVersion() < event.agreementVersion()
+                || order.getUserSubmittedAt() == null) {
+            return;
+        }
+        orderWorkflowService.correlateAgreementSubmitted(event.orderId(), event.agreementVersion());
+    }
+
+    public void handleOrderAgreementReviewed(OrderAgreementReviewedEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_AGREEMENT_REVIEWED");
+        if (order.getCurrentAgreementVersion() == null
+                || !order.getCurrentAgreementVersion().equals(event.agreementVersion())) {
+            return;
+        }
+        orderWorkflowService.completeAgreementReview(
+                event.orderId(), event.agreementVersion(), event.decision().name(), event.staffId()
+        );
     }
 
     public void handleOrderDelivered(OrderDeliveredEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_DELIVERED");
-        consultationAttributionService.confirmOrderAttributions(order.getId());
         if (order.getUser() == null) {
             return;
         }
@@ -170,7 +192,6 @@ public class OrderLifecycleEventHandler {
                 "Đơn hàng #" + order.getId() + " đã hoàn tất. Hãy chia sẻ trải nghiệm của bạn cho từng sản phẩm.",
                 order.getId(),
                 userId,
-                null,
                 "/topic/user-notifications/" + userId
         );
         applicationCacheService.evictOrderDelivered(order, userId);
@@ -179,7 +200,6 @@ public class OrderLifecycleEventHandler {
     public void handleOrderCancelled(OrderCancelledEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CANCELLED");
         orderWorkflowService.correlateOrderCancelled(order.getId());
-        consultationAttributionService.cancelOrderAttributions(order.getId());
         applicationCacheService.evictOrderCancelled(order, event.oldStatus());
 
         if (StringUtils.hasText(order.getEmail())) {
@@ -197,7 +217,6 @@ public class OrderLifecycleEventHandler {
                     cancellationMessage(order.getId(), event.reason()),
                     order.getId(),
                     userId,
-                    null,
                     "/topic/user-notifications/" + userId
             );
         }
@@ -210,7 +229,6 @@ public class OrderLifecycleEventHandler {
                     cancellationMessage(order.getId(), event.reason()),
                     order.getId(),
                     assignedStaffId,
-                    null,
                     "/topic/user-notifications/" + assignedStaffId
             );
         }
@@ -218,7 +236,6 @@ public class OrderLifecycleEventHandler {
                 "Đơn hàng đã hủy",
                 cancellationMessage(order.getId(), event.reason()),
                 order.getId(),
-                null,
                 null,
                 "/topic/admin-notifications"
         );
@@ -242,7 +259,6 @@ public class OrderLifecycleEventHandler {
                     "Thanh toán cho đơn hàng #" + order.getId() + " đã được xác nhận.",
                     order.getId(),
                     userId,
-                    null,
                     "/topic/user-notifications/" + userId
             );
         }
@@ -254,7 +270,6 @@ public class OrderLifecycleEventHandler {
                     "Đơn hàng #" + order.getId() + " đã thanh toán và đang chờ bạn bắt đầu sản xuất.",
                     order.getId(),
                     staffId,
-                    null,
                     "/topic/user-notifications/" + staffId
             );
         }

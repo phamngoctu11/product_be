@@ -464,7 +464,7 @@ public class OrderService {
     }
 
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
-        notificationService.sendNotification(title, content, orderId, targetUserId, null, destination);
+        notificationService.sendNotification(title, content, orderId, targetUserId, destination);
     }
 
     private void saveCustomerNotificationIfSystemUser(Order order, String title, String content) {

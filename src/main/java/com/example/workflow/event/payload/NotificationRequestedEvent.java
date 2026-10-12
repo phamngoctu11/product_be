@@ -5,7 +5,6 @@ public record NotificationRequestedEvent(
         String content,
         Long orderId,
         String targetUserId,
-        Long consultationRequestId,
         String destination
 ) {
 }

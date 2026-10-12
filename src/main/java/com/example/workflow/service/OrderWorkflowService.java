@@ -17,6 +17,8 @@ public class OrderWorkflowService {
     private static final String GUEST_ASSIGNMENT_TASK = "Task_ManagerAssignOrder";
     private static final String LEGACY_GUEST_ASSIGNMENT_TASK = "Task_ManagerAssignHandmadeItems";
     private static final String ORDER_ASSIGNED_MESSAGE = "ORDER_ASSIGNED";
+    private static final String ORDER_AGREEMENT_SUBMITTED_MESSAGE = "ORDER_AGREEMENT_SUBMITTED";
+    private static final String AGREEMENT_REVIEW_TASK = "staff_review_agreement";
 
     private final RuntimeService runtimeService;
     private final TaskService taskService;
@@ -86,6 +88,34 @@ public class OrderWorkflowService {
         } catch (RuntimeException ex) {
             throw new IllegalStateException("Could not correlate cancellation for order " + orderId, ex);
         }
+    }
+
+    /**
+     * Hook for the WF03 interrupting wait-for-form scope; DB remains authoritative during staged cutover.
+     */
+    public void correlateAgreementSubmitted(Long orderId, Integer agreementVersion) {
+        Execution execution = runtimeService.createExecutionQuery()
+                .messageEventSubscriptionName(ORDER_AGREEMENT_SUBMITTED_MESSAGE)
+                .processVariableValueEquals("orderId", orderId)
+                .singleResult();
+        if (execution == null) return;
+        runtimeService.messageEventReceived(
+                ORDER_AGREEMENT_SUBMITTED_MESSAGE,
+                execution.getId(),
+                Map.of("currentAgreementVersion", agreementVersion)
+        );
+    }
+
+    /** Completes the target WF03 staff task when that process version is deployed. */
+    public boolean completeAgreementReview(Long orderId, Integer agreementVersion, String decision, String staffId) {
+        Task task = singleTask(orderId, AGREEMENT_REVIEW_TASK);
+        if (task == null) return false;
+        taskService.complete(task.getId(), Map.of(
+                "currentAgreementVersion", agreementVersion,
+                "agreementDecision", decision,
+                "staffId", staffId
+        ));
+        return true;
     }
 
     private Task singleTask(Long orderId, String taskDefinitionKey) {

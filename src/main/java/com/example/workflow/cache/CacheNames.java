@@ -33,8 +33,4 @@ public final class CacheNames {
     public static final String PRODUCT_REVIEWS = "productReviews";
     public static final String PRODUCT_REVIEW_SUMMARIES = "productReviewSummaries";
 
-    public static final String STAFF_COMMISSION_SUMMARIES = "staffCommissionSummaries";
-    public static final String STAFF_COMMISSION_DETAILS = "staffCommissionDetails";
-    public static final String CONSULTATION_ATTRIBUTIONS = "consultationAttributions";
-    public static final String CONSULTATION_REVIEWS = "consultationReviews";
 }

@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      PHẦN 05 VÀ PHẦN 07 ĐÃ IMPLEMENTED
-Phần đang thực hiện:      CHỜ REVIEW PHẦN 07 TRƯỚC KHI BẮT ĐẦU PHẦN 08
-Phần hoàn thành gần nhất: PHẦN 07 — Manager review, assignment và Guest CATALOG bắt buộc qua sản xuất
-Ngày cập nhật gần nhất:   10/10/2026
+Tái triển khai code:      PHẦN 05, 07 VÀ BACKEND PHẦN 08 ĐÃ IMPLEMENTED
+Phần đang thực hiện:      BÀN GIAO FRONTEND PHẦN 08 CHO ANTIGRAVITY; CHỜ REVIEW TRƯỚC PHẦN 09
+Phần hoàn thành gần nhất: PHẦN 08 — Order chat, agreement và timeout CUSTOM (backend)
+Ngày cập nhật gần nhất:   12/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -51,7 +51,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 05 | Custom request | WF01 | 02–04 | `IMPLEMENTED` |
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
 | 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IMPLEMENTED` |
-| 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `NOT_STARTED` |
+| 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `IMPLEMENTED` |
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `NOT_STARTED` |
 | 10 | Production, checkpoint và KCS | WF05 | 07–09 | `NOT_STARTED` |
 | 11 | ChangeRequest | WF06 | 08–10 | `NOT_STARTED` |
@@ -268,7 +268,7 @@ Phạm vi chính:
 
 ### PHẦN 08 — Chat, agreement và timer custom, WF03
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` (backend; FE được bàn giao qua `docs/prompts/P8_FRONTEND_ANTIGRAVITY.md`).
 
 Phạm vi chính:
 
@@ -460,6 +460,7 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 09/10/2026 | 07 | `IN_PROGRESS` | Rà soát domain xác nhận shop không có hàng làm sẵn: CATALOG và CUSTOM đều handmade/made-to-order; phát hiện Guest BPMN/handler còn dùng `hasHandmadeItems` để cho phép bỏ qua assignment. Kết luận trước đó về Guest BPMN hoàn tất chưa còn đủ | Đã cập nhật target/báo cáo; chưa sửa code ở checkpoint tài liệu này | Bỏ biến/gateway `hasHandmadeItems`, cho Guest CATALOG luôn chờ assignment; giữ tương thích process instance cũ khi đổi task key rồi chạy lại BPMN/full suite |
 | 10/10/2026 | 07 | `IMPLEMENTED` | Đóng gap Guest made-to-order: bỏ tham số/process variable và gateway `hasHandmadeItems` khỏi service, runtime BPMN và blueprint; mọi Guest CATALOG được duyệt đi thẳng tới `Task_ManagerAssignOrder`. Bridge vẫn hoàn tất được task key legacy cho process instance đang chạy | Targeted 21 test đạt; `.\mvnw.cmd test`: 270 test, 0 failure/error, 7 MySQL opt-in skipped; test BPMN xác nhận biến legacy `hasHandmadeItems=false` không thể bỏ qua assignment; `git diff --check` đạt | Review PHẦN 07; sau đó bắt đầu PHẦN 08 chat, agreement và timer CUSTOM PT24H |
 | 12/10/2026 | 07 / FE | `IMPLEMENTED` | Hoàn thiện UI Manager duyệt/phân công và Staff self-claim theo API P7; thêm read queue Manager, DTO queue có `orderVersion`, idempotency header, phân quyền MANAGER riêng và badge state mục tiêu | FE development build đạt; `.\mvnw.cmd test`: 273 test, 0 failure/error, 7 MySQL opt-in skipped; test queue xác nhận `PENDING_ASSIGNMENT` và version cho cả Manager/Staff | Review thủ công UI với dữ liệu tích hợp; sau đó bắt đầu PHẦN 08 |
+| 12/10/2026 | 08 / scope cleanup | `IMPLEMENTED` | Theo quyết định scope mới, loại bỏ hoàn toàn chat tư vấn trước bán, attribution và hoa hồng; chỉ giữ order-chat. Thu gọn `ChatMessage`, gỡ API/service/entity/repository/Redis presence/event/cache/security hook legacy và thêm migration xóa schema SQL cũ có điều kiện | `.\mvnw.cmd test`: 281 test, 0 failure/error, 7 MySQL opt-in skipped; Liquibase H2 đạt; lệnh cleanup Mongo nằm trong `P8_CHAT_LATENCY_REFACTOR.md` | Backup dữ liệu, deploy Liquibase rồi chạy cleanup Mongo trên đúng database |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 

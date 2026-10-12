@@ -30,7 +30,6 @@ public class RateLimitPolicyResolver {
             sliding("cart-write", WRITE_METHODS, Set.of("/api/cart/items", "/api/cart/items/**"), 60, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("order-create", Set.of("POST"), Set.of("/api/cart/approve/**"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("order-write", WRITE_METHODS, Set.of("/api/orders/**"), 20, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
-            sliding("consultation-write", WRITE_METHODS, Set.of("/api/consultations/**", "/api/consultations", "/api/consultation-attributions/*/review"), 20, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("product-write", WRITE_METHODS, Set.of("/api/products/**", "/api/products"), 30, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("user-write", Set.of("PUT", "DELETE"), Set.of("/api/users/**"), 30, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("admin-cache-clear", Set.of("DELETE"), Set.of("/api/cache/clear-all"), 5, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),

@@ -1,13 +1,10 @@
 package com.example.workflow.config;
 
 import com.example.workflow.cache.CacheNames;
-import com.example.workflow.service.redis.ChatRealtimePublisher;
-import com.example.workflow.service.redis.ChatRedisSubscriber;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -15,8 +12,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.listener.ChannelTopic;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -100,26 +95,10 @@ public class RedisConfig implements CachingConfigurer {
                 .withCacheConfiguration(CacheNames.USER, ttl(Duration.ofMinutes(5)))
                 .withCacheConfiguration(CacheNames.REPUTATION_HISTORIES, ttl(Duration.ofMinutes(5)))
                 .withCacheConfiguration(CacheNames.PRODUCT_REVIEWS, ttl(Duration.ofMinutes(10)))
-                .withCacheConfiguration(CacheNames.PRODUCT_REVIEW_SUMMARIES, ttl(Duration.ofMinutes(10)))
-                .withCacheConfiguration(CacheNames.STAFF_COMMISSION_SUMMARIES, ttl(Duration.ofMinutes(5)))
-                .withCacheConfiguration(CacheNames.STAFF_COMMISSION_DETAILS, ttl(Duration.ofMinutes(5)))
-                .withCacheConfiguration(CacheNames.CONSULTATION_ATTRIBUTIONS, ttl(Duration.ofMinutes(5)))
-                .withCacheConfiguration(CacheNames.CONSULTATION_REVIEWS, ttl(Duration.ofMinutes(10)));
+                .withCacheConfiguration(CacheNames.PRODUCT_REVIEW_SUMMARIES, ttl(Duration.ofMinutes(10)));
     }
 
     private RedisCacheConfiguration ttl(Duration ttl) {
         return RedisCacheConfiguration.defaultCacheConfig().entryTtl(ttl);
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "chat.realtime.redis-pubsub.enabled", havingValue = "true")
-    public RedisMessageListenerContainer redisMessageListenerContainer(
-            RedisConnectionFactory connectionFactory,
-            ChatRedisSubscriber chatRedisSubscriber
-    ) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(chatRedisSubscriber, new ChannelTopic(ChatRealtimePublisher.CHAT_EVENTS_CHANNEL));
-        return container;
     }
 }

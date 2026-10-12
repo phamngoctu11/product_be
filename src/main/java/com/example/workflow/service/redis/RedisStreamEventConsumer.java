@@ -15,7 +15,6 @@ import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
-import com.example.workflow.event.payload.StaffCommissionRefreshRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
@@ -54,7 +53,6 @@ public class RedisStreamEventConsumer {
     private final EmailService emailService;
     private final OrderRepository orderRepository;
     private final OrderLifecycleEventHandler orderLifecycleEventHandler;
-    private final StaffCommissionService staffCommissionService;
     private final OptionalCacheService optionalCacheService;
     private final com.example.workflow.service.consistency.DurableRequestExecutor durableRequests;
     private final RedisStreamRetryTemplate retryTemplate;
@@ -187,11 +185,12 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
             case EventTypes.ORDER_ASSIGNED -> handleOrderAssigned(payload);
             case EventTypes.ORDER_ACCEPTED -> handleOrderAccepted(payload);
+            case EventTypes.ORDER_AGREEMENT_SUBMITTED -> handleOrderAgreementSubmitted(payload);
+            case EventTypes.ORDER_AGREEMENT_REVIEWED -> handleOrderAgreementReviewed(payload);
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
             case EventTypes.PAYMENT_CONFIRMED -> handlePaymentConfirmed(payload);
-            case EventTypes.STAFF_COMMISSION_REFRESH_REQUESTED -> handleStaffCommissionRefreshRequested(payload);
             case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
             default -> throw new IllegalArgumentException("Unsupported event type " + type);
         }
@@ -204,7 +203,6 @@ public class RedisStreamEventConsumer {
                 event.content(),
                 event.orderId(),
                 event.targetUserId(),
-                event.consultationRequestId(),
                 event.destination()
         );
     }
@@ -268,6 +266,18 @@ public class RedisStreamEventConsumer {
         orderLifecycleEventHandler.handleOrderAssigned(readPayload(payload, OrderAssignedEvent.class));
     }
 
+    private void handleOrderAgreementSubmitted(String payload) {
+        orderLifecycleEventHandler.handleOrderAgreementSubmitted(
+                readPayload(payload, com.example.workflow.event.payload.OrderAgreementSubmittedEvent.class)
+        );
+    }
+
+    private void handleOrderAgreementReviewed(String payload) {
+        orderLifecycleEventHandler.handleOrderAgreementReviewed(
+                readPayload(payload, com.example.workflow.event.payload.OrderAgreementReviewedEvent.class)
+        );
+    }
+
     private void handleWorkflowEmailRequested(String payload) {
         WorkflowEmailRequestedEvent event = readPayload(payload, WorkflowEmailRequestedEvent.class);
         if (StringUtils.hasText(event.toEmail())
@@ -309,11 +319,6 @@ public class RedisStreamEventConsumer {
 
     private void handlePaymentConfirmed(String payload) {
         orderLifecycleEventHandler.handlePaymentConfirmed(readPayload(payload, PaymentConfirmedEvent.class));
-    }
-
-    private void handleStaffCommissionRefreshRequested(String payload) {
-        StaffCommissionRefreshRequestedEvent event = readPayload(payload, StaffCommissionRefreshRequestedEvent.class);
-        staffCommissionService.refreshSummaries(event.refreshKeys());
     }
 
     private void handleCacheEvictionRequested(String payload) {

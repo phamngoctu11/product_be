@@ -191,6 +191,18 @@ public class VoucherService {
         return userVoucherRepository.save(voucher);
     }
 
+    /** Validate an agreement voucher without consuming it; confirmation performs the locked consume. */
+    @Transactional(readOnly = true)
+    public UserVoucher previewVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
+        if (userVoucherId == null) {
+            return null;
+        }
+        UserVoucher voucher = userVoucherRepository.findById(userVoucherId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VOUCHER_NOT_FOUND));
+        validateVoucherForCheckout(voucher, userId, totalPrice);
+        return voucher;
+    }
+
     @Transactional
     public AppliedGuestVoucher applyGuestVoucherForCheckout(
             String voucherCode,

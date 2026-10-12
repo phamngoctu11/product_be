@@ -19,7 +19,27 @@ public interface OrderMapper {
     @Mapping(target = "voucherName", expression = "java(resolveVoucherName(order))")
     @Mapping(target = "totalPrice", expression = "java(resolveTotalPrice(order))")
     @Mapping(target = "finalPrice", expression = "java(resolveFinalPrice(order))")
+    @Mapping(target = "staffId", expression = "java(resolveStaffId(order))")
+    @Mapping(target = "staffName", expression = "java(resolveStaffName(order))")
+    @Mapping(target = "managerId", expression = "java(order.getManager() == null ? null : order.getManager().getId())")
+    @Mapping(target = "managerName", expression = "java(resolveManagerName(order))")
     OrderDTO toDto(Order order);
+
+    default String resolveStaffId(Order order) {
+        if (order == null) return null;
+        User staff = order.getAssignedStaff() != null ? order.getAssignedStaff() : order.getWarehouseStaff();
+        return staff == null ? null : staff.getId();
+    }
+
+    default String resolveStaffName(Order order) {
+        if (order == null) return null;
+        User staff = order.getAssignedStaff() != null ? order.getAssignedStaff() : order.getWarehouseStaff();
+        return UserDisplayNameUtils.fullName(staff);
+    }
+
+    default String resolveManagerName(Order order) {
+        return order == null ? null : UserDisplayNameUtils.fullName(order.getManager());
+    }
 
     default String resolveCustomerName(Order order) {
         if (order == null) {

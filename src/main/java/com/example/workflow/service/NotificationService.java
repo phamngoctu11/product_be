@@ -41,28 +41,16 @@ public class NotificationService {
     private final DomainEventPublisher eventPublisher;
     private final CurrentUserService currentUserService;
 
-    public void sendUserNotification(String title, String content, String targetUserId, Long consultationRequestId) {
-        sendNotification(
-                title,
-                content,
-                null,
-                targetUserId,
-                consultationRequestId,
-                "/topic/user-notifications/" + targetUserId
-        );
-    }
-
     public void sendNotification(
             String title,
             String content,
             Long orderId,
             String targetUserId,
-            Long consultationRequestId,
             String destination
     ) {
         eventPublisher.publishAfterCommit(
                 EventTypes.NOTIFICATION_REQUESTED,
-                new NotificationRequestedEvent(title, content, orderId, targetUserId, consultationRequestId, destination)
+                new NotificationRequestedEvent(title, content, orderId, targetUserId, destination)
         );
     }
 
@@ -72,7 +60,6 @@ public class NotificationService {
             String content,
             Long orderId,
             String targetUserId,
-            Long consultationRequestId,
             String destination
     ) {
         Notification notification = new Notification();
@@ -80,7 +67,6 @@ public class NotificationService {
         notification.setContent(content);
         notification.setOrderId(orderId);
         notification.setTargetUserId(targetUserId);
-        notification.setConsultationRequestId(consultationRequestId);
         Notification savedNotification = notificationRepository.save(notification);
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(

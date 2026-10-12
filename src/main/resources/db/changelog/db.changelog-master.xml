@@ -7,4 +7,5 @@
     <include file="04-custom-request.xml" relativeToChangelogFile="true"/>
     <include file="05-manager-review.xml" relativeToChangelogFile="true"/>
     <include file="06-custom-request-content.xml" relativeToChangelogFile="true"/>
+    <include file="07-order-agreement-chat.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

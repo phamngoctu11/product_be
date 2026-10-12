@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="07-create-order-chat-threads" author="workflow">
+        <createTable tableName="order_chat_threads">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="order_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="owner_user_id" type="varchar(36)"><constraints nullable="false"/></column>
+            <column name="assigned_staff_id" type="varchar(36)"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="order_chat_threads" columnNames="order_id" constraintName="uk_order_chat_threads_order"/>
+        <addForeignKeyConstraint baseTableName="order_chat_threads" baseColumnNames="order_id" referencedTableName="orders" referencedColumnNames="id" constraintName="fk_order_chat_threads_order"/>
+        <addForeignKeyConstraint baseTableName="order_chat_threads" baseColumnNames="owner_user_id" referencedTableName="users" referencedColumnNames="id" constraintName="fk_order_chat_threads_owner"/>
+        <addForeignKeyConstraint baseTableName="order_chat_threads" baseColumnNames="assigned_staff_id" referencedTableName="users" referencedColumnNames="id" constraintName="fk_order_chat_threads_staff"/>
+        <createIndex tableName="order_chat_threads" indexName="idx_order_chat_threads_owner"><column name="owner_user_id"/></createIndex>
+        <createIndex tableName="order_chat_threads" indexName="idx_order_chat_threads_staff"><column name="assigned_staff_id"/></createIndex>
+    </changeSet>
+    <changeSet id="07-order-agreement-query-index" author="workflow">
+        <createIndex tableName="order_agreements" indexName="idx_order_agreements_current">
+            <column name="order_id"/>
+            <column name="status"/>
+            <column name="agreement_version"/>
+        </createIndex>
+    </changeSet>
+    <changeSet id="07-add-order-chat-participant-display-names" author="workflow">
+        <addColumn tableName="order_chat_threads">
+            <column name="owner_display_name" type="varchar(255)"/>
+            <column name="assigned_staff_display_name" type="varchar(255)"/>
+        </addColumn>
+    </changeSet>
+    <changeSet id="07-drop-consultation-reviews" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="consultation_reviews"/>
+        </preConditions>
+        <dropTable tableName="consultation_reviews" cascadeConstraints="true"/>
+    </changeSet>
+    <changeSet id="07-drop-consultation-sale-attributions" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="consultation_sale_attributions"/>
+        </preConditions>
+        <dropTable tableName="consultation_sale_attributions" cascadeConstraints="true"/>
+    </changeSet>
+    <changeSet id="07-drop-consultation-requests" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="consultation_requests"/>
+        </preConditions>
+        <dropTable tableName="consultation_requests" cascadeConstraints="true"/>
+    </changeSet>
+    <changeSet id="07-drop-legacy-sql-chat-messages" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="chat_messages"/>
+        </preConditions>
+        <dropTable tableName="chat_messages" cascadeConstraints="true"/>
+    </changeSet>
+    <changeSet id="07-drop-notification-consultation-reference" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="notifications" columnName="consultation_request_id"/>
+        </preConditions>
+        <dropColumn tableName="notifications" columnName="consultation_request_id"/>
+    </changeSet>
+</databaseChangeLog>

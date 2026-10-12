@@ -30,7 +30,6 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -38,11 +37,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OrderLifecycleEventHandlerTest {
     @Mock private OrderRepository orderRepository;
-    @Mock private ConsultationAttributionService consultationAttributionService;
     @Mock private EmailService emailService;
     @Mock private NotificationService notificationService;
     @Mock private ApplicationCacheService applicationCacheService;
     @Mock private OrderWorkflowService orderWorkflowService;
+    @Mock private OrderChatService orderChatService;
     @Mock private GuestPurchaseWorkflowService guestPurchaseWorkflowService;
     @Mock private OrderLookupTokenService orderLookupTokenService;
 
@@ -52,11 +51,11 @@ class OrderLifecycleEventHandlerTest {
     void setUp() {
         handler = new OrderLifecycleEventHandler(
                 orderRepository,
-                consultationAttributionService,
                 emailService,
                 notificationService,
                 applicationCacheService,
                 orderWorkflowService,
+                orderChatService,
                 guestPurchaseWorkflowService,
                 orderLookupTokenService,
                 new ObjectMapper()
@@ -73,7 +72,6 @@ class OrderLifecycleEventHandlerTest {
 
         handler.handleOrderCreated(new OrderCreatedEvent(10L));
 
-        verify(consultationAttributionService).recordOrderAttributions(order);
         verify(applicationCacheService).evictOrderCreated(order);
         verify(emailService).sendOrderConfirmationEmail(
                 "user@example.com", "User One", 10L, 120.0, "Thanh toán khi nhận hàng (COD)"
@@ -83,7 +81,6 @@ class OrderLifecycleEventHandlerTest {
                 anyString(),
                 eq(10L),
                 eq("user-1"),
-                eq(null),
                 eq("/topic/user-notifications/user-1")
         );
     }
@@ -137,7 +134,7 @@ class OrderLifecycleEventHandlerTest {
                 "http://localhost:4200/orders/10", null, 120.0, null, null
         );
         verify(notificationService).sendNotification(
-                eq("Đơn hàng đã được chấp nhận"), anyString(), eq(10L), eq("user-1"), eq(null),
+                eq("Đơn hàng đã được chấp nhận"), anyString(), eq(10L), eq("user-1"),
                 eq("/topic/user-notifications/user-1")
         );
     }
@@ -181,6 +178,7 @@ class OrderLifecycleEventHandlerTest {
         ));
 
         verify(orderWorkflowService).advanceAfterAssignment(10L, "staff-1");
+        verify(orderChatService).ensureThreadForAssignedOrder(10L);
     }
 
     @Test
@@ -227,21 +225,20 @@ class OrderLifecycleEventHandlerTest {
         handler.handleOrderCancelled(event);
 
         verify(orderWorkflowService).correlateOrderCancelled(10L);
-        verify(consultationAttributionService).cancelOrderAttributions(10L);
         verify(applicationCacheService).evictOrderCancelled(order, OrderStatus.PENDING_APPROVAL);
         verify(emailService).sendOrderCancellationEmail(
                 "user@example.com", "User One", 10L, "Khách hủy"
         );
         verify(notificationService).sendNotification(
-                eq("Đơn hàng đã hủy"), anyString(), eq(10L), eq("user-1"), eq(null),
+                eq("Đơn hàng đã hủy"), anyString(), eq(10L), eq("user-1"),
                 eq("/topic/user-notifications/user-1")
         );
         verify(notificationService).sendNotification(
-                eq("Đơn phụ trách đã hủy"), anyString(), eq(10L), eq("staff-1"), eq(null),
+                eq("Đơn phụ trách đã hủy"), anyString(), eq(10L), eq("staff-1"),
                 eq("/topic/user-notifications/staff-1")
         );
         verify(notificationService).sendNotification(
-                eq("Đơn hàng đã hủy"), anyString(), eq(10L), eq(null), eq(null),
+                eq("Đơn hàng đã hủy"), anyString(), eq(10L), eq(null),
                 eq("/topic/admin-notifications")
         );
     }
@@ -260,15 +257,14 @@ class OrderLifecycleEventHandlerTest {
                 "user@example.com", "User One", 10L, 120.0, "Thanh toán online đã xác nhận"
         );
         verify(notificationService).sendNotification(
-                eq("Thanh toán thành công"), anyString(), eq(10L), eq("user-1"), eq(null),
+                eq("Thanh toán thành công"), anyString(), eq(10L), eq("user-1"),
                 eq("/topic/user-notifications/user-1")
         );
         verify(notificationService).sendNotification(
-                eq("Đơn hàng đã thanh toán"), anyString(), eq(10L), eq("staff-1"), eq(null),
+                eq("Đơn hàng đã thanh toán"), anyString(), eq(10L), eq("staff-1"),
                 eq("/topic/user-notifications/staff-1")
         );
         verifyNoInteractions(applicationCacheService);
-        verify(consultationAttributionService, never()).recordOrderAttributions(order);
     }
 
     private Order userOrder() {

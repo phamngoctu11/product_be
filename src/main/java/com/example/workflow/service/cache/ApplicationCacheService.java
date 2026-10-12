@@ -126,7 +126,6 @@ public class ApplicationCacheService {
         optionalCacheService.evictAfterCommit(CacheNames.PRODUCT, productId);
         publishDeferredCacheEvictions(
                 "product updated",
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_DETAILS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS_BATCH)
@@ -138,7 +137,6 @@ public class ApplicationCacheService {
         optionalCacheService.evictAfterCommit(CacheNames.PRODUCT, productId);
         publishDeferredCacheEvictions(
                 "product basic info updated",
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_DETAILS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS_BATCH)
@@ -210,50 +208,16 @@ public class ApplicationCacheService {
     public void evictMyProfileUpdated() {
         optionalCacheService.clearAfterCommit(CacheNames.USERS);
         optionalCacheService.clearAfterCommit(CacheNames.USER);
-        publishDeferredCacheEvictions("my profile updated", staffCommissionEntries());
     }
 
     public void evictUserUpdated(String userId) {
         optionalCacheService.clearAfterCommit(CacheNames.USERS);
         optionalCacheService.evictAfterCommit(CacheNames.USER, userId);
-        publishDeferredCacheEvictions("user updated", staffCommissionEntries());
     }
 
     public void evictUserDeleted(String userId) {
         optionalCacheService.clearAfterCommit(CacheNames.USERS);
         optionalCacheService.evictAfterCommit(CacheNames.USER, userId);
-        publishDeferredCacheEvictions("user deleted", staffCommissionEntries());
-    }
-
-    public void evictConsultationAttributionsRecorded() {
-        publishDeferredCacheEvictions("consultation order attributions recorded", consultationAttributionEntries());
-    }
-
-    public void evictConsultationAttributionsConfirmed() {
-        publishDeferredCacheEvictions("consultation order attributions confirmed", consultationAttributionEntries());
-    }
-
-    public void evictConsultationAttributionsCancelled() {
-        publishDeferredCacheEvictions("consultation order attributions cancelled", consultationAttributionEntries());
-    }
-
-    public void evictConsultationReviewCreated() {
-        optionalCacheService.clearAfterCommit(CacheNames.CONSULTATION_ATTRIBUTIONS);
-        optionalCacheService.clearAfterCommit(CacheNames.CONSULTATION_REVIEWS);
-        publishDeferredCacheEvictions(
-                "consultation review created",
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_DETAILS),
-                CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS)
-        );
-    }
-
-    public void evictStaffCommissionRebuilt() {
-        optionalCacheService.clearAfterCommit(CacheNames.STAFF_COMMISSION_SUMMARIES);
-        optionalCacheService.clearAfterCommit(CacheNames.STAFF_COMMISSION_DETAILS);
-    }
-
-    public void evictStaffCommissionSummariesRefreshed() {
-        publishDeferredCacheEvictions("staff commission summaries refreshed", staffCommissionEntries());
     }
 
     private void evictManagerPendingOrdersAfterCommit(OrderStatus status) {
@@ -329,21 +293,6 @@ public class ApplicationCacheService {
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS_BATCH)
-        );
-    }
-
-    private List<CacheEvictionEntry> staffCommissionEntries() {
-        return List.of(
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_SUMMARIES),
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_DETAILS)
-        );
-    }
-
-    private List<CacheEvictionEntry> consultationAttributionEntries() {
-        return List.of(
-                CacheEvictionEntry.allEntries(CacheNames.CONSULTATION_ATTRIBUTIONS),
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_SUMMARIES),
-                CacheEvictionEntry.allEntries(CacheNames.STAFF_COMMISSION_DETAILS)
         );
     }
 

@@ -1,5 +1,4 @@
 package com.example.workflow.repository;
-import com.example.workflow.dto.ChatUserDTO;
 import com.example.workflow.dto.UserListDTO;
 import com.example.workflow.entity.User;
 import com.example.workflow.nume.Role;
@@ -31,10 +30,6 @@ public interface UserRepository extends JpaRepository<User, String> {
     @Query("SELECT new com.example.workflow.dto.UserListDTO(u.id, u.firstname, u.lastname, u.reputation, u.role, u.avatarUrl) " +
             "FROM User u WHERE u.role IN :roles")
     Page<UserListDTO> findAllCustomByRoles(@Param("roles") List<Role> roles, Pageable pageable);
-
-    @Query("SELECT new com.example.workflow.dto.ChatUserDTO(u.id, u.firstname, u.lastname, u.email, u.avatarUrl, false) " +
-            "FROM User u WHERE u.id IN :ids AND u.isDelete = false")
-    List<ChatUserDTO> findChatUserDtosByIds(@Param("ids") List<String> ids);
 
     Page<User> findByRoleAndIsDeleteFalse(Role role, Pageable pageable);
 

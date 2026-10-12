@@ -45,7 +45,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password", "/api/users").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/", "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/product-reviews/products/**", "/api/product-reviews/variants/*/public", "/api/product-reviews/variants/*/summary").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/consultation-attributions/reviews/product/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vouchers/guest", "/api/vouchers/guest/").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cart", "/api/cart/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/cart/items", "/api/cart/items/").permitAll()
@@ -57,7 +56,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payment/momo-callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/momo-mock-success").permitAll()
                         .requestMatchers("/ws/**", "/camunda/**").permitAll()
-                        .requestMatchers("/api/chat/users").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 ).oauth2ResourceServer(oauth2 -> oauth2
