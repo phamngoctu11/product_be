@@ -126,8 +126,7 @@ public class OrderLifecycleEventHandler {
         applicationCacheService.evictOrderCreated(order);
         guestPurchaseWorkflowService.startAfterOrderCreated(
                 order.getId(),
-                order.getGuestSessionId(),
-                hasHandmadeItems(order)
+                order.getGuestSessionId()
         );
         String accessUrl = StringUtils.hasText(event.lookupToken())
                 ? UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
@@ -354,10 +353,6 @@ public class OrderLifecycleEventHandler {
                         .filter(Objects::nonNull)
                         .max(Integer::compareTo)
                         .orElse(null);
-    }
-
-    private boolean hasHandmadeItems(Order order) {
-        return order.getItems() != null && order.getItems().stream().anyMatch(OrderItem::isHandmade);
     }
 
     private String paymentLabel(Order order) {

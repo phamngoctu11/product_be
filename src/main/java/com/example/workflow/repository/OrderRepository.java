@@ -1,6 +1,7 @@
 package com.example.workflow.repository;
 
 import com.example.workflow.dto.OrderListDTO;
+import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.nume.OrderStatus;
 import jakarta.persistence.LockModeType;
@@ -173,6 +174,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "ORDER BY o.startOrderTime ASC",
             countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.assignedStaff IS NULL AND o.warehouseStaff IS NULL")
     Page<OrderListDTO> findUnassignedListDtoByStatus(@Param("status") OrderStatus status, Pageable pageable);
+
+    @Query(value = "SELECT new com.example.workflow.dto.OrderAssignmentQueueDTO(o.id, o.version, o.orderType, " +
+            "CASE WHEN o.contactSnapshot.fullName IS NOT NULL THEN o.contactSnapshot.fullName WHEN u.id IS NOT NULL THEN CONCAT(CONCAT(u.lastname, ' '), u.firstname) ELSE 'Khach vang lai' END, " +
+            "o.finalPrice, o.paymentMethod, o.status, o.startOrderTime) " +
+            "FROM Order o LEFT JOIN o.user u " +
+            "WHERE o.status = :status AND o.assignedStaff IS NULL AND o.warehouseStaff IS NULL " +
+            "ORDER BY o.startOrderTime ASC",
+            countQuery = "SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.assignedStaff IS NULL AND o.warehouseStaff IS NULL")
+    Page<OrderAssignmentQueueDTO> findAssignmentQueueByStatus(
+            @Param("status") OrderStatus status,
+            Pageable pageable
+    );
 
     @Query(value = "SELECT new com.example.workflow.dto.OrderListDTO(o.id, " +
             "CASE WHEN o.contactSnapshot.fullName IS NOT NULL THEN o.contactSnapshot.fullName WHEN u.id IS NOT NULL THEN CONCAT(CONCAT(u.lastname, ' '), u.firstname) ELSE 'Khach vang lai' END, " +

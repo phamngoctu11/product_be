@@ -143,14 +143,18 @@ class OrderLifecycleEventHandlerTest {
     }
 
     @Test
-    void guestOrderCreatedRoutesTokenizedEmailWithoutNotification() {
+    void guestCatalogWithLegacyHandmadeFalseStillStartsMandatoryAssignmentWorkflow() {
         Order order = guestOrder();
+        order.setOrderType(OrderType.CATALOG);
+        OrderItem legacyItem = new OrderItem();
+        legacyItem.setHandmade(false);
+        order.setItems(List.of(legacyItem));
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
 
         handler.handleGuestOrderCreated(new GuestOrderCreatedEvent(10L, "raw-token", 5));
 
         verify(applicationCacheService).evictOrderCreated(order);
-        verify(guestPurchaseWorkflowService).startAfterOrderCreated(10L, null, false);
+        verify(guestPurchaseWorkflowService).startAfterOrderCreated(10L, null);
         verify(emailService).sendGuestOrderConfirmationEmail(
                 "guest@example.com",
                 "Guest One",

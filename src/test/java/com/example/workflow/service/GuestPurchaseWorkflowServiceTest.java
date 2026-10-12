@@ -41,7 +41,7 @@ class GuestPurchaseWorkflowServiceTest {
                 org.mockito.ArgumentMatchers.anyMap()
         )).thenReturn(processInstance);
 
-        var result = service.startAfterOrderCreated(200L, "guest-session-0001", true);
+        var result = service.startAfterOrderCreated(200L, "guest-session-0001");
 
         assertThat(result.started()).isTrue();
         assertThat(result.processInstanceId()).isEqualTo("process-200");
@@ -54,8 +54,8 @@ class GuestPurchaseWorkflowServiceTest {
         assertThat(variables.getValue())
                 .containsEntry("orderId", 200L)
                 .containsEntry("guestSessionId", "guest-session-0001")
-                .containsEntry("hasHandmadeItems", true)
-                .containsEntry("guestOrder", true);
+                .containsEntry("guestOrder", true)
+                .doesNotContainKey("hasHandmadeItems");
         verify(stateService).markStarted(200L, "process-200");
     }
 
@@ -69,7 +69,7 @@ class GuestPurchaseWorkflowServiceTest {
                         org.mockito.ArgumentMatchers.anyMap()
                 );
 
-        var result = service.startAfterOrderCreated(201L, "guest-session-0002", false);
+        var result = service.startAfterOrderCreated(201L, "guest-session-0002");
 
         assertThat(result.started()).isFalse();
         assertThat(result.errorMessage()).isEqualTo("engine unavailable");
@@ -82,7 +82,7 @@ class GuestPurchaseWorkflowServiceTest {
         when(existing.getProcessInstanceId()).thenReturn("process-existing");
         when(runtimeService.createProcessInstanceQuery().singleResult()).thenReturn(existing);
 
-        var result = service.startAfterOrderCreated(202L, "guest-session-0003", true);
+        var result = service.startAfterOrderCreated(202L, "guest-session-0003");
 
         assertThat(result.processInstanceId()).isEqualTo("process-existing");
         verify(stateService).markStarted(202L, "process-existing");

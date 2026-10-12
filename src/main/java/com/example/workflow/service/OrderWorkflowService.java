@@ -14,7 +14,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class OrderWorkflowService {
     private static final String MANAGER_REVIEW_TASK = "manager_approve_order";
-    private static final String GUEST_ASSIGNMENT_TASK = "Task_ManagerAssignHandmadeItems";
+    private static final String GUEST_ASSIGNMENT_TASK = "Task_ManagerAssignOrder";
+    private static final String LEGACY_GUEST_ASSIGNMENT_TASK = "Task_ManagerAssignHandmadeItems";
     private static final String ORDER_ASSIGNED_MESSAGE = "ORDER_ASSIGNED";
 
     private final RuntimeService runtimeService;
@@ -43,6 +44,9 @@ public class OrderWorkflowService {
      */
     public boolean advanceAfterAssignment(Long orderId, String staffId) {
         Task guestAssignment = singleTask(orderId, GUEST_ASSIGNMENT_TASK);
+        if (guestAssignment == null) {
+            guestAssignment = singleTask(orderId, LEGACY_GUEST_ASSIGNMENT_TASK);
+        }
         if (guestAssignment != null) {
             taskService.complete(guestAssignment.getId(), Map.of("staffId", staffId));
             return true;

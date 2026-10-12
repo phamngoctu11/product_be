@@ -1,8 +1,8 @@
 # Bàn giao PHẦN 07 — Manager review và assignment (WF02)
 
-Ngày cập nhật: 09/10/2026.
+Ngày cập nhật: 12/10/2026.
 
-Trạng thái sau rà soát domain: `IN_PROGRESS`. Phần API/service/transaction bên dưới đã được triển khai, nhưng Guest BPMN còn gateway legacy `hasHandmadeItems` cho phép đi theo nhánh không cần assignment/sản xuất. Nhánh này trái target vì shop không bán hàng làm sẵn; phải sửa trước khi coi PHẦN 07 hoàn tất.
+Trạng thái: `IMPLEMENTED`. Guest BPMN không còn biến/gateway legacy `hasHandmadeItems` hoặc nhánh hàng làm sẵn. Mọi Guest CATALOG sau manager approval đều phải chờ một assignment sản xuất trước khi kết thúc chặng WF02.
 
 ## Kết quả
 
@@ -43,6 +43,7 @@ Reject bắt buộc `reason`, không cho kèm `staffId`. Approve có thể để
 
 ```http
 GET  /api/orders/manager/available-staff
+GET  /api/orders/manager/assignments
 POST /api/orders/manager/assignments/{orderId}
 Idempotency-Key: <key>
 
@@ -63,6 +64,16 @@ Idempotency-Key: <key>
 ```
 
 Danh sách review và claimable có phân trang. Danh sách `PENDING_APPROVAL` và `PENDING_ASSIGNMENT` được cache theo trang; approve/assign/claim xóa cache liên quan sau commit.
+
+DTO hàng đợi assignment trả cả `orderId` và `orderVersion`; Manager và Staff phải gửi lại đúng version khi assign/claim. Cùng endpoint đọc `PENDING_ASSIGNMENT` được dùng cho màn Manager chờ phân công và màn Staff chờ nhận.
+
+## Frontend P7
+
+- Màn Manager tách hai tab `PENDING_APPROVAL` và `PENDING_ASSIGNMENT`, có xem chi tiết typed CUSTOM, approve/reject, duyệt kèm staff và phân công sau duyệt.
+- Danh sách staff khả dụng được tải hết các trang (backend giới hạn 50 bản ghi/trang), không dùng danh sách toàn bộ user.
+- Màn Staff dùng `/staff/claimable`, gửi `orderVersion` và `Idempotency-Key` khi self-claim, sau đó chuyển sang danh sách đơn đang phụ trách.
+- Route/menu duyệt đơn chỉ cấp cho `MANAGER`; `ADMIN` không được suy diễn kế thừa quyền MANAGER.
+- Badge FE đã map đầy đủ state mục tiêu từ `PENDING_ASSIGNMENT` đến `READY_TO_SHIP`, đồng thời vẫn hiển thị state legacy trong giai đoạn chuyển tiếp.
 
 ## Quy tắc trạng thái
 
@@ -143,6 +154,8 @@ Signed milestone token dùng HMAC, bị ràng buộc với `orderId`, chỉ có 
 - hai manager chạy đồng thời trên một Order chỉ tạo một assignment/audit;
 - hai Order chạy đồng thời tranh cùng staff chỉ một Order chiếm được staff;
 - bridge Camunda thật hoàn thành chuỗi Guest manager review → assignment và không tạo process trùng khi retry;
+- catalog item có `handmade=false` legacy và cả process variable legacy `hasHandmadeItems=false` vẫn bắt buộc chờ assignment;
+- bridge ưu tiên task key mới `Task_ManagerAssignOrder` nhưng vẫn hoàn tất task key cũ `Task_ManagerAssignHandmadeItems` cho process instance đang chạy khi deploy chuyển tiếp;
 - manager inactive/soft-delete không thể review hoặc xem danh sách staff khả dụng;
 - contract controller giữ `MANAGER` authority và `Idempotency-Key` bắt buộc trên hai write API;
 - migration chạy lặp trên schema legacy;
@@ -150,7 +163,7 @@ Signed milestone token dùng HMAC, bị ràng buộc với `orderId`, chỉ có 
 
 ```text
 .\mvnw.cmd test
-269 test chạy, 0 failure, 0 error, 7 MySQL opt-in test skipped
+273 test chạy, 0 failure, 0 error, 7 MySQL opt-in test skipped
 BUILD SUCCESS
 ```
 
@@ -162,12 +175,11 @@ BUILD SUCCESS
 - Guest flow đã start/complete manager task và assignment task thật. USER/CUSTOM chưa có process lifecycle mục tiêu; full cutover và thiết kế lại `approve-cart.bpmn` vẫn thuộc PHẦN 13. Với Order chưa có process, database/outbox tiếp tục là nguồn nghiệp vụ chính.
 - MySQL opt-in chưa chạy trong checkpoint này; H2 và migration legacy đã đạt.
 
-## Gap phải đóng trước khi bàn giao
+## Gap đã đóng
 
-- Bỏ tham số/process variable `hasHandmadeItems` khỏi đường start Guest workflow.
-- Bỏ gateway “contains handmade items” và nhánh kết thúc dành cho hàng làm sẵn; sau manager approval, Guest CATALOG luôn đến assignment task.
-- Không đổi tên helper thành `hasCustomItem`: Guest không tạo CUSTOM và `orderType` đã là nguồn phân biệt CATALOG/CUSTOM.
-- Nếu đổi task key, bridge phải tiếp tục hoàn tất được task key cũ cho process instance đang chạy trong giai đoạn chuyển tiếp.
-- Bổ sung BPMN/service test với catalog item có giá trị `handmade=false` legacy nhưng vẫn bắt buộc chờ assignment, chứng minh field legacy không còn điều khiển nghiệp vụ mới.
+- Đã bỏ tham số/process variable `hasHandmadeItems` khỏi đường start Guest workflow.
+- Đã bỏ gateway “contains handmade items” và toàn bộ nhánh hàng làm sẵn khỏi runtime BPMN và blueprint.
+- Task mới dùng key trung tính `Task_ManagerAssignOrder`; bridge giữ fallback cho key legacy trong giai đoạn chuyển tiếp.
+- Test BPMN/service chứng minh dữ liệu và process variable `handmade=false` legacy không còn điều khiển nghiệp vụ mới.
 
 Hành động tiếp theo: review PHẦN 07, sau đó triển khai PHẦN 08 — chat, agreement và timer CUSTOM PT24H.

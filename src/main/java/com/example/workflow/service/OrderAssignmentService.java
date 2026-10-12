@@ -5,8 +5,8 @@ import com.example.workflow.cache.CacheNames;
 import com.example.workflow.dto.AvailableStaffDTO;
 import com.example.workflow.dto.ClaimOrderRequest;
 import com.example.workflow.dto.OrderAssignmentDTO;
+import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
-import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
 import com.example.workflow.entity.User;
@@ -73,9 +73,23 @@ public class OrderAssignmentService {
             value = CacheNames.WAREHOUSE_PENDING_ORDERS,
             key = "T(com.example.workflow.cache.CacheKeys).warehousePendingOrders(#pageable)"
     )
-    public Page<OrderListDTO> listClaimable(Pageable pageable) {
+    public Page<OrderAssignmentQueueDTO> listClaimable(Pageable pageable) {
         currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-        return orderRepository.findUnassignedListDtoByStatus(
+        return assignmentQueue(pageable);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+            value = CacheNames.WAREHOUSE_PENDING_ORDERS,
+            key = "T(com.example.workflow.cache.CacheKeys).warehousePendingOrders(#pageable)"
+    )
+    public Page<OrderAssignmentQueueDTO> listAssignable(Pageable pageable) {
+        requireActiveManager();
+        return assignmentQueue(pageable);
+    }
+
+    private Page<OrderAssignmentQueueDTO> assignmentQueue(Pageable pageable) {
+        return orderRepository.findAssignmentQueueByStatus(
                 OrderStatus.PENDING_ASSIGNMENT,
                 PageableUtils.normalize(pageable, 20, 100)
         );

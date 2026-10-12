@@ -1,5 +1,6 @@
 package com.example.workflow.service;
 
+import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
@@ -20,7 +21,12 @@ import com.example.workflow.service.consistency.OrderTransitionService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -145,6 +151,52 @@ class OrderAssignmentServiceTest {
                 .hasMessageContaining("khóa hoặc xóa");
 
         verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void staffClaimableQueueUsesPendingAssignmentAndReturnsOrderVersion() {
+        User staff = user("staff-queue", Role.STAFF, true);
+        OrderAssignmentQueueDTO queued = new OrderAssignmentQueueDTO(
+                61L, 7L, OrderType.CUSTOM, "Customer", 125_000D,
+                "COD", OrderStatus.PENDING_ASSIGNMENT, LocalDateTime.now()
+        );
+        when(currentUserService.requireCurrentUser(
+                Role.STAFF,
+                com.example.workflow.exception.ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED
+        )).thenReturn(staff);
+        when(orderRepository.findAssignmentQueueByStatus(eq(OrderStatus.PENDING_ASSIGNMENT), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(queued)));
+
+        var result = service.listClaimable(PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).singleElement().satisfies(item -> {
+            assertThat(item.orderId()).isEqualTo(61L);
+            assertThat(item.orderVersion()).isEqualTo(7L);
+            assertThat(item.status()).isEqualTo(OrderStatus.PENDING_ASSIGNMENT);
+        });
+    }
+
+    @Test
+    void managerAssignableQueueUsesSamePendingAssignmentContract() {
+        User manager = user("manager-queue", Role.MANAGER, true);
+        OrderAssignmentQueueDTO queued = new OrderAssignmentQueueDTO(
+                62L, 4L, OrderType.CATALOG, "Customer", 90_000D,
+                "ONLINE", OrderStatus.PENDING_ASSIGNMENT, LocalDateTime.now()
+        );
+        when(currentUserService.requireCurrentUser(
+                Role.MANAGER,
+                com.example.workflow.exception.ConstantErrorCode.CURRENT_USER_MANAGER_ROLE_REQUIRED
+        )).thenReturn(manager);
+        when(orderRepository.findAssignmentQueueByStatus(eq(OrderStatus.PENDING_ASSIGNMENT), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(queued)));
+
+        var result = service.listAssignable(PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).singleElement().satisfies(item -> {
+            assertThat(item.orderId()).isEqualTo(62L);
+            assertThat(item.orderVersion()).isEqualTo(4L);
+            assertThat(item.status()).isEqualTo(OrderStatus.PENDING_ASSIGNMENT);
+        });
     }
 
     private void prepareAvailable(Order order, User staff) {

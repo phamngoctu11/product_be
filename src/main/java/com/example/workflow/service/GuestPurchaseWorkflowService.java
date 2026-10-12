@@ -21,13 +21,11 @@ public class GuestPurchaseWorkflowService {
 
     public StartResult startAfterOrderCreated(
             Long orderId,
-            String guestSessionId,
-            boolean hasHandmadeItems
+            String guestSessionId
     ) {
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("orderId", orderId);
         variables.put("guestSessionId", guestSessionId);
-        variables.put("hasHandmadeItems", hasHandmadeItems);
         variables.put("guestOrder", true);
 
         String businessKey = "guest-order-" + orderId;

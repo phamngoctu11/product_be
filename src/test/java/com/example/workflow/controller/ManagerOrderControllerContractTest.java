@@ -4,6 +4,7 @@ import com.example.workflow.dto.AssignOrderRequest;
 import com.example.workflow.dto.ManagerReviewRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.lang.reflect.Method;
@@ -22,6 +23,15 @@ class ManagerOrderControllerContractTest {
 
         assertManagerWriteContract(review);
         assertManagerWriteContract(assignment);
+    }
+
+    @Test
+    void assignmentQueueReadIsManagerOnly() throws Exception {
+        Method queue = ManagerOrderController.class.getMethod("getAssignableOrders", Pageable.class);
+
+        PreAuthorize authorization = queue.getAnnotation(PreAuthorize.class);
+        assertThat(authorization).isNotNull();
+        assertThat(authorization.value()).isEqualTo("hasAuthority('MANAGER')");
     }
 
     private void assertManagerWriteContract(Method method) {

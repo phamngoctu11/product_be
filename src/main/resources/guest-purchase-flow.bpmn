@@ -4,8 +4,8 @@
   <bpmn:process id="GuestPurchaseFlowBlueprint" name="Guest Purchase Flow Blueprint" isExecutable="false" camunda:historyTimeToLive="180">
     <bpmn:documentation>
       Guest purchase flow for non-user checkout. Guest cart is identified by guestSessionId.
-      Guest order stores contact snapshot and orderLookupToken. Handmade items continue through
-      staff assignment and two checkpoint stages, with manager review depending on policy.
+      Guest order stores contact snapshot and orderLookupToken. Every catalog item is made to order,
+      so all approved orders continue through staff assignment and two production checkpoints.
     </bpmn:documentation>
     <bpmn:startEvent id="Start_GuestCheckoutSubmitted" name="Guest checkout submitted">
       <bpmn:outgoing>Flow_Start_To_ResolveSession</bpmn:outgoing>
@@ -118,32 +118,10 @@
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_PublishGuestOrderCreated" name="Order-created event owned by checkout" camunda:expression="${true}">
       <bpmn:incoming>Flow_SaveSnapshot_To_PublishOrderCreated</bpmn:incoming>
-      <bpmn:outgoing>Flow_PublishOrderCreated_To_HandmadeGateway</bpmn:outgoing>
+      <bpmn:outgoing>Flow_PublishOrderCreated_To_AssignStaff</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:exclusiveGateway id="Gateway_ContainsHandmadeItems" name="Contains handmade items?">
-      <bpmn:incoming>Flow_PublishOrderCreated_To_HandmadeGateway</bpmn:incoming>
-      <bpmn:outgoing>Flow_NoHandmade_To_PackReadyMade</bpmn:outgoing>
-      <bpmn:outgoing>Flow_HasHandmade_To_AssignStaff</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:userTask id="Task_StaffPackReadyMadeItems" name="Staff packs ready-made items" camunda:candidateGroups="STAFF">
-      <bpmn:incoming>Flow_NoHandmade_To_PackReadyMade</bpmn:incoming>
-      <bpmn:outgoing>Flow_PackReadyMade_To_SendReadyEmail</bpmn:outgoing>
-    </bpmn:userTask>
-    <bpmn:serviceTask id="Task_SendGuestReadyToShipEmail" name="Send ready-to-ship email" camunda:delegateExpression="${workflowTaskDelegate}">
-      <bpmn:extensionElements>
-        <camunda:inputOutput>
-          <camunda:inputParameter name="taskType">SEND_EMAIL</camunda:inputParameter>
-          <camunda:inputParameter name="emailType">GUEST_READY_TO_SHIP</camunda:inputParameter>
-        </camunda:inputOutput>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_PackReadyMade_To_SendReadyEmail</bpmn:incoming>
-      <bpmn:outgoing>Flow_SendReadyEmail_To_EndReadyMade</bpmn:outgoing>
-    </bpmn:serviceTask>
-    <bpmn:endEvent id="End_GuestOrderReadyMadeReady" name="Ready-made order ready to ship">
-      <bpmn:incoming>Flow_SendReadyEmail_To_EndReadyMade</bpmn:incoming>
-    </bpmn:endEvent>
-    <bpmn:userTask id="Task_ManagerAssignStaffByItem" name="Manager assigns staff by item" camunda:candidateGroups="MANAGER">
-      <bpmn:incoming>Flow_HasHandmade_To_AssignStaff</bpmn:incoming>
+    <bpmn:userTask id="Task_ManagerAssignStaffByItem" name="Manager assigns production staff" camunda:candidateGroups="MANAGER">
+      <bpmn:incoming>Flow_PublishOrderCreated_To_AssignStaff</bpmn:incoming>
       <bpmn:outgoing>Flow_AssignStaff_To_SubmitInitial</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:userTask id="Task_StaffSubmitInitialCheckpoint" name="Staff submits INITIAL_SHAPE checkpoint" camunda:candidateGroups="STAFF">
@@ -247,15 +225,7 @@
     <bpmn:sequenceFlow id="Flow_CancelReservation_To_EndExpired" sourceRef="Task_CancelGuestReservation" targetRef="End_GuestPaymentExpired" />
     <bpmn:sequenceFlow id="Flow_CreateOrder_To_SaveSnapshot" sourceRef="Task_CreateGuestOrder" targetRef="Task_SaveGuestSnapshotLookupToken" />
     <bpmn:sequenceFlow id="Flow_SaveSnapshot_To_PublishOrderCreated" sourceRef="Task_SaveGuestSnapshotLookupToken" targetRef="Task_PublishGuestOrderCreated" />
-    <bpmn:sequenceFlow id="Flow_PublishOrderCreated_To_HandmadeGateway" sourceRef="Task_PublishGuestOrderCreated" targetRef="Gateway_ContainsHandmadeItems" />
-    <bpmn:sequenceFlow id="Flow_NoHandmade_To_PackReadyMade" name="No" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_StaffPackReadyMadeItems">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == false}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_HasHandmade_To_AssignStaff" name="Yes" sourceRef="Gateway_ContainsHandmadeItems" targetRef="Task_ManagerAssignStaffByItem">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${hasHandmadeItems == true}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_PackReadyMade_To_SendReadyEmail" sourceRef="Task_StaffPackReadyMadeItems" targetRef="Task_SendGuestReadyToShipEmail" />
-    <bpmn:sequenceFlow id="Flow_SendReadyEmail_To_EndReadyMade" sourceRef="Task_SendGuestReadyToShipEmail" targetRef="End_GuestOrderReadyMadeReady" />
+    <bpmn:sequenceFlow id="Flow_PublishOrderCreated_To_AssignStaff" sourceRef="Task_PublishGuestOrderCreated" targetRef="Task_ManagerAssignStaffByItem" />
     <bpmn:sequenceFlow id="Flow_AssignStaff_To_SubmitInitial" sourceRef="Task_ManagerAssignStaffByItem" targetRef="Task_StaffSubmitInitialCheckpoint" />
     <bpmn:sequenceFlow id="Flow_SubmitInitial_To_InitialReviewPolicy" sourceRef="Task_StaffSubmitInitialCheckpoint" targetRef="Gateway_InitialCheckpointReviewPolicy" />
     <bpmn:sequenceFlow id="Flow_InitialReviewNotRequired_To_SendInitialEmail" name="No" sourceRef="Gateway_InitialCheckpointReviewPolicy" targetRef="Task_SendGuestInitialCheckpointEmail">
@@ -361,24 +331,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_PublishGuestOrderCreated_di" bpmnElement="Task_PublishGuestOrderCreated">
         <dc:Bounds x="1650" y="280" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_ContainsHandmadeItems_di" bpmnElement="Gateway_ContainsHandmadeItems" isMarkerVisible="true">
-        <dc:Bounds x="1890" y="295" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1872" y="352" width="88" height="27" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_StaffPackReadyMadeItems_di" bpmnElement="Task_StaffPackReadyMadeItems">
-        <dc:Bounds x="2030" y="160" width="150" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_SendGuestReadyToShipEmail_di" bpmnElement="Task_SendGuestReadyToShipEmail">
-        <dc:Bounds x="2240" y="160" width="150" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_GuestOrderReadyMadeReady_di" bpmnElement="End_GuestOrderReadyMadeReady">
-        <dc:Bounds x="2460" y="182" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="2434" y="225" width="89" height="40" />
-        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_ManagerAssignStaffByItem_di" bpmnElement="Task_ManagerAssignStaffByItem">
         <dc:Bounds x="2030" y="400" width="150" height="80" />
@@ -524,33 +476,10 @@
         <di:waypoint x="1590" y="320" />
         <di:waypoint x="1650" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_PublishOrderCreated_To_HandmadeGateway_di" bpmnElement="Flow_PublishOrderCreated_To_HandmadeGateway">
+      <bpmndi:BPMNEdge id="Flow_PublishOrderCreated_To_AssignStaff_di" bpmnElement="Flow_PublishOrderCreated_To_AssignStaff">
         <di:waypoint x="1820" y="320" />
-        <di:waypoint x="1890" y="320" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_NoHandmade_To_PackReadyMade_di" bpmnElement="Flow_NoHandmade_To_PackReadyMade">
-        <di:waypoint x="1915" y="295" />
-        <di:waypoint x="1915" y="200" />
-        <di:waypoint x="2030" y="200" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1925" y="241" width="15" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_HasHandmade_To_AssignStaff_di" bpmnElement="Flow_HasHandmade_To_AssignStaff">
-        <di:waypoint x="1915" y="345" />
         <di:waypoint x="1915" y="440" />
         <di:waypoint x="2030" y="440" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1924" y="387" width="19" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_PackReadyMade_To_SendReadyEmail_di" bpmnElement="Flow_PackReadyMade_To_SendReadyEmail">
-        <di:waypoint x="2180" y="200" />
-        <di:waypoint x="2240" y="200" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_SendReadyEmail_To_EndReadyMade_di" bpmnElement="Flow_SendReadyEmail_To_EndReadyMade">
-        <di:waypoint x="2390" y="200" />
-        <di:waypoint x="2460" y="200" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_AssignStaff_To_SubmitInitial_di" bpmnElement="Flow_AssignStaff_To_SubmitInitial">
         <di:waypoint x="2180" y="440" />

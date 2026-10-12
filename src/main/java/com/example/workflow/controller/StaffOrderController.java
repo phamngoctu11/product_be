@@ -4,6 +4,7 @@ import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.ClaimOrderRequest;
 import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
+import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
@@ -41,7 +42,7 @@ public class StaffOrderController {
 
     @GetMapping("/claimable")
     @PreAuthorize("hasAuthority('STAFF')")
-    public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getClaimableOrders(
+    public ResponseEntity<ApiResponse<Page<OrderAssignmentQueueDTO>>> getClaimableOrders(
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(assignmentService.listClaimable(pageable)));

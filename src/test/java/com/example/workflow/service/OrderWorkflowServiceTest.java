@@ -40,7 +40,7 @@ class OrderWorkflowServiceTest {
     void completesDeployedGuestAssignmentTaskBeforeTryingMessageCorrelation() {
         Task task = mock(Task.class);
         when(task.getId()).thenReturn("task-assignment");
-        stubTaskQuery(20L, "Task_ManagerAssignHandmadeItems", List.of(task));
+        stubTaskQuery(20L, "Task_ManagerAssignOrder", List.of(task));
 
         assertThat(service.advanceAfterAssignment(20L, "staff-1")).isTrue();
 
@@ -48,8 +48,19 @@ class OrderWorkflowServiceTest {
     }
 
     @Test
-    void correlatesFutureOrderAssignedMessageWhenNoLegacyTaskExists() {
-        stubTaskQuery(30L, "Task_ManagerAssignHandmadeItems", List.of());
+    void completesLegacyGuestAssignmentTaskDuringDeploymentTransition() {
+        Task task = mock(Task.class);
+        when(task.getId()).thenReturn("legacy-task-assignment");
+        stubTaskQueries(25L, List.of(), List.of(task));
+
+        assertThat(service.advanceAfterAssignment(25L, "staff-legacy")).isTrue();
+
+        verify(taskService).complete("legacy-task-assignment", Map.of("staffId", "staff-legacy"));
+    }
+
+    @Test
+    void correlatesFutureOrderAssignedMessageWhenNoAssignmentTaskExists() {
+        stubTaskQueries(30L, List.of(), List.of());
         ExecutionQuery query = mock(ExecutionQuery.class);
         Execution execution = mock(Execution.class);
         when(execution.getId()).thenReturn("execution-1");
@@ -71,5 +82,19 @@ class OrderWorkflowServiceTest {
         when(query.processVariableValueEquals("orderId", orderId)).thenReturn(query);
         when(query.taskDefinitionKey(definitionKey)).thenReturn(query);
         when(query.listPage(0, 2)).thenReturn(tasks);
+    }
+
+    private void stubTaskQueries(Long orderId, List<Task> currentTasks, List<Task> legacyTasks) {
+        TaskQuery currentQuery = taskQuery(orderId, "Task_ManagerAssignOrder", currentTasks);
+        TaskQuery legacyQuery = taskQuery(orderId, "Task_ManagerAssignHandmadeItems", legacyTasks);
+        when(taskService.createTaskQuery()).thenReturn(currentQuery, legacyQuery);
+    }
+
+    private TaskQuery taskQuery(Long orderId, String definitionKey, List<Task> tasks) {
+        TaskQuery query = mock(TaskQuery.class);
+        when(query.processVariableValueEquals("orderId", orderId)).thenReturn(query);
+        when(query.taskDefinitionKey(definitionKey)).thenReturn(query);
+        when(query.listPage(0, 2)).thenReturn(tasks);
+        return query;
     }
 }

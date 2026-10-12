@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      PHẦN 05 ĐÃ IMPLEMENTED; PHẦN 07 CÒN GAP BPMN hasHandmadeItems CẦN LOẠI BỎ
-Phần đang thực hiện:      HIỆU CHỈNH PHẦN 07 — GUEST CATALOG LUÔN ĐI QUA ASSIGNMENT/SẢN XUẤT
-Phần hoàn thành gần nhất: F06 — Manager duyệt khả năng thực hiện (PHẦN 07), TRỪ NHÁNH HANDMADE LEGACY
-Ngày cập nhật gần nhất:   09/10/2026
+Tái triển khai code:      PHẦN 05 VÀ PHẦN 07 ĐÃ IMPLEMENTED
+Phần đang thực hiện:      CHỜ REVIEW PHẦN 07 TRƯỚC KHI BẮT ĐẦU PHẦN 08
+Phần hoàn thành gần nhất: PHẦN 07 — Manager review, assignment và Guest CATALOG bắt buộc qua sản xuất
+Ngày cập nhật gần nhất:   10/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -50,7 +50,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
 | 05 | Custom request | WF01 | 02–04 | `IMPLEMENTED` |
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
-| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IN_PROGRESS` |
+| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IMPLEMENTED` |
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `NOT_STARTED` |
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `NOT_STARTED` |
 | 10 | Production, checkpoint và KCS | WF05 | 07–09 | `NOT_STARTED` |
@@ -247,7 +247,7 @@ Phạm vi chính:
 
 ### PHẦN 07 — Manager review và assignment, WF02
 
-Trạng thái: `IN_PROGRESS` — API review/list/detail, manager assign, staff claim, JWT actor, version/idempotency, active assignment locking, decision metadata/migration và `ORDER_ACCEPTED` event đã hoàn thành. Guest BPMN vẫn còn gateway legacy `hasHandmadeItems` và nhánh bỏ qua assignment/sản xuất; phải loại bỏ trước khi bàn giao PHẦN 07.
+Trạng thái: `IMPLEMENTED` — API review/list/detail, manager assign, staff claim, JWT actor, version/idempotency, active assignment locking, decision metadata/migration và `ORDER_ACCEPTED` event đã hoàn thành. Guest BPMN không còn biến/gateway legacy `hasHandmadeItems`; mọi Guest CATALOG sau khi được duyệt đều bắt buộc chờ assignment.
 
 Bàn giao: [07-manager-review-assignment.md](implementation/07-manager-review-assignment.md).
 
@@ -458,6 +458,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 09/10/2026 | 07 / F06 | `IMPLEMENTED` | Nghiệm thu lại manager review theo contract custom mới: chi tiết OrderItem trả typed `description/imageUrls` với fallback snapshot legacy; assignment mới chặn ghi đè cả `assignedStaff` lẫn `warehouseStaff` legacy | Targeted 14 test mapper/review/assignment/atomicity đạt; `.\mvnw.cmd test`: 256 test, 0 failure/error, 7 MySQL opt-in skipped | Review PHẦN 05 và PHẦN 07/F06, sau đó bắt đầu PHẦN 08 |
 | 09/10/2026 | 07 | `IMPLEMENTED` | Hardening sau review: chặn MANAGER inactive/deleted; phát/consume `ORDER_ASSIGNED`; nối Guest `GUEST_ORDER_CREATED → manager task → assignment task`; email Guest ORDER_ACCEPTED có signed READ-only link và snapshot mẫu/giá/số lượng/thời lượng; signed token không xoay token checkout | `.\mvnw.cmd test`: 269 test, 0 failure/error, 7 MySQL opt-in skipped; concurrency thật xác nhận một winner cho cùng Order/cùng staff; BPMN engine test xác nhận review → assignment | PHẦN 08 consume `ORDER_ASSIGNED` để tạo ChatThread và timer CUSTOM; PHẦN 13 cutover BPMN USER/CUSTOM; production phải đặt `ORDER_LINK_SIGNING_SECRET` |
 | 09/10/2026 | 07 | `IN_PROGRESS` | Rà soát domain xác nhận shop không có hàng làm sẵn: CATALOG và CUSTOM đều handmade/made-to-order; phát hiện Guest BPMN/handler còn dùng `hasHandmadeItems` để cho phép bỏ qua assignment. Kết luận trước đó về Guest BPMN hoàn tất chưa còn đủ | Đã cập nhật target/báo cáo; chưa sửa code ở checkpoint tài liệu này | Bỏ biến/gateway `hasHandmadeItems`, cho Guest CATALOG luôn chờ assignment; giữ tương thích process instance cũ khi đổi task key rồi chạy lại BPMN/full suite |
+| 10/10/2026 | 07 | `IMPLEMENTED` | Đóng gap Guest made-to-order: bỏ tham số/process variable và gateway `hasHandmadeItems` khỏi service, runtime BPMN và blueprint; mọi Guest CATALOG được duyệt đi thẳng tới `Task_ManagerAssignOrder`. Bridge vẫn hoàn tất được task key legacy cho process instance đang chạy | Targeted 21 test đạt; `.\mvnw.cmd test`: 270 test, 0 failure/error, 7 MySQL opt-in skipped; test BPMN xác nhận biến legacy `hasHandmadeItems=false` không thể bỏ qua assignment; `git diff --check` đạt | Review PHẦN 07; sau đó bắt đầu PHẦN 08 chat, agreement và timer CUSTOM PT24H |
+| 12/10/2026 | 07 / FE | `IMPLEMENTED` | Hoàn thiện UI Manager duyệt/phân công và Staff self-claim theo API P7; thêm read queue Manager, DTO queue có `orderVersion`, idempotency header, phân quyền MANAGER riêng và badge state mục tiêu | FE development build đạt; `.\mvnw.cmd test`: 273 test, 0 failure/error, 7 MySQL opt-in skipped; test queue xác nhận `PENDING_ASSIGNMENT` và version cho cả Manager/Staff | Review thủ công UI với dữ liệu tích hợp; sau đó bắt đầu PHẦN 08 |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 

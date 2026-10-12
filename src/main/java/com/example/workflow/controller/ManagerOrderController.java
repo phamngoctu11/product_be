@@ -8,6 +8,7 @@ import com.example.workflow.dto.ManagerOrderReviewSummaryDTO;
 import com.example.workflow.dto.ManagerReviewRequest;
 import com.example.workflow.dto.ManagerReviewResultDTO;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
+import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.ManagerOrderReviewService;
@@ -79,6 +80,14 @@ public class ManagerOrderController {
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(assignmentService.listAvailableStaff(pageable)));
+    }
+
+    @GetMapping("/manager/assignments")
+    @PreAuthorize("hasAuthority('MANAGER')")
+    public ResponseEntity<ApiResponse<Page<OrderAssignmentQueueDTO>>> getAssignableOrders(
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(assignmentService.listAssignable(pageable)));
     }
 
     @PostMapping("/manager/assignments/{orderId}")

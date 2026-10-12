@@ -24,11 +24,11 @@ import static org.mockito.ArgumentMatchers.any;
 class GuestPurchaseFlowBpmnTest {
 
     @Test
-    void readyMadeOrderWaitsForManagerApprovalBeforeCompleting() {
+    void legacyHandmadeFalseVariableCannotBypassAssignment() {
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
-            var instance = start(engine, false, 200L);
+            var instance = startWithLegacyHandmadeVariable(engine, false, 200L);
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
 
             verifyNoInteractions(publisher);
@@ -36,25 +36,24 @@ class GuestPurchaseFlowBpmnTest {
 
             completeManagerApproval(engine, instance.getId(), true);
 
-            assertThat(engine.getRuntimeService().createProcessInstanceQuery()
-                    .processInstanceId(instance.getId()).count()).isZero();
+            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignOrder");
         } finally {
             engine.close();
         }
     }
 
     @Test
-    void handmadeBranchWaitsForManagerAssignment() {
+    void approvedGuestCatalogAlwaysWaitsForManagerAssignment() {
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
-            var instance = start(engine, true, 201L);
+            var instance = start(engine, 201L);
 
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
 
             completeManagerApproval(engine, instance.getId(), true);
 
-            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignHandmadeItems");
+            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignOrder");
         } finally {
             engine.close();
         }
@@ -66,7 +65,7 @@ class GuestPurchaseFlowBpmnTest {
         JavaDelegate cancelOrderDelegate = mock(JavaDelegate.class);
         ProcessEngine engine = processEngine(publisher, cancelOrderDelegate);
         try {
-            var instance = start(engine, true, 203L);
+            var instance = start(engine, 203L);
 
             completeManagerApproval(engine, instance.getId(), false);
 
@@ -85,7 +84,7 @@ class GuestPurchaseFlowBpmnTest {
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
-            var instance = start(engine, false, 202L);
+            var instance = start(engine, 202L);
 
             verifyNoInteractions(publisher);
             assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("manager_approve_order");
@@ -101,11 +100,11 @@ class GuestPurchaseFlowBpmnTest {
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         ProcessEngine engine = processEngine(publisher, mock(JavaDelegate.class));
         try {
-            var instance = start(engine, true, 204L);
+            var instance = start(engine, 204L);
             var workflow = new OrderWorkflowService(engine.getRuntimeService(), engine.getTaskService());
 
             assertThat(workflow.completeManagerReview(204L, true, "manager-1")).isTrue();
-            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignHandmadeItems");
+            assertThat(activeTaskKey(engine, instance.getId())).isEqualTo("Task_ManagerAssignOrder");
             assertThat(workflow.advanceAfterAssignment(204L, "staff-1")).isTrue();
 
             assertThat(engine.getRuntimeService().createProcessInstanceQuery()
@@ -137,7 +136,6 @@ class GuestPurchaseFlowBpmnTest {
 
     private org.camunda.bpm.engine.runtime.ProcessInstance start(
             ProcessEngine engine,
-            boolean hasHandmadeItems,
             Long orderId
     ) {
         return engine.getRuntimeService().startProcessInstanceByKey(
@@ -146,6 +144,22 @@ class GuestPurchaseFlowBpmnTest {
                 Map.of(
                         "orderId", orderId,
                         "guestSessionId", "guest-session-0001",
+                        "guestOrder", true
+                )
+        );
+    }
+
+    private org.camunda.bpm.engine.runtime.ProcessInstance startWithLegacyHandmadeVariable(
+            ProcessEngine engine,
+            boolean hasHandmadeItems,
+            Long orderId
+    ) {
+        return engine.getRuntimeService().startProcessInstanceByKey(
+                "GuestPurchaseFlow",
+                "guest-order-" + orderId,
+                Map.of(
+                        "orderId", orderId,
+                        "guestSessionId", "guest-session-legacy",
                         "hasHandmadeItems", hasHandmadeItems,
                         "guestOrder", true
                 )
