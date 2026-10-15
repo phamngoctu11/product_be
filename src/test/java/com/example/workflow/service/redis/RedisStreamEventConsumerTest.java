@@ -3,7 +3,12 @@ package com.example.workflow.service.redis;
 import com.example.workflow.entity.Order;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
+import com.example.workflow.event.payload.OrderReadyToShipEvent;
+import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
+import com.example.workflow.nume.ProductionCheckpointStage;
+import com.example.workflow.nume.ProductionDecisionType;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,6 +18,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -20,7 +27,7 @@ import static org.mockito.Mockito.when;
 
 class RedisStreamEventConsumerTest {
     private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final NotificationService notificationService = mock(NotificationService.class);
     private final EmailService emailService = mock(EmailService.class);
     private final OrderRepository orderRepository = mock(OrderRepository.class);
@@ -121,6 +128,53 @@ class RedisStreamEventConsumerTest {
                 "Guest Customer",
                 200L
         );
+    }
+
+    @Test
+    void productionCheckpointSubmittedDelegatesToLifecycleHandler() throws JsonProcessingException {
+        ProductionCheckpointSubmittedEvent event = new ProductionCheckpointSubmittedEvent(
+                200L, 501L, 901L, ProductionCheckpointStage.INITIAL_SHAPE, 1,
+                "staff-1", List.of("https://cdn.example/initial.jpg"), "Tao dang"
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleProductionCheckpointSubmitted",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(orderLifecycleEventHandler).handleProductionCheckpointSubmitted(event);
+    }
+
+    @Test
+    void productionCheckpointReviewedDelegatesToLifecycleHandler() throws JsonProcessingException {
+        ProductionCheckpointReviewedEvent event = new ProductionCheckpointReviewedEvent(
+                200L, 501L, 902L, 2, ProductionDecisionType.REWORK_REQUIRED,
+                "Can lam lai", "manager-1", "staff-1"
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleProductionCheckpointReviewed",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(orderLifecycleEventHandler).handleProductionCheckpointReviewed(event);
+    }
+
+    @Test
+    void readyToShipDelegatesToLifecycleHandler() throws JsonProcessingException {
+        OrderReadyToShipEvent event = new OrderReadyToShipEvent(
+                200L, 70L, "manager-1", LocalDateTime.of(2026, 10, 13, 16, 0)
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                consumer,
+                "handleOrderReadyToShip",
+                objectMapper.writeValueAsString(event)
+        );
+
+        verify(orderLifecycleEventHandler).handleOrderReadyToShip(event);
     }
 
     private String payload(Long orderId) throws JsonProcessingException {

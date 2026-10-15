@@ -15,7 +15,6 @@ import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
-import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.PageableUtils;
@@ -59,7 +58,6 @@ public class OrderService {
     private final ReputationService reputationService;
     private final CartService cartService;
     private final OrderDetailsAssembler orderDetailsAssembler;
-    private final ApplicationCacheService applicationCacheService;
     private final OrderLookupService orderLookupService;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderCancellationService orderCancellationService;
@@ -93,88 +91,6 @@ public class OrderService {
         if (oldStatus != order.getStatus()) {
             orderStatusHistoryService.record(order, oldStatus, order.getStatus(), changerId);
         }
-    }
-
-    private OrderItem findOrderItemByVariant(Order order, Long variantId) {
-        return order.getItems().stream()
-                .filter(existingItem -> existingItem.getProductVariant().getId().equals(variantId))
-                .findFirst()
-                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VARIANT_NOT_IN_ORDER, variantId));
-    }
-
-    // ==========================================
-    // Station 2: warehouse export
-    // ==========================================
-    @Transactional
-    public void processStaffExport(Long orderId, List<ItemCheckRequest> exportData) {
-        Order order = orderLookupService.require(orderId);
-        User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED);
-
-        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_STAFF_REQUIRED_BEFORE_EXPORT);
-        }
-        if (order.getWarehouseStaff() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_HAS_NO_ASSIGNED_STAFF);
-        }
-        if (!order.getWarehouseStaff().getId().equals(staff.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ONLY_ASSIGNED_STAFF_CAN_EXPORT);
-        }
-        if (exportData == null || exportData.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_DATA_REQUIRED);
-        }
-
-        Task task = findWorkflowTask(orderId, "staff_export_warehouse", "Order is not waiting for warehouse export!");
-
-        // Apply actual exported quantities.
-        for (ItemCheckRequest req : exportData) {
-            if (req.getQuantity() < 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.EXPORT_QUANTITY_NEGATIVE);
-            }
-            OrderItem item = findOrderItemByVariant(order, req.getVariantId());
-            item.setExportedQuantity(req.getQuantity());
-        }
-
-        OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.READY_TO_SHIP);
-        saveOrderAndAuditStatusChange(order, oldStatus, staff.getId());
-        taskService.complete(task.getId());
-
-        applicationCacheService.evictStaffExported(order, staff.getId());
-    }
-
-    // ==========================================
-    // Station 3: manager KCS reconciliation
-    // ==========================================
-    @Transactional
-    public void processManagerKcsCheck(Long orderId, boolean isPassed,String cancelReason) {
-        Order order = orderLookupService.require(orderId);
-
-        if (order.getStatus() != OrderStatus.READY_TO_SHIP) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_WAITING_FOR_KCS);
-        }
-
-        Task task = findWorkflowTask(orderId, "manager_kcs_check", "KCS task not found for this order!");
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("kcsPassed", isPassed);
-
-        OrderStatus oldStatus = order.getStatus();
-        if (isPassed) {
-            order.setStatus(OrderStatus.SHIPPING);
-            saveCustomerNotificationIfSystemUser(order, "Don hang dang giao", "Don hang #" + orderId + " da xuat kho va dang tren duong giao den ban.");
-        } else {
-            order.setStatus(OrderStatus.READY_TO_SHIP);
-            String message = " vui long kiem tra lai so luong xuat.";
-            if (cancelReason != null) message = "Ly do: " + cancelReason;
-            String staffId = order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
-            String destination = staffId == null ? "/topic/admin-notifications" : "/topic/user-notifications/" + staffId;
-            saveAndSendNotification("Canh bao KCS", "Don # bi KCS danh rot" + orderId + message, orderId, staffId, destination);
-        }
-
-        saveOrderAndAuditStatusChange(order, oldStatus, null);
-        taskService.complete(task.getId(), variables);
-
-        applicationCacheService.evictManagerKcsChecked(order);
     }
 
     // ==========================================
@@ -465,19 +381,6 @@ public class OrderService {
 
     private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
         notificationService.sendNotification(title, content, orderId, targetUserId, destination);
-    }
-
-    private void saveCustomerNotificationIfSystemUser(Order order, String title, String content) {
-        if (order == null || order.getUser() == null || order.getUser().getId() == null) {
-            return;
-        }
-        saveAndSendNotification(
-                title,
-                content,
-                order.getId(),
-                order.getUser().getId(),
-                "/topic/user-notifications/" + order.getUser().getId()
-        );
     }
 
     @Transactional

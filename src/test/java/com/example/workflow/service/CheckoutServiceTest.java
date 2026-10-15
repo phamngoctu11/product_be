@@ -104,6 +104,7 @@ class CheckoutServiceTest {
         Order order = orderCaptor.getValue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_APPROVAL);
         assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.NOT_DUE);
+        assertThat(order.getProductionStatus()).isEqualTo(com.example.workflow.nume.OrderProductionStatus.WAITING_PRODUCTION);
         assertThat(order.getFinalPrice()).isEqualTo(300.0);
         assertThat(order.getItems()).singleElement().satisfies(item -> {
             assertThat(item.getSourceType()).isEqualTo(OrderItemSourceType.CATALOG);
@@ -111,6 +112,7 @@ class CheckoutServiceTest {
             assertThat(item.getMadeDaySnapshot()).isEqualTo(3.0);
             assertThat(item.getProductionDurationDays()).isEqualTo(7);
             assertThat(item.getDurationRuleVersion()).isEqualTo(CatalogDurationCalculator.RULE_VERSION);
+            assertThat(item.isHandmade()).isTrue();
         });
         assertThat(cart.getItems()).containsExactly(unselected);
         assertThat(response.getProvider()).isNull();
@@ -177,7 +179,8 @@ class CheckoutServiceTest {
         product.setId(variantId + 100L);
         product.setProductName("Product " + variantId);
         product.setMadeDay(madeDay);
-        product.setHandmade(true);
+        // P10: every new catalog item is made-to-order, regardless of this legacy catalog flag.
+        product.setHandmade(false);
         product.setAvailabilityStatus(ProductAvailabilityStatus.ACCEPTING_ORDERS);
         ProductVariant variant = new ProductVariant();
         variant.setId(variantId);

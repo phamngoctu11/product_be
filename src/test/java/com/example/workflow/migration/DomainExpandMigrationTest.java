@@ -117,6 +117,112 @@ class DomainExpandMigrationTest {
     }
 
     @Test
+    void productionCheckpointAttemptsImagesAndDecisionAreImmutableByConstraint() throws Exception {
+        try (Connection connection = legacyDatabase()) {
+            migrate(connection);
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO production_checkpoints(
+                            order_item_id, stage, status, attempt_number, manager_review_required,
+                            submitted_by_id, submitted_at, version
+                        ) VALUES (1, 'FINAL_PRODUCT', 'PENDING_REVIEW', 1, TRUE,
+                                  'staff-1', CURRENT_TIMESTAMP, 0)
+                        """);
+                assertThatThrownBy(() -> statement.executeUpdate("""
+                        INSERT INTO production_checkpoints(
+                            order_item_id, stage, status, attempt_number, manager_review_required,
+                            submitted_by_id, submitted_at, version
+                        ) VALUES (1, 'FINAL_PRODUCT', 'PENDING_REVIEW', 1, TRUE,
+                                  'staff-1', CURRENT_TIMESTAMP, 0)
+                        """))
+                        .isInstanceOf(SQLException.class);
+
+                statement.executeUpdate("""
+                        INSERT INTO production_checkpoint_images(
+                            checkpoint_id, image_url, display_order, created_at
+                        ) VALUES (1, 'https://cdn.example/final.jpg', 0, CURRENT_TIMESTAMP)
+                        """);
+                assertThatThrownBy(() -> statement.executeUpdate("""
+                        INSERT INTO production_checkpoint_images(
+                            checkpoint_id, image_url, display_order, created_at
+                        ) VALUES (1, 'https://cdn.example/duplicate.jpg', 0, CURRENT_TIMESTAMP)
+                        """))
+                        .isInstanceOf(SQLException.class);
+
+                statement.executeUpdate("""
+                        INSERT INTO production_decisions(
+                            checkpoint_id, decision_type, reason, decided_by_id, decided_at
+                        ) VALUES (1, 'REWORK_REQUIRED', 'Can lam lai', 'staff-1', CURRENT_TIMESTAMP)
+                        """);
+                assertThatThrownBy(() -> statement.executeUpdate("""
+                        INSERT INTO production_decisions(
+                            checkpoint_id, decision_type, decided_by_id, decided_at
+                        ) VALUES (1, 'PASS', 'staff-1', CURRENT_TIMESTAMP)
+                        """))
+                        .isInstanceOf(SQLException.class);
+            }
+        }
+    }
+
+    @Test
+    void normalizesLegacyProductionStatusesBeforeNewEnumsAreRead() throws Exception {
+        try (Connection connection = legacyDatabase()) {
+            try (var statement = connection.createStatement()) {
+                statement.execute("""
+                        CREATE TABLE production_checkpoints (
+                            id BIGINT PRIMARY KEY,
+                            status VARCHAR(24) NOT NULL,
+                            manager_review_required BOOLEAN NOT NULL
+                        )
+                        """);
+                statement.execute("""
+                        CREATE TABLE production_decisions (
+                            id BIGINT PRIMARY KEY,
+                            decision_type VARCHAR(16) NOT NULL
+                        )
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO production_checkpoints VALUES
+                            (1, 'SUBMITTED', FALSE),
+                            (2, 'SUBMITTED', TRUE),
+                            (3, 'APPROVED', TRUE),
+                            (4, 'REJECTED', TRUE)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO production_decisions VALUES
+                            (1, 'APPROVED'),
+                            (2, 'REJECTED')
+                        """);
+            }
+
+            migrate(connection);
+
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery(
+                         "SELECT status FROM production_checkpoints ORDER BY id"
+                 )) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("PASSED");
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("PENDING_REVIEW");
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("PASSED");
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("REWORK_REQUIRED");
+            }
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery(
+                         "SELECT decision_type FROM production_decisions ORDER BY id"
+                 )) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("PASS");
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("REWORK_REQUIRED");
+            }
+        }
+    }
+
+    @Test
     void customContentMigrationBackfillsLegacyNullAttachmentsWithoutRenamingColumns() throws Exception {
         try (Connection connection = legacyDatabase()) {
             applyChangelog(connection, "db/changelog/02-domain-expand.xml");

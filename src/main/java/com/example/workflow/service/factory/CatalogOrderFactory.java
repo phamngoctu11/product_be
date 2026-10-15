@@ -50,7 +50,6 @@ public class CatalogOrderFactory {
         order.setItems(new ArrayList<>());
 
         double subtotal = 0.0;
-        boolean requiresProduction = false;
         for (CartItem cartItem : cartItems) {
             ProductVariant variant = cartItem.getProductVariant();
             Product product = variant.getProduct();
@@ -68,10 +67,10 @@ public class CatalogOrderFactory {
             item.setMadeDaySnapshot(product.getMadeDay());
             item.setProductionDurationDays(duration);
             item.setDurationRuleVersion(CatalogDurationCalculator.RULE_VERSION);
-            item.setHandmade(product.isHandmade());
-            item.setProductionStatus(product.isHandmade()
-                    ? OrderItemProductionStatus.WAITING_ASSIGNMENT
-                    : OrderItemProductionStatus.NOT_REQUIRED);
+            // Every catalog item in the target shop is made to order. The legacy
+            // Product.handmade flag must not bypass WF05 for newly created orders.
+            item.setHandmade(true);
+            item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
             order.getItems().add(item);
 
             double lineTotal = variant.getPrice() * cartItem.getQuantity();
@@ -84,12 +83,9 @@ public class CatalogOrderFactory {
                 );
             }
             subtotal = updatedSubtotal;
-            requiresProduction = requiresProduction || product.isHandmade();
         }
         order.setTotalPrice(subtotal);
-        order.setProductionStatus(requiresProduction
-                ? OrderProductionStatus.WAITING_PRODUCTION
-                : OrderProductionStatus.NOT_REQUIRED);
+        order.setProductionStatus(OrderProductionStatus.WAITING_PRODUCTION);
         return order;
     }
 }

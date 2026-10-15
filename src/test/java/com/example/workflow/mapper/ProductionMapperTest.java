@@ -28,7 +28,7 @@ class ProductionMapperTest {
         OrderItem item = new OrderItem();
         item.setId(10L);
         item.setHandmade(true);
-        item.setProductionStatus(OrderItemProductionStatus.INITIAL_WAITING_REVIEW);
+        item.setProductionStatus(OrderItemProductionStatus.FINAL_IN_PROGRESS);
 
         OrderItemAssignment assignment = new OrderItemAssignment();
         assignment.setId(20L);
@@ -42,7 +42,7 @@ class ProductionMapperTest {
         ProductionCheckpoint checkpoint = new ProductionCheckpoint();
         checkpoint.setId(30L);
         checkpoint.setStage(ProductionCheckpointStage.INITIAL_SHAPE);
-        checkpoint.setStatus(ProductionCheckpointStatus.SUBMITTED);
+        checkpoint.setStatus(ProductionCheckpointStatus.PASSED);
         checkpoint.setAttemptNumber(1);
         checkpoint.setNote("Initial shape completed");
         checkpoint.setSubmittedBy(staff);
@@ -58,7 +58,7 @@ class ProductionMapperTest {
 
         ProductionDecision decision = new ProductionDecision();
         decision.setId(50L);
-        decision.setDecisionType(ProductionDecisionType.APPROVED);
+        decision.setDecisionType(ProductionDecisionType.PASS);
         decision.setReason("Good shape");
         decision.setDecidedBy(manager);
         decision.setDecidedAt(LocalDateTime.of(2026, 9, 17, 10, 0));
@@ -69,7 +69,7 @@ class ProductionMapperTest {
 
         assertThat(result.orderItemId()).isEqualTo(10L);
         assertThat(result.handmade()).isTrue();
-        assertThat(result.productionStatus()).isEqualTo(OrderItemProductionStatus.INITIAL_WAITING_REVIEW);
+        assertThat(result.productionStatus()).isEqualTo(OrderItemProductionStatus.FINAL_IN_PROGRESS);
         assertThat(result.assignment().assignedStaffId()).isEqualTo("staff-1");
         assertThat(result.assignment().assignedStaffName()).isEqualTo("Nguyen An");
         assertThat(result.checkpoints()).singleElement().satisfies(mappedCheckpoint -> {
@@ -77,7 +77,7 @@ class ProductionMapperTest {
             assertThat(mappedCheckpoint.images()).singleElement()
                     .extracting(imageDto -> imageDto.imageUrl())
                     .isEqualTo("https://cdn.example/checkpoint.jpg");
-            assertThat(mappedCheckpoint.decision().decisionType()).isEqualTo(ProductionDecisionType.APPROVED);
+            assertThat(mappedCheckpoint.decision().decisionType()).isEqualTo(ProductionDecisionType.PASS);
             assertThat(mappedCheckpoint.decision().decidedByName()).isEqualTo("Tran Binh");
         });
     }

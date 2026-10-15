@@ -5,11 +5,13 @@ import com.example.workflow.dto.CancelOrderRequest;
 import com.example.workflow.dto.GuestOrderCancellationViewDTO;
 import com.example.workflow.dto.OrderCancellationResultDTO;
 import com.example.workflow.dto.OrderDTO;
+import com.example.workflow.dto.OrderItemProductionDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
 import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.OrderService;
+import com.example.workflow.service.ProductionCheckpointService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class GuestOrderController {
     private final OrderCancellationService cancellationService;
     private final OrderService orderService;
+    private final ProductionCheckpointService productionCheckpointService;
 
     /** Safe link target: reading an email link never mutates the order. */
     @GetMapping("/{orderId}/cancellation")
@@ -69,6 +72,16 @@ public class GuestOrderController {
             @NotBlank @RequestParam("token") String token
     ) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getGuestOrderHistory(orderId, token)));
+    }
+
+    @GetMapping("/{orderId}/checkpoints")
+    public ResponseEntity<ApiResponse<List<OrderItemProductionDTO>>> getGuestProductionCheckpoints(
+            @Positive @PathVariable Long orderId,
+            @NotBlank @RequestParam("token") String token
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                productionCheckpointService.getGuestProgress(orderId, token)
+        ));
     }
 
     @PostMapping("/{orderId}/confirm-receipt")

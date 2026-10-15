@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="09-create-production-checkpoints-if-missing" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="production_checkpoints"/></not>
+        </preConditions>
+        <createTable tableName="production_checkpoints">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_item_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="stage" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="status" type="varchar(24)"><constraints nullable="false"/></column>
+            <column name="attempt_number" type="int"><constraints nullable="false"/></column>
+            <column name="note" type="varchar(2000)"/>
+            <column name="manager_review_required" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="submitted_by_id" type="varchar(36)"><constraints nullable="false"/></column>
+            <column name="submitted_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="production_checkpoints"
+                             columnNames="order_item_id,stage,attempt_number"
+                             constraintName="uk_checkpoint_item_stage_attempt"/>
+        <addForeignKeyConstraint baseTableName="production_checkpoints" baseColumnNames="order_item_id"
+                                 referencedTableName="order_item" referencedColumnNames="id"
+                                 constraintName="fk_checkpoint_order_item"/>
+        <addForeignKeyConstraint baseTableName="production_checkpoints" baseColumnNames="submitted_by_id"
+                                 referencedTableName="users" referencedColumnNames="id"
+                                 constraintName="fk_checkpoint_submitter"/>
+        <createIndex tableName="production_checkpoints" indexName="idx_checkpoint_item_stage">
+            <column name="order_item_id"/><column name="stage"/>
+        </createIndex>
+        <createIndex tableName="production_checkpoints" indexName="idx_checkpoint_status">
+            <column name="status"/><column name="submitted_at"/>
+        </createIndex>
+        <createIndex tableName="production_checkpoints" indexName="idx_checkpoint_submitter">
+            <column name="submitted_by_id"/><column name="submitted_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="09-create-production-checkpoint-images-if-missing" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="production_checkpoint_images"/></not>
+        </preConditions>
+        <createTable tableName="production_checkpoint_images">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="checkpoint_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="image_url" type="varchar(2048)"><constraints nullable="false"/></column>
+            <column name="public_id" type="varchar(255)"/>
+            <column name="display_order" type="int"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="production_checkpoint_images"
+                             columnNames="checkpoint_id,display_order"
+                             constraintName="uk_checkpoint_image_display_order"/>
+        <addForeignKeyConstraint baseTableName="production_checkpoint_images" baseColumnNames="checkpoint_id"
+                                 referencedTableName="production_checkpoints" referencedColumnNames="id"
+                                 constraintName="fk_checkpoint_image_checkpoint"/>
+        <createIndex tableName="production_checkpoint_images" indexName="idx_checkpoint_image_checkpoint">
+            <column name="checkpoint_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="09-create-production-decisions-if-missing" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="production_decisions"/></not>
+        </preConditions>
+        <createTable tableName="production_decisions">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="checkpoint_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="decision_type" type="varchar(16)"><constraints nullable="false"/></column>
+            <column name="reason" type="varchar(1000)"/>
+            <column name="decided_by_id" type="varchar(36)"><constraints nullable="false"/></column>
+            <column name="decided_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="production_decisions" columnNames="checkpoint_id"
+                             constraintName="uk_production_decision_checkpoint"/>
+        <addForeignKeyConstraint baseTableName="production_decisions" baseColumnNames="checkpoint_id"
+                                 referencedTableName="production_checkpoints" referencedColumnNames="id"
+                                 constraintName="fk_production_decision_checkpoint"/>
+        <addForeignKeyConstraint baseTableName="production_decisions" baseColumnNames="decided_by_id"
+                                 referencedTableName="users" referencedColumnNames="id"
+                                 constraintName="fk_production_decision_actor"/>
+        <createIndex tableName="production_decisions" indexName="idx_production_decision_actor">
+            <column name="decided_by_id"/><column name="decided_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="09-normalize-legacy-production-checkpoint-status" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="production_checkpoints"/>
+            <columnExists tableName="production_checkpoints" columnName="manager_review_required"/>
+        </preConditions>
+        <sql>
+            UPDATE production_checkpoints SET status = 'PASSED' WHERE status = 'APPROVED';
+            UPDATE production_checkpoints SET status = 'REWORK_REQUIRED' WHERE status = 'REJECTED';
+            UPDATE production_checkpoints SET status = 'PASSED'
+            WHERE status = 'SUBMITTED' AND manager_review_required = FALSE;
+            UPDATE production_checkpoints SET status = 'PENDING_REVIEW'
+            WHERE status = 'SUBMITTED' AND manager_review_required = TRUE;
+        </sql>
+    </changeSet>
+
+    <changeSet id="09-normalize-legacy-production-decision-type" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="production_decisions"/>
+        </preConditions>
+        <sql>
+            UPDATE production_decisions SET decision_type = 'PASS' WHERE decision_type = 'APPROVED';
+            UPDATE production_decisions SET decision_type = 'REWORK_REQUIRED' WHERE decision_type = 'REJECTED';
+        </sql>
+    </changeSet>
+
+    <changeSet id="09-remove-initial-review-item-states" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="order_item"/>
+            <columnExists tableName="order_item" columnName="production_status"/>
+        </preConditions>
+        <sql>
+            UPDATE order_item SET production_status = 'FINAL_IN_PROGRESS'
+            WHERE production_status IN ('INITIAL_WAITING_REVIEW', 'INITIAL_REWORK_REQUIRED');
+        </sql>
+    </changeSet>
+</databaseChangeLog>

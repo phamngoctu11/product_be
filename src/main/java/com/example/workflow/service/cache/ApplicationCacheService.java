@@ -82,18 +82,6 @@ public class ApplicationCacheService {
         evictUserOrdersAfterCommit(orderUserId(order));
     }
 
-    public void evictStaffExported(Order order, String staffId) {
-        evictStaffAssignedOrdersAfterCommit(staffId);
-        evictManagerPendingOrdersAfterCommit(OrderStatus.READY_TO_SHIP);
-        evictUserOrdersAfterCommit(orderUserId(order));
-    }
-
-    public void evictManagerKcsChecked(Order order) {
-        evictManagerPendingOrdersAfterCommit(OrderStatus.READY_TO_SHIP);
-        evictStaffAssignedOrdersAfterCommit(orderStaffId(order));
-        evictUserOrdersAfterCommit(orderUserId(order));
-    }
-
     public void evictOrderDelivered(Order order, String userId) {
         evictUserOrdersAfterCommit(userId);
         evictUserStateAfterCommit(userId);

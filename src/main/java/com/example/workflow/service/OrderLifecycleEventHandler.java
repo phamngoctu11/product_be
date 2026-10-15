@@ -11,9 +11,17 @@ import com.example.workflow.event.payload.OrderAgreementSubmittedEvent;
 import com.example.workflow.event.payload.OrderAgreementReviewedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
+import com.example.workflow.event.payload.PaymentOpenedEvent;
+import com.example.workflow.event.payload.ProductionStartedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
+import com.example.workflow.event.payload.OrderReadyToShipEvent;
+import com.example.workflow.nume.ProductionCheckpointStage;
+import com.example.workflow.nume.ProductionDecisionType;
 import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentMethod;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -243,25 +251,8 @@ public class OrderLifecycleEventHandler {
 
     public void handlePaymentConfirmed(PaymentConfirmedEvent event) {
         Order order = requireOrder(event.orderId(), "PAYMENT_CONFIRMED");
-        if (StringUtils.hasText(order.getEmail())) {
-            emailService.sendOrderConfirmationEmail(
-                    order.getEmail(),
-                    order.getRecipientName(),
-                    order.getId(),
-                    order.getFinalPrice(),
-                    "Thanh toán online đã xác nhận"
-            );
-        }
-        if (order.getUser() != null) {
-            String userId = order.getUser().getId();
-            notificationService.sendNotification(
-                    "Thanh toán thành công",
-                    "Thanh toán cho đơn hàng #" + order.getId() + " đã được xác nhận.",
-                    order.getId(),
-                    userId,
-                    "/topic/user-notifications/" + userId
-            );
-        }
+        if (order.getPaymentStatus() != PaymentStatus.PAID) return;
+        orderWorkflowService.correlatePaymentSuccess(order.getId());
 
         String staffId = assignedStaffId(order);
         if (StringUtils.hasText(staffId)) {
@@ -271,6 +262,135 @@ public class OrderLifecycleEventHandler {
                     order.getId(),
                     staffId,
                     "/topic/user-notifications/" + staffId
+            );
+        }
+    }
+
+    public void handlePaymentOpened(PaymentOpenedEvent event) {
+        Order order = requireOrder(event.orderId(), "PAYMENT_OPENED");
+        if (order.getStatus() != OrderStatus.ORDER_ACCEPTED
+                || order.getPaymentStatus() != PaymentStatus.PENDING) {
+            return;
+        }
+        orderWorkflowService.correlatePaymentOpened(event.orderId(), event.attemptId(), event.dueAt());
+    }
+
+    public void handleProductionStarted(ProductionStartedEvent event) {
+        Order order = requireOrder(event.orderId(), "PRODUCTION_STARTED");
+        if (order.getStatus() != OrderStatus.ORDER_CREATING
+                || order.getProductionStartedAt() == null
+                || !Objects.equals(event.staffId(), assignedStaffId(order))) {
+            return;
+        }
+        orderWorkflowService.completeProductionStart(
+                event.orderId(), event.staffId(), event.productionStartedAt()
+        );
+        if (StringUtils.hasText(order.getEmail())) {
+            emailService.sendProductionStartedEmail(
+                    order.getEmail(),
+                    order.getRecipientName(),
+                    order.getId(),
+                    order.getUser() == null ? signedGuestOrderUrl(order) : authenticatedOrderUrl(order.getId())
+            );
+        }
+        if (order.getUser() != null) {
+            String userId = order.getUser().getId();
+            notificationService.sendNotification(
+                    "Đơn hàng đã bắt đầu sản xuất",
+                    "Nhân viên đã bắt đầu sản xuất đơn hàng #" + order.getId() + ".",
+                    order.getId(),
+                    userId,
+                    "/topic/user-notifications/" + userId
+            );
+        }
+    }
+
+    public void handleProductionCheckpointSubmitted(ProductionCheckpointSubmittedEvent event) {
+        Order order = requireOrder(event.orderId(), "PRODUCTION_CHECKPOINT_SUBMITTED");
+        if (order.getStatus() == OrderStatus.CANCELLED
+                || !Objects.equals(event.staffId(), assignedStaffId(order))) {
+            return;
+        }
+        orderWorkflowService.completeProductionCheckpointSubmission(
+                event.orderId(), event.orderItemId(), event.checkpointId(), event.stage(), event.attemptNumber()
+        );
+        if (event.stage() == ProductionCheckpointStage.INITIAL_SHAPE) {
+            if (StringUtils.hasText(order.getEmail())) {
+                emailService.sendInitialShapeCheckpointEmail(
+                        order.getEmail(),
+                        order.getRecipientName(),
+                        order.getId(),
+                        event.orderItemId(),
+                        event.imageUrls(),
+                        event.note(),
+                        order.getUser() == null ? signedGuestOrderUrl(order) : authenticatedOrderUrl(order.getId())
+                );
+            }
+            if (order.getUser() != null) {
+                String userId = order.getUser().getId();
+                notificationService.sendNotification(
+                        "Cập nhật tiến độ sản xuất",
+                        "Đã có hình ảnh đầu tiên của item #" + event.orderItemId(),
+                        order.getId(),
+                        userId,
+                        "/topic/user-notifications/" + userId
+                );
+            }
+            return;
+        }
+        notificationService.sendNotification(
+                "Sản phẩm chờ KCS",
+                "Item #" + event.orderItemId() + " của đơn #" + order.getId()
+                        + " có sản phẩm hoàn thiện lần " + event.attemptNumber() + " đang chờ KCS.",
+                order.getId(),
+                null,
+                "/topic/admin-notifications"
+        );
+    }
+
+    public void handleProductionCheckpointReviewed(ProductionCheckpointReviewedEvent event) {
+        Order order = requireOrder(event.orderId(), "PRODUCTION_CHECKPOINT_REVIEWED");
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+        orderWorkflowService.completeProductionCheckpointReview(
+                event.orderId(), event.orderItemId(), event.checkpointId(), event.decision()
+        );
+        if (event.decision() == ProductionDecisionType.REWORK_REQUIRED
+                && StringUtils.hasText(event.assignedStaffId())) {
+            notificationService.sendNotification(
+                    "KCS yêu cầu làm lại",
+                    "Item #" + event.orderItemId() + " của đơn #" + order.getId()
+                            + " cần làm lại. Lý do: " + event.reason(),
+                    order.getId(),
+                    event.assignedStaffId(),
+                    "/topic/user-notifications/" + event.assignedStaffId()
+            );
+        }
+    }
+
+    public void handleOrderReadyToShip(OrderReadyToShipEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_READY_TO_SHIP");
+        if (order.getStatus() == OrderStatus.CANCELLED || order.getReadyToShipAt() == null) {
+            return;
+        }
+        orderWorkflowService.completeProduction(event.orderId(), event.readyToShipAt());
+        if (StringUtils.hasText(order.getEmail())) {
+            emailService.sendReadyToShipEmail(
+                    order.getEmail(),
+                    order.getRecipientName(),
+                    order.getId(),
+                    order.getUser() == null ? signedGuestOrderUrl(order) : authenticatedOrderUrl(order.getId())
+            );
+        }
+        if (order.getUser() != null) {
+            String userId = order.getUser().getId();
+            notificationService.sendNotification(
+                    "Đơn hàng sẵn sàng bàn giao",
+                    "Đơn hàng #" + order.getId() + " đã hoàn tất sản xuất.",
+                    order.getId(),
+                    userId,
+                    "/topic/user-notifications/" + userId
             );
         }
     }

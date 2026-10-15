@@ -69,7 +69,7 @@ class ProductionRepositoryTest {
         checkpoint.addImage(image);
 
         ProductionDecision decision = new ProductionDecision();
-        decision.setDecisionType(ProductionDecisionType.APPROVED);
+        decision.setDecisionType(ProductionDecisionType.PASS);
         decision.setReason("Approved");
         decision.setDecidedBy(manager);
         checkpoint.attachDecision(decision);
@@ -91,7 +91,7 @@ class ProductionRepositoryTest {
                     assertThat(saved.getImages()).singleElement()
                             .extracting(ProductionCheckpointImage::getImageUrl)
                             .isEqualTo("https://cdn.example/initial.jpg");
-                    assertThat(saved.getDecision().getDecisionType()).isEqualTo(ProductionDecisionType.APPROVED);
+                    assertThat(saved.getDecision().getDecisionType()).isEqualTo(ProductionDecisionType.PASS);
                     assertThat(saved.getSubmittedAt()).isNotNull();
                 });
     }

@@ -9,11 +9,17 @@ import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
+import com.example.workflow.event.payload.OrderReadyToShipEvent;
+import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentMethod;
+import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.nume.AssignmentSource;
+import com.example.workflow.nume.ProductionCheckpointStage;
+import com.example.workflow.nume.ProductionDecisionType;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +34,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -244,8 +251,9 @@ class OrderLifecycleEventHandlerTest {
     }
 
     @Test
-    void paymentConfirmedRoutesEmailAndNotificationsWithoutCacheEviction() {
+    void paymentConfirmedCorrelatesWorkflowAndNotifiesAssignedStaffOnly() {
         Order order = userOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
         User staff = new User();
         staff.setId("staff-1");
         order.setAssignedStaff(staff);
@@ -253,18 +261,102 @@ class OrderLifecycleEventHandlerTest {
 
         handler.handlePaymentConfirmed(new PaymentConfirmedEvent(10L));
 
-        verify(emailService).sendOrderConfirmationEmail(
-                "user@example.com", "User One", 10L, 120.0, "Thanh toán online đã xác nhận"
-        );
-        verify(notificationService).sendNotification(
-                eq("Thanh toán thành công"), anyString(), eq(10L), eq("user-1"),
-                eq("/topic/user-notifications/user-1")
-        );
+        verify(orderWorkflowService).correlatePaymentSuccess(10L);
         verify(notificationService).sendNotification(
                 eq("Đơn hàng đã thanh toán"), anyString(), eq(10L), eq("staff-1"),
                 eq("/topic/user-notifications/staff-1")
         );
-        verifyNoInteractions(applicationCacheService);
+        verifyNoInteractions(emailService, applicationCacheService);
+    }
+
+    @Test
+    void initialShapeForUserCompletesItemTaskThenEmailsAndNotifiesOwner() {
+        Order order = userOrder();
+        order.setStatus(OrderStatus.ORDER_CREATING);
+        order.setAssignedStaff(staff("staff-1"));
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        ProductionCheckpointSubmittedEvent event = new ProductionCheckpointSubmittedEvent(
+                10L, 501L, 901L, ProductionCheckpointStage.INITIAL_SHAPE, 1,
+                "staff-1", List.of("https://cdn.example/initial.jpg"), "Hoan thanh tao dang"
+        );
+
+        handler.handleProductionCheckpointSubmitted(event);
+
+        verify(orderWorkflowService).completeProductionCheckpointSubmission(
+                10L, 501L, 901L, ProductionCheckpointStage.INITIAL_SHAPE, 1
+        );
+        verify(emailService).sendInitialShapeCheckpointEmail(
+                "user@example.com", "User One", 10L, 501L,
+                List.of("https://cdn.example/initial.jpg"), "Hoan thanh tao dang",
+                "http://localhost:4200/orders/10"
+        );
+        verify(notificationService).sendNotification(
+                anyString(), anyString(), eq(10L), eq("user-1"),
+                eq("/topic/user-notifications/user-1")
+        );
+    }
+
+    @Test
+    void initialShapeForGuestEmailsSignedLinkWithoutCreatingAccountNotification() {
+        Order order = guestOrder();
+        order.setStatus(OrderStatus.ORDER_CREATING);
+        order.setAssignedStaff(staff("staff-1"));
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderLookupTokenService.issueSignedReadToken(eq(order), org.mockito.ArgumentMatchers.any()))
+                .thenReturn("guest-progress-token");
+
+        handler.handleProductionCheckpointSubmitted(new ProductionCheckpointSubmittedEvent(
+                10L, 501L, 901L, ProductionCheckpointStage.INITIAL_SHAPE, 1,
+                "staff-1", List.of("https://cdn.example/initial.jpg"), null
+        ));
+
+        verify(emailService).sendInitialShapeCheckpointEmail(
+                "guest@example.com", "Guest One", 10L, 501L,
+                List.of("https://cdn.example/initial.jpg"), null,
+                "http://localhost:4200/guest/orders/10?token=guest-progress-token"
+        );
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void reworkReviewCompletesKcsTaskAndNotifiesAssignedStaff() {
+        Order order = userOrder();
+        order.setStatus(OrderStatus.ORDER_CREATING);
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+
+        handler.handleProductionCheckpointReviewed(new ProductionCheckpointReviewedEvent(
+                10L, 501L, 902L, 1, ProductionDecisionType.REWORK_REQUIRED,
+                "Can bo sung duong may", "manager-1", "staff-1"
+        ));
+
+        verify(orderWorkflowService).completeProductionCheckpointReview(
+                10L, 501L, 902L, ProductionDecisionType.REWORK_REQUIRED
+        );
+        verify(notificationService).sendNotification(
+                anyString(), anyString(), eq(10L), eq("staff-1"),
+                eq("/topic/user-notifications/staff-1")
+        );
+    }
+
+    @Test
+    void readyToShipEmailsAndNotifiesUserWithoutAdvancingToShipping() {
+        Order order = userOrder();
+        LocalDateTime readyAt = LocalDateTime.of(2026, 10, 13, 16, 0);
+        order.setStatus(OrderStatus.READY_TO_SHIP);
+        order.setReadyToShipAt(readyAt);
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+
+        handler.handleOrderReadyToShip(new OrderReadyToShipEvent(10L, 70L, "manager-1", readyAt));
+
+        verify(orderWorkflowService).completeProduction(10L, readyAt);
+        verify(emailService).sendReadyToShipEmail(
+                "user@example.com", "User One", 10L, "http://localhost:4200/orders/10"
+        );
+        verify(notificationService).sendNotification(
+                anyString(), anyString(), eq(10L), eq("user-1"),
+                eq("/topic/user-notifications/user-1")
+        );
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.READY_TO_SHIP);
     }
 
     private Order userOrder() {
@@ -284,5 +376,11 @@ class OrderLifecycleEventHandlerTest {
         order.setRecipientName("Guest One");
         order.setFinalPrice(120.0);
         return order;
+    }
+
+    private User staff(String id) {
+        User staff = new User();
+        staff.setId(id);
+        return staff;
     }
 }

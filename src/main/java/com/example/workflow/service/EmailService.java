@@ -120,6 +120,110 @@ public class EmailService {
         );
     }
 
+    public void sendProductionStartedEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            String orderAccessUrl
+    ) {
+        StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
+                .append(escapeHtml(customerName))
+                .append(",</p><p>Đơn hàng #")
+                .append(orderId)
+                .append(" đã bắt đầu sản xuất.</p>");
+        if (orderAccessUrl != null && !orderAccessUrl.isBlank()) {
+            html.append("<p><a href=\"")
+                    .append(escapeHtml(orderAccessUrl))
+                    .append("\">Xem thông tin đơn hàng</a></p>");
+        }
+        html.append("</body></html>");
+        eventPublisher.publishAfterCommit(
+                EventTypes.WORKFLOW_EMAIL_REQUESTED,
+                new WorkflowEmailRequestedEvent(
+                        "PRODUCTION_STARTED",
+                        toEmail,
+                        "Đơn hàng #" + orderId + " đã bắt đầu sản xuất",
+                        html.toString(),
+                        orderId
+                )
+        );
+    }
+
+    public void sendInitialShapeCheckpointEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            Long orderItemId,
+            java.util.List<String> imageUrls,
+            String note,
+            String orderAccessUrl
+    ) {
+        StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
+                .append(escapeHtml(customerName))
+                .append(",</p><p>Đã có hình ảnh đầu tiên của item #")
+                .append(orderItemId)
+                .append(" thuộc đơn hàng #")
+                .append(orderId)
+                .append(".</p>");
+        if (note != null && !note.isBlank()) {
+            html.append("<p>Ghi chú: ").append(escapeHtml(note)).append("</p>");
+        }
+        if (imageUrls != null && !imageUrls.isEmpty()) {
+            html.append("<ul>");
+            for (String imageUrl : imageUrls) {
+                html.append("<li><a href=\"")
+                        .append(escapeHtml(imageUrl))
+                        .append("\">Xem hình ảnh tiến độ</a></li>");
+            }
+            html.append("</ul>");
+        }
+        if (orderAccessUrl != null && !orderAccessUrl.isBlank()) {
+            html.append("<p><a href=\"")
+                    .append(escapeHtml(orderAccessUrl))
+                    .append("\">Xem thông tin đơn hàng</a></p>");
+        }
+        html.append("</body></html>");
+        eventPublisher.publishAfterCommit(
+                EventTypes.WORKFLOW_EMAIL_REQUESTED,
+                new WorkflowEmailRequestedEvent(
+                        "PRODUCTION_INITIAL_SHAPE",
+                        toEmail,
+                        "Hình ảnh tiến độ item #" + orderItemId + " - đơn hàng #" + orderId,
+                        html.toString(),
+                        orderId
+                )
+        );
+    }
+
+    public void sendReadyToShipEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            String orderAccessUrl
+    ) {
+        StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
+                .append(escapeHtml(customerName))
+                .append(",</p><p>Đơn hàng #")
+                .append(orderId)
+                .append(" đã hoàn tất sản xuất và sẵn sàng bàn giao.</p>");
+        if (orderAccessUrl != null && !orderAccessUrl.isBlank()) {
+            html.append("<p><a href=\"")
+                    .append(escapeHtml(orderAccessUrl))
+                    .append("\">Xem thông tin đơn hàng</a></p>");
+        }
+        html.append("</body></html>");
+        eventPublisher.publishAfterCommit(
+                EventTypes.WORKFLOW_EMAIL_REQUESTED,
+                new WorkflowEmailRequestedEvent(
+                        "ORDER_READY_TO_SHIP",
+                        toEmail,
+                        "Đơn hàng #" + orderId + " đã sẵn sàng bàn giao",
+                        html.toString(),
+                        orderId
+                )
+        );
+    }
+
     public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
         try {
             sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod);

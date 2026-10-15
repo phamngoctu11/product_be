@@ -9,12 +9,11 @@ import com.example.workflow.dto.ManagerReviewRequest;
 import com.example.workflow.dto.ManagerReviewResultDTO;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.dto.OrderAssignmentQueueDTO;
-import com.example.workflow.exception.AppException;
-import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.dto.ReviewProductionCheckpointRequest;
+import com.example.workflow.dto.ReviewProductionCheckpointResultDTO;
 import com.example.workflow.service.ManagerOrderReviewService;
 import com.example.workflow.service.OrderAssignmentService;
-import com.example.workflow.service.OrderService;
-import jakarta.annotation.Nullable;
+import com.example.workflow.service.ProductionCheckpointService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.NotBlank;
@@ -23,7 +22,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -32,7 +30,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,9 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Validated
 public class ManagerOrderController {
-    private final OrderService orderService;
     private final ManagerOrderReviewService reviewService;
     private final OrderAssignmentService assignmentService;
+    private final ProductionCheckpointService productionCheckpointService;
 
     @GetMapping("/manager/reviews")
     @PreAuthorize("hasAuthority('MANAGER')")
@@ -103,20 +100,18 @@ public class ManagerOrderController {
         ));
     }
 
-    @PostMapping("/manager/kcs-check/{orderId}")
+    @PostMapping("/manager/{orderId}/checkpoints/{checkpointId}/review")
     @PreAuthorize("hasAuthority('MANAGER')")
-    public ResponseEntity<ApiResponse<Void>> kcsCheck(
+    public ResponseEntity<ApiResponse<ReviewProductionCheckpointResultDTO>> reviewProductionCheckpoint(
             @Positive @PathVariable Long orderId,
-            @RequestParam("isPassed") boolean isPassed,
-            @Nullable @RequestParam("cancelReason") String cancelReason
+            @Positive @PathVariable Long checkpointId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody ReviewProductionCheckpointRequest request
     ) {
-        try {
-            orderService.processManagerKcsCheck(orderId, isPassed, cancelReason);
-            return ResponseEntity.ok(ApiResponse.success("KCS hoan tat!"));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        return ResponseEntity.ok(ApiResponse.success(
+                "Production checkpoint reviewed.",
+                productionCheckpointService.review(orderId, checkpointId, request, idempotencyKey)
+        ));
     }
+
 }

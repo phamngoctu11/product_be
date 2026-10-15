@@ -2,14 +2,17 @@ package com.example.workflow.controller;
 
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.ClaimOrderRequest;
-import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.dto.OrderListDTO;
-import com.example.workflow.exception.AppException;
-import com.example.workflow.exception.ConstantErrorCode;
+import com.example.workflow.dto.StartProductionRequest;
+import com.example.workflow.dto.StartProductionResultDTO;
+import com.example.workflow.dto.SubmitProductionCheckpointRequest;
+import com.example.workflow.dto.ProductionCheckpointDTO;
 import com.example.workflow.service.OrderService;
 import com.example.workflow.service.OrderAssignmentService;
+import com.example.workflow.service.ProductionStartService;
+import com.example.workflow.service.ProductionCheckpointService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -18,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -30,8 +32,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/orders/staff")
 @RequiredArgsConstructor
@@ -39,6 +39,8 @@ import java.util.List;
 public class StaffOrderController {
     private final OrderService orderService;
     private final OrderAssignmentService assignmentService;
+    private final ProductionStartService productionStartService;
+    private final ProductionCheckpointService productionCheckpointService;
 
     @GetMapping("/claimable")
     @PreAuthorize("hasAuthority('STAFF')")
@@ -69,19 +71,31 @@ public class StaffOrderController {
         ));
     }
 
-    @PostMapping("/export/{orderId}")
+    @PostMapping("/{orderId}/start-production")
     @PreAuthorize("hasAuthority('STAFF')")
-    public ResponseEntity<ApiResponse<Void>> exportOrder(
+    public ResponseEntity<ApiResponse<StartProductionResultDTO>> startProduction(
             @Positive @PathVariable Long orderId,
-            @RequestBody List<ItemCheckRequest> exportData
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody StartProductionRequest request
     ) {
-        try {
-            orderService.processStaffExport(orderId, exportData);
-            return ResponseEntity.ok(ApiResponse.success("Ghi nhan xuat kho thanh cong, dang cho quan ly KCS."));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        return ResponseEntity.ok(ApiResponse.success(
+                "Production started.",
+                productionStartService.start(orderId, request, idempotencyKey)
+        ));
     }
+
+    @PostMapping("/{orderId}/items/{orderItemId}/checkpoints")
+    @PreAuthorize("hasAuthority('STAFF')")
+    public ResponseEntity<ApiResponse<ProductionCheckpointDTO>> submitProductionCheckpoint(
+            @Positive @PathVariable Long orderId,
+            @Positive @PathVariable Long orderItemId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody SubmitProductionCheckpointRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Production checkpoint submitted.",
+                productionCheckpointService.submit(orderId, orderItemId, request, idempotencyKey)
+        ));
+    }
+
 }

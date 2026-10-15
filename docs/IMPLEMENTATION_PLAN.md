@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      PHẦN 05, 07 VÀ BACKEND PHẦN 08 ĐÃ IMPLEMENTED
-Phần đang thực hiện:      BÀN GIAO FRONTEND PHẦN 08 CHO ANTIGRAVITY; CHỜ REVIEW TRƯỚC PHẦN 09
-Phần hoàn thành gần nhất: PHẦN 08 — Order chat, agreement và timeout CUSTOM (backend)
-Ngày cập nhật gần nhất:   12/10/2026
+Tái triển khai code:      BACKEND PHẦN 05–10 VÀ FRONTEND PHẦN 09–10 ĐÃ IMPLEMENTED
+Phần đang thực hiện:      REVIEW/COMMIT PHẦN 09–10; TIẾP THEO PHẦN 11
+Phần hoàn thành gần nhất: PHẦN 10 — Production checkpoint và KCS WF05 (backend)
+Ngày cập nhật gần nhất:   15/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -52,8 +52,8 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
 | 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IMPLEMENTED` |
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `IMPLEMENTED` |
-| 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `NOT_STARTED` |
-| 10 | Production, checkpoint và KCS | WF05 | 07–09 | `NOT_STARTED` |
+| 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `IMPLEMENTED` |
+| 10 | Production, checkpoint và KCS | WF05 | 07–09 | `IMPLEMENTED` |
 | 11 | ChangeRequest | WF06 | 08–10 | `NOT_STARTED` |
 | 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `NOT_STARTED` |
 | 13 | Tích hợp xuyên luồng và rollout | BPMN, event, email, cache, FE, E2E, migration rollout | 01–12 | `NOT_STARTED` |
@@ -287,7 +287,7 @@ Phạm vi chính:
 
 ### PHẦN 09 — Payment, webhook và staff bắt đầu, WF04
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` — chờ frontend Antigravity và E2E/cutover BPMN ở PHẦN 13.
 
 Phạm vi chính:
 
@@ -306,7 +306,7 @@ Phạm vi chính:
 
 ### PHẦN 10 — Production, checkpoint và KCS, WF05
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` — backend và frontend đã hoàn tất; chờ E2E/cutover BPMN tổng ở PHẦN 13.
 
 Phạm vi chính:
 
@@ -461,6 +461,9 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 10/10/2026 | 07 | `IMPLEMENTED` | Đóng gap Guest made-to-order: bỏ tham số/process variable và gateway `hasHandmadeItems` khỏi service, runtime BPMN và blueprint; mọi Guest CATALOG được duyệt đi thẳng tới `Task_ManagerAssignOrder`. Bridge vẫn hoàn tất được task key legacy cho process instance đang chạy | Targeted 21 test đạt; `.\mvnw.cmd test`: 270 test, 0 failure/error, 7 MySQL opt-in skipped; test BPMN xác nhận biến legacy `hasHandmadeItems=false` không thể bỏ qua assignment; `git diff --check` đạt | Review PHẦN 07; sau đó bắt đầu PHẦN 08 chat, agreement và timer CUSTOM PT24H |
 | 12/10/2026 | 07 / FE | `IMPLEMENTED` | Hoàn thiện UI Manager duyệt/phân công và Staff self-claim theo API P7; thêm read queue Manager, DTO queue có `orderVersion`, idempotency header, phân quyền MANAGER riêng và badge state mục tiêu | FE development build đạt; `.\mvnw.cmd test`: 273 test, 0 failure/error, 7 MySQL opt-in skipped; test queue xác nhận `PENDING_ASSIGNMENT` và version cho cả Manager/Staff | Review thủ công UI với dữ liệu tích hợp; sau đó bắt đầu PHẦN 08 |
 | 12/10/2026 | 08 / scope cleanup | `IMPLEMENTED` | Theo quyết định scope mới, loại bỏ hoàn toàn chat tư vấn trước bán, attribution và hoa hồng; chỉ giữ order-chat. Thu gọn `ChatMessage`, gỡ API/service/entity/repository/Redis presence/event/cache/security hook legacy và thêm migration xóa schema SQL cũ có điều kiện | `.\mvnw.cmd test`: 281 test, 0 failure/error, 7 MySQL opt-in skipped; Liquibase H2 đạt; lệnh cleanup Mongo nằm trong `P8_CHAT_LATENCY_REFACTOR.md` | Backup dữ liệu, deploy Liquibase rồi chạy cleanup Mongo trên đúng database |
+| 12/10/2026 | 09 | `IMPLEMENTED` | PaymentAttempt ONLINE, SePay webhook HMAC/idempotency, timeout PT1H, COD bypass và assigned staff chủ động bắt đầu sản xuất/deadline snapshot | Test webhook–timer, callback muộn, start–cancel/start lặp đạt; báo cáo `09-payment-and-production-start.md` | Antigravity triển khai frontend P9; E2E và BPMN cutover tổng ở P13 |
+| 13/10/2026 | 10 | `IMPLEMENTED` | Checkpoint theo OrderItem, INITIAL_SHAPE publish thẳng, FINAL_PRODUCT attempt + manager KCS/rework, PASS toàn bộ mới READY_TO_SHIP/release; gỡ export/KCS legacy | `.\mvnw.cmd test`: 316 test, 0 failure/error, 9 opt-in skipped; test hai KCS cuối cạnh tranh xác nhận đúng một transition/release/event | Antigravity triển khai frontend P10; tiếp theo backend P11 ChangeRequest |
+| 15/10/2026 | 10 / FE | `IMPLEMENTED` | Hoàn thiện UI Staff submit INITIAL/FINAL, Manager KCS/rework, USER/guest progress chỉ INITIAL; notification mở đúng order; retry giữ nguyên payload và idempotency key; gỡ lời gọi export/KCS legacy | `npm.cmd test -- --watch=false --browsers=ChromeHeadless`: 42/42; `npm.cmd run build:prod`: thành công, chỉ còn warning budget/CommonJS hiện hữu | Review/commit P9–P10; tiếp theo backend P11 ChangeRequest |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -499,7 +502,7 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 - `OrderStatus` đã có state mục tiêu nhưng vẫn giữ state kho/payment legacy trong giai đoạn expand; code mới không được tạo state legacy.
 - `Order.totalPrice` còn là primitive `double` và Order vẫn giữ các cờ stock legacy. Giá chính thức CUSTOM chưa chốt được biểu diễn bằng `finalPrice=null`; API không được diễn giải `totalPrice=0.0` tương thích schema thành giá thỏa thuận.
-- KCS hiện có đường chuyển trực tiếp sang `SHIPPING`, thiếu `READY_TO_SHIP` riêng.
+- Đường export/KCS legacy chuyển thẳng sang `SHIPPING` đã được gỡ ở PHẦN 10. Luồng mới chỉ kết thúc tại `READY_TO_SHIP`; tích hợp shipping và BPMN cutover tổng vẫn thuộc PHẦN 12–13.
 - Code còn complaint receipt dù target đã loại bỏ complaint workflow.
 - Endpoint checkout mới đã tạo `PENDING_APPROVAL/NOT_DUE`; code checkout/payment legacy vẫn còn và phải được loại/cutover ở PHẦN 13.
 - Repo có nhiều BPMN cho user/guest; cần tránh duy trì hai lifecycle process cạnh tranh cho cùng Order.
@@ -508,8 +511,8 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Review/bàn giao **PHẦN 05 — Custom request** và **F06 manager review thuộc PHẦN 07** theo quyết định ngày 09/10/2026:
+Bàn giao/review **PHẦN 09 — Payment/production start** và **PHẦN 10 — Production checkpoint/KCS**, sau đó tiếp tục backend:
 
-1. Khi Docker sẵn sàng, chạy bộ MySQL opt-in để nghiệm thu changeset `06-custom-request-content.xml` trên MySQL thực tế.
-2. Sau khi review PHẦN 05 và PHẦN 07, bắt đầu PHẦN 08 — ChatThread, Agreement versioned và timer CUSTOM PT24H.
-3. Agreement PHẦN 08 phải đọc snapshot `{description,imageUrls}` mới và fallback `{spec,attachments}` legacy; không đổi snapshot OrderItem đã tạo.
+1. Review diff backend/frontend và commit PHẦN 09–10.
+2. Sau khi commit PHẦN 09–10, bắt đầu PHẦN 11 — ChangeRequest.
+3. Giữ PHẦN 13 cho BPMN cutover tổng, E2E và nghiệm thu các migration trên MySQL thực tế.

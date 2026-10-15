@@ -13,6 +13,11 @@ import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
+import com.example.workflow.event.payload.PaymentOpenedEvent;
+import com.example.workflow.event.payload.ProductionStartedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
+import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
+import com.example.workflow.event.payload.OrderReadyToShipEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
@@ -190,7 +195,12 @@ public class RedisStreamEventConsumer {
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
+            case EventTypes.PAYMENT_OPENED -> handlePaymentOpened(payload);
             case EventTypes.PAYMENT_CONFIRMED -> handlePaymentConfirmed(payload);
+            case EventTypes.PRODUCTION_STARTED -> handleProductionStarted(payload);
+            case EventTypes.PRODUCTION_CHECKPOINT_SUBMITTED -> handleProductionCheckpointSubmitted(payload);
+            case EventTypes.PRODUCTION_CHECKPOINT_REVIEWED -> handleProductionCheckpointReviewed(payload);
+            case EventTypes.ORDER_READY_TO_SHIP -> handleOrderReadyToShip(payload);
             case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
             default -> throw new IllegalArgumentException("Unsupported event type " + type);
         }
@@ -319,6 +329,30 @@ public class RedisStreamEventConsumer {
 
     private void handlePaymentConfirmed(String payload) {
         orderLifecycleEventHandler.handlePaymentConfirmed(readPayload(payload, PaymentConfirmedEvent.class));
+    }
+
+    private void handlePaymentOpened(String payload) {
+        orderLifecycleEventHandler.handlePaymentOpened(readPayload(payload, PaymentOpenedEvent.class));
+    }
+
+    private void handleProductionStarted(String payload) {
+        orderLifecycleEventHandler.handleProductionStarted(readPayload(payload, ProductionStartedEvent.class));
+    }
+
+    private void handleProductionCheckpointSubmitted(String payload) {
+        orderLifecycleEventHandler.handleProductionCheckpointSubmitted(
+                readPayload(payload, ProductionCheckpointSubmittedEvent.class)
+        );
+    }
+
+    private void handleProductionCheckpointReviewed(String payload) {
+        orderLifecycleEventHandler.handleProductionCheckpointReviewed(
+                readPayload(payload, ProductionCheckpointReviewedEvent.class)
+        );
+    }
+
+    private void handleOrderReadyToShip(String payload) {
+        orderLifecycleEventHandler.handleOrderReadyToShip(readPayload(payload, OrderReadyToShipEvent.class));
     }
 
     private void handleCacheEvictionRequested(String payload) {

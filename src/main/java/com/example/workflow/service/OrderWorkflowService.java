@@ -1,5 +1,7 @@
 package com.example.workflow.service;
 
+import com.example.workflow.nume.ProductionCheckpointStage;
+import com.example.workflow.nume.ProductionDecisionType;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
@@ -19,6 +21,13 @@ public class OrderWorkflowService {
     private static final String ORDER_ASSIGNED_MESSAGE = "ORDER_ASSIGNED";
     private static final String ORDER_AGREEMENT_SUBMITTED_MESSAGE = "ORDER_AGREEMENT_SUBMITTED";
     private static final String AGREEMENT_REVIEW_TASK = "staff_review_agreement";
+    private static final String PAYMENT_OPENED_MESSAGE = "PAYMENT_OPENED";
+    private static final String PAYMENT_SUCCESS_MESSAGE = "PAYMENT_SUCCESS";
+    private static final String START_PRODUCTION_TASK = "staff_start_production";
+    private static final String INITIAL_SHAPE_TASK = "staff_submit_initial_shape";
+    private static final String FINAL_PRODUCT_TASK = "staff_submit_final_product";
+    private static final String FINAL_KCS_TASK = "manager_review_final_product";
+    private static final String ORDER_READY_TO_SHIP_MESSAGE = "ORDER_READY_TO_SHIP";
 
     private final RuntimeService runtimeService;
     private final TaskService taskService;
@@ -118,6 +127,90 @@ public class OrderWorkflowService {
         return true;
     }
 
+    public boolean correlatePaymentOpened(Long orderId, Long attemptId, java.time.LocalDateTime dueAt) {
+        Execution execution = runtimeService.createExecutionQuery()
+                .messageEventSubscriptionName(PAYMENT_OPENED_MESSAGE)
+                .processVariableValueEquals("orderId", orderId)
+                .singleResult();
+        if (execution == null) return false;
+        runtimeService.messageEventReceived(
+                PAYMENT_OPENED_MESSAGE,
+                execution.getId(),
+                Map.of("paymentAttemptId", attemptId, "paymentDueAt", dueAt.toString())
+        );
+        return true;
+    }
+
+    public boolean correlatePaymentSuccess(Long orderId) {
+        Execution execution = runtimeService.createExecutionQuery()
+                .messageEventSubscriptionName(PAYMENT_SUCCESS_MESSAGE)
+                .processVariableValueEquals("orderId", orderId)
+                .singleResult();
+        if (execution == null) return false;
+        runtimeService.messageEventReceived(PAYMENT_SUCCESS_MESSAGE, execution.getId());
+        return true;
+    }
+
+    public boolean completeProductionStart(Long orderId, String staffId, java.time.LocalDateTime startedAt) {
+        Task task = singleTask(orderId, START_PRODUCTION_TASK);
+        if (task == null) return false;
+        taskService.complete(task.getId(), Map.of(
+                "staffId", staffId,
+                "productionStartedAt", startedAt.toString()
+        ));
+        return true;
+    }
+
+    public boolean completeProductionCheckpointSubmission(
+            Long orderId,
+            Long orderItemId,
+            Long checkpointId,
+            ProductionCheckpointStage stage,
+            int attemptNumber
+    ) {
+        String taskKey = stage == ProductionCheckpointStage.INITIAL_SHAPE
+                ? INITIAL_SHAPE_TASK
+                : FINAL_PRODUCT_TASK;
+        Task task = singleItemTask(orderId, orderItemId, taskKey);
+        if (task == null) return false;
+        taskService.complete(task.getId(), Map.of(
+                "checkpointId", checkpointId,
+                "checkpointStage", stage.name(),
+                "checkpointAttempt", attemptNumber
+        ));
+        return true;
+    }
+
+    public boolean completeProductionCheckpointReview(
+            Long orderId,
+            Long orderItemId,
+            Long checkpointId,
+            ProductionDecisionType decision
+    ) {
+        Task task = singleItemTask(orderId, orderItemId, FINAL_KCS_TASK);
+        if (task == null) return false;
+        taskService.complete(task.getId(), Map.of(
+                "checkpointId", checkpointId,
+                "kcsDecision", decision.name(),
+                "kcsPassed", decision == ProductionDecisionType.PASS
+        ));
+        return true;
+    }
+
+    public boolean completeProduction(Long orderId, java.time.LocalDateTime readyToShipAt) {
+        Execution execution = runtimeService.createExecutionQuery()
+                .messageEventSubscriptionName(ORDER_READY_TO_SHIP_MESSAGE)
+                .processVariableValueEquals("orderId", orderId)
+                .singleResult();
+        if (execution == null) return false;
+        runtimeService.messageEventReceived(
+                ORDER_READY_TO_SHIP_MESSAGE,
+                execution.getId(),
+                Map.of("readyToShipAt", readyToShipAt.toString())
+        );
+        return true;
+    }
+
     private Task singleTask(Long orderId, String taskDefinitionKey) {
         List<Task> tasks = taskService.createTaskQuery()
                 .processVariableValueEquals("orderId", orderId)
@@ -126,6 +219,21 @@ public class OrderWorkflowService {
         if (tasks.size() > 1) {
             throw new IllegalStateException(
                     "Multiple active workflow tasks " + taskDefinitionKey + " for order " + orderId
+            );
+        }
+        return tasks.isEmpty() ? null : tasks.getFirst();
+    }
+
+    private Task singleItemTask(Long orderId, Long orderItemId, String taskDefinitionKey) {
+        List<Task> tasks = taskService.createTaskQuery()
+                .processVariableValueEquals("orderId", orderId)
+                .processVariableValueEquals("orderItemId", orderItemId)
+                .taskDefinitionKey(taskDefinitionKey)
+                .listPage(0, 2);
+        if (tasks.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple active workflow tasks " + taskDefinitionKey
+                            + " for order " + orderId + " item " + orderItemId
             );
         }
         return tasks.isEmpty() ? null : tasks.getFirst();

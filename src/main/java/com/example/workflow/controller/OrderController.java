@@ -10,10 +10,12 @@ import com.example.workflow.dto.ReceiptComplaintRequest;
 import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.dto.ReorderResponseDTO;
+import com.example.workflow.dto.OrderItemProductionDTO;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
 import com.example.workflow.service.OrderCancellationService;
+import com.example.workflow.service.ProductionCheckpointService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.DecimalMin;
@@ -45,6 +47,7 @@ import java.util.List;
 public class OrderController {
     private final OrderService orderService;
     private final OrderCancellationService orderCancellationService;
+    private final ProductionCheckpointService productionCheckpointService;
 
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('USER')")
@@ -87,6 +90,14 @@ public class OrderController {
             @Positive @PathVariable("order_id") Long orderId
     ) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getOrderHistory(orderId)));
+    }
+
+    @GetMapping("/{orderId}/checkpoints")
+    @PreAuthorize("hasAnyAuthority('USER', 'STAFF', 'MANAGER')")
+    public ResponseEntity<ApiResponse<List<OrderItemProductionDTO>>> getProductionCheckpoints(
+            @Positive @PathVariable Long orderId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(productionCheckpointService.getProgress(orderId)));
     }
 
     @PostMapping("/{order_id}/cancellation")

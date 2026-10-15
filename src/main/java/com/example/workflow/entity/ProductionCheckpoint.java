@@ -64,7 +64,7 @@ public class ProductionCheckpoint {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 24)
-    private ProductionCheckpointStatus status = ProductionCheckpointStatus.SUBMITTED;
+    private ProductionCheckpointStatus status = ProductionCheckpointStatus.PENDING_REVIEW;
 
     @Column(name = "attempt_number", nullable = false)
     private int attemptNumber = 1;

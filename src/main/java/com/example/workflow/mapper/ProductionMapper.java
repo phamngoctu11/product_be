@@ -34,6 +34,8 @@ public interface ProductionMapper {
     ProductionDecisionDTO toDto(ProductionDecision decision);
 
     @Mapping(source = "id", target = "orderItemId")
+    @Mapping(source = "productNameSnapshot", target = "productName")
+    @Mapping(source = "variantNameSnapshot", target = "variantName")
     @Mapping(source = "productionCheckpoints", target = "checkpoints")
     OrderItemProductionDTO toProductionDto(OrderItem orderItem);
 
