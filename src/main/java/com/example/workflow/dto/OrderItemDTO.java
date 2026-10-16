@@ -21,6 +21,7 @@ public class OrderItemDTO implements Serializable {
     private Double price;
     private OrderItemSourceType sourceType;
     private String specSnapshot;
+    private int specVersion;
     private String description;
     private List<String> imageUrls;
     private Double madeDaySnapshot;

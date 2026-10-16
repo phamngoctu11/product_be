@@ -51,6 +51,9 @@ public class OrderItem {
     @Column(name = "spec_snapshot", columnDefinition = "LONGTEXT")
     private String specSnapshot;
 
+    @Column(name = "spec_version", nullable = false, columnDefinition = "int default 1")
+    private int specVersion = 1;
+
     @Column(name = "made_day_snapshot")
     private Double madeDaySnapshot;
 

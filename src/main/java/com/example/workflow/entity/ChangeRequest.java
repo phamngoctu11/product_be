@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 import java.time.LocalDateTime;
 
-/** Domain contract for the new order lifecycle; endpoints are implemented in later phases. */
 @Entity
 @Getter
 @Setter
@@ -26,15 +25,30 @@ public class ChangeRequest {
     @Column(name = "owner_id", nullable = false, columnDefinition = "varchar(36)")
     private String ownerId;
 
+    @Column(name = "order_item_id", nullable = false, columnDefinition = "bigint")
+    private Long orderItemId;
+
+    @Column(name = "assigned_staff_id", nullable = false, columnDefinition = "varchar(36)")
+    private String assignedStaffId;
+
     @Column(name = "base_agreement_version", nullable = false, columnDefinition = "int")
     private Integer baseAgreementVersion;
 
+    @Column(name = "base_spec_version", nullable = false, columnDefinition = "int")
+    private Integer baseSpecVersion;
+
+    @Column(name = "base_spec_snapshot", columnDefinition = "LONGTEXT")
+    private String baseSpecSnapshot;
+
     @Column(name = "requested_details", nullable = false, columnDefinition = "text")
-    private String requestedDetails;
+    private String proposedSpecSnapshot;
+
+    @Column(name = "request_reason", nullable = false, columnDefinition = "text")
+    private String requestReason;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, columnDefinition = "varchar(24)")
-    private ChangeRequestStatus status = ChangeRequestStatus.PENDING;
+    private ChangeRequestStatus status = ChangeRequestStatus.PENDING_REVIEW;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "datetime")
     private LocalDateTime createdAt;
@@ -50,4 +64,7 @@ public class ChangeRequest {
 
     @Column(name = "applied_version", nullable = true, columnDefinition = "int")
     private Integer appliedVersion;
+
+    @Column(name = "applied_spec_snapshot", columnDefinition = "LONGTEXT")
+    private String appliedSpecSnapshot;
 }

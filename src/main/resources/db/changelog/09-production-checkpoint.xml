@@ -88,6 +88,34 @@
         </createIndex>
     </changeSet>
 
+    <!--
+        Hibernate previously generated these columns as MySQL ENUMs from the
+        legacy Java enums.  Merely updating the stored values is not enough:
+        MySQL rejects PASSED/PENDING_REVIEW/PASS/REWORK_REQUIRED before the
+        UPDATE or a new checkpoint INSERT can be executed.  Convert the
+        physical columns first.  These changeSets also repair an existing
+        database where the create-if-missing changeSets above were MARK_RAN.
+    -->
+    <changeSet id="09-production-checkpoint-status-varchar" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="production_checkpoints"/>
+            <columnExists tableName="production_checkpoints" columnName="status"/>
+        </preConditions>
+        <modifyDataType tableName="production_checkpoints"
+                        columnName="status"
+                        newDataType="varchar(24)"/>
+    </changeSet>
+
+    <changeSet id="09-production-decision-type-varchar" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="production_decisions"/>
+            <columnExists tableName="production_decisions" columnName="decision_type"/>
+        </preConditions>
+        <modifyDataType tableName="production_decisions"
+                        columnName="decision_type"
+                        newDataType="varchar(16)"/>
+    </changeSet>
+
     <changeSet id="09-normalize-legacy-production-checkpoint-status" author="workflow">
         <preConditions onFail="MARK_RAN">
             <tableExists tableName="production_checkpoints"/>

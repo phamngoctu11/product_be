@@ -8,9 +8,9 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      BACKEND PHẦN 05–10 VÀ FRONTEND PHẦN 09–10 ĐÃ IMPLEMENTED
-Phần đang thực hiện:      REVIEW/COMMIT PHẦN 09–10; TIẾP THEO PHẦN 11
-Phần hoàn thành gần nhất: PHẦN 10 — Production checkpoint và KCS WF05 (backend)
+Tái triển khai code:      BACKEND PHẦN 05–11 VÀ FRONTEND PHẦN 09–11 ĐÃ IMPLEMENTED
+Phần đang thực hiện:      REVIEW/COMMIT PHẦN 11; TIẾP THEO PHẦN 12
+Phần hoàn thành gần nhất: PHẦN 11 — ChangeRequest WF06 (backend + frontend)
 Ngày cập nhật gần nhất:   15/10/2026
 ```
 
@@ -54,7 +54,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `IMPLEMENTED` |
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `IMPLEMENTED` |
 | 10 | Production, checkpoint và KCS | WF05 | 07–09 | `IMPLEMENTED` |
-| 11 | ChangeRequest | WF06 | 08–10 | `NOT_STARTED` |
+| 11 | ChangeRequest | WF06 | 08–10 | `IMPLEMENTED` |
 | 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `NOT_STARTED` |
 | 13 | Tích hợp xuyên luồng và rollout | BPMN, event, email, cache, FE, E2E, migration rollout | 01–12 | `NOT_STARTED` |
 
@@ -323,7 +323,7 @@ Phạm vi chính:
 
 ### PHẦN 11 — ChangeRequest, WF06
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED`.
 
 Phạm vi chính:
 
@@ -464,6 +464,7 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 12/10/2026 | 09 | `IMPLEMENTED` | PaymentAttempt ONLINE, SePay webhook HMAC/idempotency, timeout PT1H, COD bypass và assigned staff chủ động bắt đầu sản xuất/deadline snapshot | Test webhook–timer, callback muộn, start–cancel/start lặp đạt; báo cáo `09-payment-and-production-start.md` | Antigravity triển khai frontend P9; E2E và BPMN cutover tổng ở P13 |
 | 13/10/2026 | 10 | `IMPLEMENTED` | Checkpoint theo OrderItem, INITIAL_SHAPE publish thẳng, FINAL_PRODUCT attempt + manager KCS/rework, PASS toàn bộ mới READY_TO_SHIP/release; gỡ export/KCS legacy | `.\mvnw.cmd test`: 316 test, 0 failure/error, 9 opt-in skipped; test hai KCS cuối cạnh tranh xác nhận đúng một transition/release/event | Antigravity triển khai frontend P10; tiếp theo backend P11 ChangeRequest |
 | 15/10/2026 | 10 / FE | `IMPLEMENTED` | Hoàn thiện UI Staff submit INITIAL/FINAL, Manager KCS/rework, USER/guest progress chỉ INITIAL; notification mở đúng order; retry giữ nguyên payload và idempotency key; gỡ lời gọi export/KCS legacy | `npm.cmd test -- --watch=false --browsers=ChromeHeadless`: 42/42; `npm.cmd run build:prod`: thành công, chỉ còn warning budget/CommonJS hiện hữu | Review/commit P9–P10; tiếp theo backend P11 ChangeRequest |
+| 15/10/2026 | 11 / BE+FE | `IMPLEMENTED` | WF06 theo OrderItem: USER gửi proposed spec, assigned STAFF accept/reject, spec version/snapshot history, progress guard, whitelist payload, lock/version/idempotency, notification/outbox; UI dùng chung cho USER/STAFF | `./mvnw.cmd test`: 323 test, 0 failure/error, 9 opt-in skipped; `npm.cmd test -- --watch=false --browsers=ChromeHeadless`: 44/44; `npm.cmd run build:prod`: thành công (warning budget/CommonJS hiện hữu) | Review/commit P11; tiếp theo P12 bàn giao/nhận hàng/reorder |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -511,8 +512,8 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Bàn giao/review **PHẦN 09 — Payment/production start** và **PHẦN 10 — Production checkpoint/KCS**, sau đó tiếp tục backend:
+Bàn giao/review **PHẦN 11 — ChangeRequest**, sau đó tiếp tục:
 
-1. Review diff backend/frontend và commit PHẦN 09–10.
-2. Sau khi commit PHẦN 09–10, bắt đầu PHẦN 11 — ChangeRequest.
+1. Review diff backend/frontend và commit PHẦN 11.
+2. Bắt đầu PHẦN 12 — bàn giao, nhận hàng và reorder.
 3. Giữ PHẦN 13 cho BPMN cutover tổng, E2E và nghiệm thu các migration trên MySQL thực tế.

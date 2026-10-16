@@ -21,6 +21,8 @@ import com.example.workflow.event.payload.OrderReadyToShipEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
 import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
+import com.example.workflow.event.payload.ChangeRequestSubmittedEvent;
+import com.example.workflow.event.payload.ChangeRequestDecidedEvent;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.*;
 import com.example.workflow.util.ThrowableUtils;
@@ -201,6 +203,8 @@ public class RedisStreamEventConsumer {
             case EventTypes.PRODUCTION_CHECKPOINT_SUBMITTED -> handleProductionCheckpointSubmitted(payload);
             case EventTypes.PRODUCTION_CHECKPOINT_REVIEWED -> handleProductionCheckpointReviewed(payload);
             case EventTypes.ORDER_READY_TO_SHIP -> handleOrderReadyToShip(payload);
+            case EventTypes.CHANGE_REQUEST_SUBMITTED -> handleChangeRequestSubmitted(payload);
+            case EventTypes.CHANGE_REQUEST_DECIDED -> handleChangeRequestDecided(payload);
             case EventTypes.CACHE_EVICTION_REQUESTED -> handleCacheEvictionRequested(payload);
             default -> throw new IllegalArgumentException("Unsupported event type " + type);
         }
@@ -353,6 +357,14 @@ public class RedisStreamEventConsumer {
 
     private void handleOrderReadyToShip(String payload) {
         orderLifecycleEventHandler.handleOrderReadyToShip(readPayload(payload, OrderReadyToShipEvent.class));
+    }
+
+    private void handleChangeRequestSubmitted(String payload) {
+        orderLifecycleEventHandler.handleChangeRequestSubmitted(readPayload(payload, ChangeRequestSubmittedEvent.class));
+    }
+
+    private void handleChangeRequestDecided(String payload) {
+        orderLifecycleEventHandler.handleChangeRequestDecided(readPayload(payload, ChangeRequestDecidedEvent.class));
     }
 
     private void handleCacheEvictionRequested(String payload) {

@@ -132,7 +132,17 @@ public enum ConstantErrorCode {
     PRODUCTION_CHECKPOINT_PENDING_REVIEW("The latest final-product checkpoint is still waiting for KCS review."),
     PRODUCTION_CHECKPOINT_VERSION_CONFLICT("Production checkpoint has changed; reload before reviewing."),
     PRODUCTION_REWORK_REASON_REQUIRED("A reason is required when requesting production rework."),
-    PRODUCTION_ITEM_ALREADY_PASSED("This order item has already passed final KCS.");
+    PRODUCTION_ITEM_ALREADY_PASSED("This order item has already passed final KCS."),
+    CHANGE_REQUEST_NOT_FOUND("Change request was not found."),
+    CHANGE_REQUEST_FORBIDDEN("You do not have access to this change request."),
+    CHANGE_REQUEST_ORDER_NOT_ELIGIBLE("This order no longer accepts change requests."),
+    CHANGE_REQUEST_ITEM_NOT_ELIGIBLE("This item is not eligible for a specification change."),
+    CHANGE_REQUEST_ITEM_ALREADY_IMPLEMENTED("This item is too far in production to change its specification."),
+    CHANGE_REQUEST_VERSION_CONFLICT("Change request has changed; reload before deciding."),
+    CHANGE_REQUEST_SPEC_VERSION_CONFLICT("Item specification has changed; reload before retrying."),
+    CHANGE_REQUEST_ALREADY_DECIDED("Change request has already been decided."),
+    CHANGE_REQUEST_REJECTION_REASON_REQUIRED("A reason is required when rejecting a change request."),
+    CHANGE_REQUEST_INVALID("Change request is invalid: %s");
 
     private final String messageTemplate;
 

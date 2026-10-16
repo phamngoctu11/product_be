@@ -22,6 +22,8 @@ public final class EventTypes {
     public static final String PRODUCTION_CHECKPOINT_SUBMITTED = "PRODUCTION_CHECKPOINT_SUBMITTED";
     public static final String PRODUCTION_CHECKPOINT_REVIEWED = "PRODUCTION_CHECKPOINT_REVIEWED";
     public static final String ORDER_READY_TO_SHIP = "ORDER_READY_TO_SHIP";
+    public static final String CHANGE_REQUEST_SUBMITTED = "CHANGE_REQUEST_SUBMITTED";
+    public static final String CHANGE_REQUEST_DECIDED = "CHANGE_REQUEST_DECIDED";
     public static final String CACHE_EVICTION_REQUESTED = "CACHE_EVICTION_REQUESTED";
 
     private EventTypes() {

@@ -39,6 +39,14 @@ class DomainExpandMigrationTest {
 
     protected String legacyStatusType() { return "VARCHAR(50)"; }
 
+    protected String legacyCheckpointStatusType() {
+        return "ENUM('SUBMITTED','APPROVED','REJECTED')";
+    }
+
+    protected String legacyProductionDecisionType() {
+        return "ENUM('APPROVED','REJECTED')";
+    }
+
     private void migrate(Connection connection) throws Exception {
         applyChangelog(connection, "db/changelog/db.changelog-master.xml");
     }
@@ -171,16 +179,16 @@ class DomainExpandMigrationTest {
                 statement.execute("""
                         CREATE TABLE production_checkpoints (
                             id BIGINT PRIMARY KEY,
-                            status VARCHAR(24) NOT NULL,
+                            status %s NOT NULL,
                             manager_review_required BOOLEAN NOT NULL
                         )
-                        """);
+                        """.formatted(legacyCheckpointStatusType()));
                 statement.execute("""
                         CREATE TABLE production_decisions (
                             id BIGINT PRIMARY KEY,
-                            decision_type VARCHAR(16) NOT NULL
+                            decision_type %s NOT NULL
                         )
-                        """);
+                        """.formatted(legacyProductionDecisionType()));
                 statement.executeUpdate("""
                         INSERT INTO production_checkpoints VALUES
                             (1, 'SUBMITTED', FALSE),
@@ -218,6 +226,16 @@ class DomainExpandMigrationTest {
                 assertThat(rows.getString(1)).isEqualTo("PASS");
                 assertThat(rows.next()).isTrue();
                 assertThat(rows.getString(1)).isEqualTo("REWORK_REQUIRED");
+            }
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO production_checkpoints(id, status, manager_review_required)
+                        VALUES (5, 'PASSED', FALSE)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO production_decisions(id, decision_type)
+                        VALUES (3, 'PASS')
+                        """);
             }
         }
     }

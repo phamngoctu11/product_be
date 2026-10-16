@@ -16,6 +16,8 @@ import com.example.workflow.event.payload.ProductionStartedEvent;
 import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
 import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
 import com.example.workflow.event.payload.OrderReadyToShipEvent;
+import com.example.workflow.event.payload.ChangeRequestSubmittedEvent;
+import com.example.workflow.event.payload.ChangeRequestDecidedEvent;
 import com.example.workflow.nume.ProductionCheckpointStage;
 import com.example.workflow.nume.ProductionDecisionType;
 import com.example.workflow.nume.OrderType;
@@ -52,6 +54,14 @@ public class OrderLifecycleEventHandler {
 
     @Value("${app.frontend-base-url:http://localhost:4200}")
     private String frontendBaseUrl;
+
+    public void handleChangeRequestSubmitted(ChangeRequestSubmittedEvent event) {
+        requireOrder(event.orderId(), "CHANGE_REQUEST_SUBMITTED");
+    }
+
+    public void handleChangeRequestDecided(ChangeRequestDecidedEvent event) {
+        requireOrder(event.orderId(), "CHANGE_REQUEST_DECIDED");
+    }
 
     public void handleOrderCreated(OrderCreatedEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CREATED");

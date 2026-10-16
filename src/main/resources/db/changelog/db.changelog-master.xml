@@ -10,4 +10,5 @@
     <include file="07-order-agreement-chat.xml" relativeToChangelogFile="true"/>
     <include file="08-payment-start.xml" relativeToChangelogFile="true"/>
     <include file="09-production-checkpoint.xml" relativeToChangelogFile="true"/>
+    <include file="10-change-request.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -105,6 +105,7 @@ Mỗi phần tử là `OrderItemProductionDTO`: thông tin loại sản phẩm, 
 ## Migration và dọn legacy
 
 - Liquibase `09-production-checkpoint.xml` tạo `production_checkpoints`, `production_checkpoint_images`, `production_decisions`, foreign key, unique constraint và index.
+- Cột MySQL ENUM legacy `production_checkpoints.status` và `production_decisions.decision_type` được đổi sang `VARCHAR` trước khi chuẩn hóa dữ liệu; nhờ đó database đã tồn tại chấp nhận `PASSED/PENDING_REVIEW/REWORK_REQUIRED` và `PASS/REWORK_REQUIRED`.
 - Dữ liệu enum cũ được chuẩn hóa: `SUBMITTED/APPROVED/REJECTED` sang bộ trạng thái P10; code không còn giữ enum cũ.
 - Hai trạng thái review checkpoint đầu cũ được đưa về `FINAL_IN_PROGRESS` vì INITIAL_SHAPE không còn vòng duyệt.
 - Đã gỡ API và service legacy đi vòng WF05:

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="10-change-request-item-version" author="workflow">
+        <addColumn tableName="order_item">
+            <column name="spec_version" type="int" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="10-change-request-contract" author="workflow">
+        <addColumn tableName="change_requests">
+            <column name="order_item_id" type="bigint"><constraints nullable="true"/></column>
+            <column name="assigned_staff_id" type="varchar(36)"><constraints nullable="true"/></column>
+            <column name="base_spec_version" type="int"><constraints nullable="true"/></column>
+            <column name="base_spec_snapshot" type="longtext"><constraints nullable="true"/></column>
+            <column name="request_reason" type="text"><constraints nullable="true"/></column>
+            <column name="applied_spec_snapshot" type="longtext"><constraints nullable="true"/></column>
+        </addColumn>
+        <sql>UPDATE change_requests SET status = 'PENDING_REVIEW' WHERE status = 'PENDING'</sql>
+        <sql>UPDATE change_requests SET status = 'APPLIED' WHERE status = 'ACCEPTED'</sql>
+        <addForeignKeyConstraint baseTableName="change_requests" baseColumnNames="order_item_id"
+            referencedTableName="order_item" referencedColumnNames="id" constraintName="fk_change_requests_order_item"/>
+        <addForeignKeyConstraint baseTableName="change_requests" baseColumnNames="assigned_staff_id"
+            referencedTableName="users" referencedColumnNames="id" constraintName="fk_change_requests_assigned_staff"/>
+        <createIndex tableName="change_requests" indexName="idx_change_requests_order_created">
+            <column name="order_id"/><column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="change_requests" indexName="idx_change_requests_staff_status">
+            <column name="assigned_staff_id"/><column name="status"/><column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="change_requests" indexName="idx_change_requests_item_status">
+            <column name="order_item_id"/><column name="status"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

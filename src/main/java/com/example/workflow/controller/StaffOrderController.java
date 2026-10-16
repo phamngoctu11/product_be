@@ -9,10 +9,13 @@ import com.example.workflow.dto.StartProductionRequest;
 import com.example.workflow.dto.StartProductionResultDTO;
 import com.example.workflow.dto.SubmitProductionCheckpointRequest;
 import com.example.workflow.dto.ProductionCheckpointDTO;
+import com.example.workflow.dto.ChangeRequestDTO;
+import com.example.workflow.dto.ChangeRequestDecisionRequest;
 import com.example.workflow.service.OrderService;
 import com.example.workflow.service.OrderAssignmentService;
 import com.example.workflow.service.ProductionStartService;
 import com.example.workflow.service.ProductionCheckpointService;
+import com.example.workflow.service.ChangeRequestService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -41,6 +44,7 @@ public class StaffOrderController {
     private final OrderAssignmentService assignmentService;
     private final ProductionStartService productionStartService;
     private final ProductionCheckpointService productionCheckpointService;
+    private final ChangeRequestService changeRequestService;
 
     @GetMapping("/claimable")
     @PreAuthorize("hasAuthority('STAFF')")
@@ -95,6 +99,20 @@ public class StaffOrderController {
         return ResponseEntity.ok(ApiResponse.success(
                 "Production checkpoint submitted.",
                 productionCheckpointService.submit(orderId, orderItemId, request, idempotencyKey)
+        ));
+    }
+
+    @PostMapping("/{orderId}/change-requests/{changeRequestId}/decision")
+    @PreAuthorize("hasAuthority('STAFF')")
+    public ResponseEntity<ApiResponse<ChangeRequestDTO>> decideChangeRequest(
+            @Positive @PathVariable Long orderId,
+            @Positive @PathVariable Long changeRequestId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody ChangeRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Yêu cầu chỉnh sửa đã được xử lý.",
+                changeRequestService.decide(orderId, changeRequestId, request, idempotencyKey)
         ));
     }
 

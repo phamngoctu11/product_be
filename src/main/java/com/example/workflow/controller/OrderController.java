@@ -11,11 +11,14 @@ import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
 import com.example.workflow.dto.ReorderResponseDTO;
 import com.example.workflow.dto.OrderItemProductionDTO;
+import com.example.workflow.dto.ChangeRequestDTO;
+import com.example.workflow.dto.CreateChangeRequestRequest;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.service.OrderService;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.ProductionCheckpointService;
+import com.example.workflow.service.ChangeRequestService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.DecimalMin;
@@ -48,6 +51,7 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderCancellationService orderCancellationService;
     private final ProductionCheckpointService productionCheckpointService;
+    private final ChangeRequestService changeRequestService;
 
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('USER')")
@@ -98,6 +102,27 @@ public class OrderController {
             @Positive @PathVariable Long orderId
     ) {
         return ResponseEntity.ok(ApiResponse.success(productionCheckpointService.getProgress(orderId)));
+    }
+
+    @GetMapping("/{orderId}/change-requests")
+    @PreAuthorize("hasAnyAuthority('USER', 'STAFF')")
+    public ResponseEntity<ApiResponse<List<ChangeRequestDTO>>> getChangeRequests(
+            @Positive @PathVariable Long orderId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(changeRequestService.list(orderId)));
+    }
+
+    @PostMapping("/{orderId}/change-requests")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<ApiResponse<ChangeRequestDTO>> createChangeRequest(
+            @Positive @PathVariable Long orderId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
+            @Valid @RequestBody CreateChangeRequestRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Yêu cầu chỉnh sửa đã được gửi.",
+                changeRequestService.create(orderId, request, idempotencyKey)
+        ));
     }
 
     @PostMapping("/{order_id}/cancellation")
