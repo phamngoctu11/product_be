@@ -6,9 +6,9 @@ import com.example.workflow.dto.OrderCancellationResultDTO;
 import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.dto.OrderListDTO;
 import com.example.workflow.dto.OrderStatusHistoryDTO;
-import com.example.workflow.dto.ReceiptComplaintRequest;
 import com.example.workflow.dto.ReceiptConfirmRequest;
 import com.example.workflow.dto.ReceiptConfirmResponse;
+import com.example.workflow.dto.ReceiptViewDTO;
 import com.example.workflow.dto.ReorderResponseDTO;
 import com.example.workflow.dto.OrderItemProductionDTO;
 import com.example.workflow.dto.ChangeRequestDTO;
@@ -19,6 +19,8 @@ import com.example.workflow.service.OrderService;
 import com.example.workflow.service.OrderCancellationService;
 import com.example.workflow.service.ProductionCheckpointService;
 import com.example.workflow.service.ChangeRequestService;
+import com.example.workflow.service.OrderDeliveryService;
+import com.example.workflow.service.OrderReorderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.DecimalMin;
@@ -52,6 +54,8 @@ public class OrderController {
     private final OrderCancellationService orderCancellationService;
     private final ProductionCheckpointService productionCheckpointService;
     private final ChangeRequestService changeRequestService;
+    private final OrderDeliveryService orderDeliveryService;
+    private final OrderReorderService orderReorderService;
 
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('USER')")
@@ -139,42 +143,30 @@ public class OrderController {
     @PostMapping("/{order_id}/reorder")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<ReorderResponseDTO>> reorderOrder(
-            @Positive @PathVariable("order_id") Long orderId
+            @Positive @PathVariable("order_id") Long orderId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey
     ) {
-        ReorderResponseDTO response = orderService.reorderOrder(orderId);
+        ReorderResponseDTO response = orderReorderService.reorder(orderId, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.success("Reorder processed", response));
     }
 
-    @PostMapping("/customer/confirm-receipt/{orderId}")
+    @GetMapping("/{orderId}/receipt")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<ApiResponse<ReceiptViewDTO>> getReceiptView(
+            @Positive @PathVariable Long orderId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderDeliveryService.getUserReceiptView(orderId)));
+    }
+
+    @PostMapping("/{orderId}/receipt")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> confirmReceipt(
             @Positive @PathVariable Long orderId,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
             @Valid @RequestBody ReceiptConfirmRequest request
     ) {
-        try {
-            ReceiptConfirmResponse response = orderService.confirmCustomerReceipt(orderId, request);
-            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
-    }
-
-    @PostMapping("/customer/receipt-complaint/{orderId}")
-    @PreAuthorize("hasAuthority('USER')")
-    public ResponseEntity<ApiResponse<ReceiptConfirmResponse>> sendReceiptComplaint(
-            @Positive @PathVariable Long orderId,
-            @Valid @RequestBody ReceiptComplaintRequest request
-    ) {
-        try {
-            ReceiptConfirmResponse response = orderService.sendReceiptComplaint(orderId, request);
-            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
-        }
+        ReceiptConfirmResponse response = orderDeliveryService.confirmByUser(orderId, request, idempotencyKey);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
 
     private void validatePriceRange(Double minPrice, Double maxPrice) {

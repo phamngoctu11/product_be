@@ -142,7 +142,14 @@ public enum ConstantErrorCode {
     CHANGE_REQUEST_SPEC_VERSION_CONFLICT("Item specification has changed; reload before retrying."),
     CHANGE_REQUEST_ALREADY_DECIDED("Change request has already been decided."),
     CHANGE_REQUEST_REJECTION_REASON_REQUIRED("A reason is required when rejecting a change request."),
-    CHANGE_REQUEST_INVALID("Change request is invalid: %s");
+    CHANGE_REQUEST_INVALID("Change request is invalid: %s"),
+    SHIPPING_HANDOVER_FORBIDDEN("Only the staff historically assigned to this order can hand it over."),
+    ORDER_NOT_READY_TO_SHIP("Order is not ready for shipping handover."),
+    SHIPPING_HANDOVER_INVALID("Shipping handover is invalid: %s"),
+    RECEIPT_CONFIRMATION_INVALID("Receipt confirmation is invalid: %s"),
+    RECEIPT_HANDOVER_DATA_MISSING("Shipping handover data is incomplete for this order."),
+    REORDER_NOT_ALLOWED("Only the owner can reorder a delivered or cancelled order."),
+    REORDER_INVALID("Reorder request is invalid: %s");
 
     private final String messageTemplate;
 

@@ -5,7 +5,6 @@ public final class EventTypes {
     public static final String NOTIFICATION_REQUESTED = "NOTIFICATION_REQUESTED";
     public static final String ORDER_CONFIRMATION_EMAIL_REQUESTED = "ORDER_CONFIRMATION_EMAIL_REQUESTED";
     public static final String ORDER_CANCELLATION_EMAIL_REQUESTED = "ORDER_CANCELLATION_EMAIL_REQUESTED";
-    public static final String RECEIPT_COMPLAINT_EMAIL_REQUESTED = "RECEIPT_COMPLAINT_EMAIL_REQUESTED";
     public static final String PASSWORD_RESET_EMAIL_REQUESTED = "PASSWORD_RESET_EMAIL_REQUESTED";
     public static final String WORKFLOW_EMAIL_REQUESTED = "WORKFLOW_EMAIL_REQUESTED";
     public static final String ORDER_CREATED = "ORDER_CREATED";
@@ -22,6 +21,7 @@ public final class EventTypes {
     public static final String PRODUCTION_CHECKPOINT_SUBMITTED = "PRODUCTION_CHECKPOINT_SUBMITTED";
     public static final String PRODUCTION_CHECKPOINT_REVIEWED = "PRODUCTION_CHECKPOINT_REVIEWED";
     public static final String ORDER_READY_TO_SHIP = "ORDER_READY_TO_SHIP";
+    public static final String ORDER_SHIPPING = "ORDER_SHIPPING";
     public static final String CHANGE_REQUEST_SUBMITTED = "CHANGE_REQUEST_SUBMITTED";
     public static final String CHANGE_REQUEST_DECIDED = "CHANGE_REQUEST_DECIDED";
     public static final String CACHE_EVICTION_REQUESTED = "CACHE_EVICTION_REQUESTED";

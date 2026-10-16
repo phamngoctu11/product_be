@@ -178,6 +178,19 @@ public class Order {
     @Column(name = "delivered_at")
     private LocalDateTime deliveredAt;
 
+    /**
+     * Null identifies a legacy SHIPPING row that predates the per-item P12
+     * handover contract. New handovers always persist version 1.
+     */
+    @Column(name = "delivery_contract_version")
+    private Integer deliveryContractVersion;
+
+    @Column(name = "shipped_by_id", length = 36)
+    private String shippedById;
+
+    @Column(name = "handover_note", length = 2000)
+    private String handoverNote;
+
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 

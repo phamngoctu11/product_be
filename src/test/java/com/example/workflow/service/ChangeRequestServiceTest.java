@@ -19,6 +19,7 @@ import com.example.workflow.repository.ChangeRequestRepository;
 import com.example.workflow.repository.OrderAssignmentRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +51,7 @@ class ChangeRequestServiceTest {
     @Mock private DurableRequestExecutor durableRequests;
     @Mock private NotificationService notificationService;
     @Mock private DomainEventPublisher eventPublisher;
+    @Mock private ApplicationCacheService cacheService;
 
     private ChangeRequestService service;
     private Order order;
@@ -60,7 +62,8 @@ class ChangeRequestServiceTest {
     @BeforeEach
     void setUp() {
         service = new ChangeRequestService(orderRepository, assignmentRepository, changeRequestRepository,
-                currentUserService, durableRequests, notificationService, eventPublisher, new ObjectMapper());
+                currentUserService, durableRequests, notificationService, eventPublisher, cacheService,
+                new ObjectMapper());
         owner = user("owner");
         staff = user("staff");
         item = item();
@@ -87,6 +90,7 @@ class ChangeRequestServiceTest {
         assertEquals(1, item.getSpecVersion());
         assertEquals("staff", result.assignedStaffId());
         verify(eventPublisher).publishAfterCommit(eq("CHANGE_REQUEST_SUBMITTED"), any());
+        verify(cacheService).evictChangeRequestChanged(order, "staff");
     }
 
     @Test
@@ -109,6 +113,7 @@ class ChangeRequestServiceTest {
         assertEquals(deadline, item.getComputedCompletionAt());
         assertEquals(OrderStatus.ORDER_CREATING, order.getStatus());
         verify(eventPublisher).publishAfterCommit(eq("CHANGE_REQUEST_DECIDED"), any());
+        verify(cacheService).evictChangeRequestChanged(order, "staff");
     }
 
     @Test
@@ -186,6 +191,20 @@ class ChangeRequestServiceTest {
         verify(durableRequests, never()).execute(any(), any(), any(), any());
     }
 
+    @Test
+    void inactiveOwnerCannotCreateChangeRequest() {
+        owner.setIsActive(false);
+        when(currentUserService.requireCurrentUser(Role.USER, ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN))
+                .thenReturn(owner);
+
+        AppException error = assertThrows(AppException.class, () -> service.create(10L,
+                new CreateChangeRequestRequest(3L, 20L, 1, "New engraving", List.of(), "Changed"),
+                "inactive-owner-key"));
+
+        assertEquals(ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN, error.getErrorCode());
+        verify(durableRequests, never()).execute(any(), any(), any(), any());
+    }
+
     private void stubLockedOrderAndAssignment() {
         when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
         when(assignmentRepository.findActiveByOrderIdForUpdate(10L)).thenReturn(Optional.of(assignment()));
@@ -245,6 +264,7 @@ class ChangeRequestServiceTest {
     private User user(String id) {
         User value = new User();
         value.setId(id);
+        value.setIsActive(true);
         return value;
     }
 

@@ -77,6 +77,25 @@ class ApplicationCacheServiceTest {
         verifyNoInteractions(cacheEvictionPublisher);
     }
 
+    @Test
+    void changeRequestEvictsOwnerAndAssignedStaffOrderListsOnly() {
+        Order order = order("user-1", "staff-1");
+
+        applicationCacheService.evictChangeRequestChanged(order, "staff-1");
+
+        verify(optionalCacheService).evictByPrefixAfterCommit(
+                CacheNames.USER_ORDERS,
+                CacheKeys.userOrdersPrefix("user-1")
+        );
+        verify(optionalCacheService).evictByPrefixAfterCommit(
+                CacheNames.STAFF_ASSIGNED_ORDERS,
+                CacheKeys.staffAssignedOrdersPrefix("staff-1")
+        );
+        verify(optionalCacheService, never()).clearAfterCommit(CacheNames.PRODUCTS);
+        verify(optionalCacheService, never()).clearAfterCommit(CacheNames.DASHBOARD_STATS);
+        verifyNoInteractions(cacheEvictionPublisher);
+    }
+
     private Order order(String userId, String staffId) {
         User user = new User();
         user.setId(userId);

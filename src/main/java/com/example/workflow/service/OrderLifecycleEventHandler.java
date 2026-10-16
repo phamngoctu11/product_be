@@ -10,6 +10,7 @@ import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.OrderAgreementSubmittedEvent;
 import com.example.workflow.event.payload.OrderAgreementReviewedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
+import com.example.workflow.event.payload.OrderShippingEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.event.payload.PaymentOpenedEvent;
 import com.example.workflow.event.payload.ProductionStartedEvent;
@@ -205,14 +206,21 @@ public class OrderLifecycleEventHandler {
         }
 
         String userId = order.getUser().getId();
-        notificationService.sendNotification(
-                "Đánh giá sản phẩm",
-                "Đơn hàng #" + order.getId() + " đã hoàn tất. Hãy chia sẻ trải nghiệm của bạn cho từng sản phẩm.",
-                order.getId(),
-                userId,
-                "/topic/user-notifications/" + userId
-        );
+        if (order.getOrderType() == OrderType.CATALOG) {
+            notificationService.sendNotification(
+                    "Đánh giá sản phẩm",
+                    "Đơn hàng #" + order.getId() + " đã hoàn tất. Hãy chia sẻ trải nghiệm của bạn cho từng sản phẩm.",
+                    order.getId(),
+                    userId,
+                    "/topic/user-notifications/" + userId
+            );
+        }
         applicationCacheService.evictOrderDelivered(order, userId);
+    }
+
+    public void handleOrderShipping(OrderShippingEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_SHIPPING");
+        applicationCacheService.evictShippingHandover(order, event.staffId());
     }
 
     public void handleOrderCancelled(OrderCancelledEvent event) {

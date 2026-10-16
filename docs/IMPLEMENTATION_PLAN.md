@@ -8,10 +8,10 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      BACKEND PHẦN 05–11 VÀ FRONTEND PHẦN 09–11 ĐÃ IMPLEMENTED
-Phần đang thực hiện:      REVIEW/COMMIT PHẦN 11; TIẾP THEO PHẦN 12
-Phần hoàn thành gần nhất: PHẦN 11 — ChangeRequest WF06 (backend + frontend)
-Ngày cập nhật gần nhất:   15/10/2026
+Tái triển khai code:      BACKEND PHẦN 05–12 VÀ FRONTEND PHẦN 09–11 ĐÃ IMPLEMENTED
+Phần đang thực hiện:      REVIEW/COMMIT PHẦN 12; FRONTEND PHẦN 12 BÀN GIAO QUA PROMPT
+Phần hoàn thành gần nhất: PHẦN 12 — Bàn giao, nhận hàng và reorder (backend)
+Ngày cập nhật gần nhất:   16/10/2026
 ```
 
 Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
@@ -55,7 +55,7 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `IMPLEMENTED` |
 | 10 | Production, checkpoint và KCS | WF05 | 07–09 | `IMPLEMENTED` |
 | 11 | ChangeRequest | WF06 | 08–10 | `IMPLEMENTED` |
-| 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `NOT_STARTED` |
+| 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `IMPLEMENTED` |
 | 13 | Tích hợp xuyên luồng và rollout | BPMN, event, email, cache, FE, E2E, migration rollout | 01–12 | `NOT_STARTED` |
 
 Thứ tự trên là thứ tự dependency, không phải thứ tự số workflow. WF09 được xây sớm vì manager reject, timer custom và payment timeout đều cần gọi cùng nghiệp vụ hủy.
@@ -339,7 +339,7 @@ Phạm vi chính:
 
 ### PHẦN 12 — Bàn giao, nhận hàng và reorder
 
-Trạng thái: `NOT_STARTED`.
+Trạng thái: `IMPLEMENTED` (backend; FE được bàn giao qua `docs/prompts/P12_FRONTEND_ANTIGRAVITY.md`).
 
 Phạm vi WF07:
 
@@ -465,6 +465,8 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 13/10/2026 | 10 | `IMPLEMENTED` | Checkpoint theo OrderItem, INITIAL_SHAPE publish thẳng, FINAL_PRODUCT attempt + manager KCS/rework, PASS toàn bộ mới READY_TO_SHIP/release; gỡ export/KCS legacy | `.\mvnw.cmd test`: 316 test, 0 failure/error, 9 opt-in skipped; test hai KCS cuối cạnh tranh xác nhận đúng một transition/release/event | Antigravity triển khai frontend P10; tiếp theo backend P11 ChangeRequest |
 | 15/10/2026 | 10 / FE | `IMPLEMENTED` | Hoàn thiện UI Staff submit INITIAL/FINAL, Manager KCS/rework, USER/guest progress chỉ INITIAL; notification mở đúng order; retry giữ nguyên payload và idempotency key; gỡ lời gọi export/KCS legacy | `npm.cmd test -- --watch=false --browsers=ChromeHeadless`: 42/42; `npm.cmd run build:prod`: thành công, chỉ còn warning budget/CommonJS hiện hữu | Review/commit P9–P10; tiếp theo backend P11 ChangeRequest |
 | 15/10/2026 | 11 / BE+FE | `IMPLEMENTED` | WF06 theo OrderItem: USER gửi proposed spec, assigned STAFF accept/reject, spec version/snapshot history, progress guard, whitelist payload, lock/version/idempotency, notification/outbox; UI dùng chung cho USER/STAFF | `./mvnw.cmd test`: 323 test, 0 failure/error, 9 opt-in skipped; `npm.cmd test -- --watch=false --browsers=ChromeHeadless`: 44/44; `npm.cmd run build:prod`: thành công (warning budget/CommonJS hiện hữu) | Review/commit P11; tiếp theo P12 bàn giao/nhận hàng/reorder |
+| 16/10/2026 | 11 / BE hardening | `VERIFIED` | Chặn actor inactive/soft-delete, invalidation cache USER/assigned STAFF sau commit, thêm migration coverage cho status legacy và kiểm thử replay/race hai quyết định trái ngược | `.\mvnw.cmd test`: 329 test, 0 failure/error, 10 MySQL opt-in skipped; P11 service/cache targeted 12/12; `git diff --check` đạt | Dùng prompt P11 để Antigravity audit FE; sau đó review/commit và bắt đầu P12 |
+| 16/10/2026 | 12 / BE | `IMPLEMENTED` | WF07 shipping handover theo OrderItem và staff lịch sử; WF08 receipt USER/Guest, mismatch/acceptMismatch, DELIVERED/reputation/review invitation; F17 catalog-to-cart/custom-to-draft; gỡ complaint legacy | `.\mvnw.cmd test`: 341 test, 0 failure/error, 11 opt-in skipped; targeted P12 11/11; `git diff --check` không có lỗi | Dùng prompt P12 triển khai FE; review/commit P12, sau đó bắt đầu P13 integration/cutover |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -503,8 +505,8 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 - `OrderStatus` đã có state mục tiêu nhưng vẫn giữ state kho/payment legacy trong giai đoạn expand; code mới không được tạo state legacy.
 - `Order.totalPrice` còn là primitive `double` và Order vẫn giữ các cờ stock legacy. Giá chính thức CUSTOM chưa chốt được biểu diễn bằng `finalPrice=null`; API không được diễn giải `totalPrice=0.0` tương thích schema thành giá thỏa thuận.
-- Đường export/KCS legacy chuyển thẳng sang `SHIPPING` đã được gỡ ở PHẦN 10. Luồng mới chỉ kết thúc tại `READY_TO_SHIP`; tích hợp shipping và BPMN cutover tổng vẫn thuộc PHẦN 12–13.
-- Code còn complaint receipt dù target đã loại bỏ complaint workflow.
+- Đường export/KCS legacy chuyển thẳng sang `SHIPPING` đã được gỡ ở PHẦN 10; PHẦN 12 đã bổ sung handover `READY_TO_SHIP → SHIPPING`. BPMN cutover tổng vẫn thuộc PHẦN 13.
+- Complaint receipt legacy đã được gỡ ở PHẦN 12; receipt mới chỉ đối chiếu quantity và cho phép khách chủ động chấp nhận chênh lệch.
 - Endpoint checkout mới đã tạo `PENDING_APPROVAL/NOT_DUE`; code checkout/payment legacy vẫn còn và phải được loại/cutover ở PHẦN 13.
 - Repo có nhiều BPMN cho user/guest; cần tránh duy trì hai lifecycle process cạnh tranh cho cùng Order.
 - PHẦN 05 đã dùng `description` và `List<String> imageUrls` ở API/domain, validate 4.000 từ và URL. Tên cột vật lý `spec/attachments` được giữ để tương thích nhưng đã nâng `LONGTEXT`; Agreement PHẦN 08 phải đọc snapshot mới và fallback snapshot legacy.
@@ -512,8 +514,8 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Bàn giao/review **PHẦN 11 — ChangeRequest**, sau đó tiếp tục:
+Bàn giao/review **PHẦN 12 — bàn giao, nhận hàng và reorder**, sau đó tiếp tục:
 
-1. Review diff backend/frontend và commit PHẦN 11.
-2. Bắt đầu PHẦN 12 — bàn giao, nhận hàng và reorder.
-3. Giữ PHẦN 13 cho BPMN cutover tổng, E2E và nghiệm thu các migration trên MySQL thực tế.
+1. Dùng `docs/prompts/P12_FRONTEND_ANTIGRAVITY.md` để triển khai và nghiệm thu frontend PHẦN 12.
+2. Review diff và commit PHẦN 12 sau khi frontend tích hợp đạt.
+3. Bắt đầu PHẦN 13 cho BPMN cutover tổng, E2E và nghiệm thu các migration trên MySQL thực tế.

@@ -21,6 +21,7 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChangeRequestRepository;
 import com.example.workflow.repository.OrderAssignmentRepository;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
@@ -52,11 +53,13 @@ public class ChangeRequestService {
     private final DurableRequestExecutor durableRequests;
     private final NotificationService notificationService;
     private final DomainEventPublisher eventPublisher;
+    private final ApplicationCacheService cacheService;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public List<ChangeRequestDTO> list(Long orderId) {
         User actor = currentUserService.requireCurrentUser();
+        requireActiveActor(actor);
         Order order = requireOrder(orderId);
         authorizeParticipant(order, actor);
         Map<Long, OrderItem> items = safeItems(order).stream()
@@ -68,6 +71,7 @@ public class ChangeRequestService {
 
     public ChangeRequestDTO create(Long orderId, CreateChangeRequestRequest request, String idempotencyKey) {
         User owner = currentUserService.requireCurrentUser(Role.USER, ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN);
+        requireActiveActor(owner);
         requireCreateRequest(request);
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("orderId", orderId);
@@ -94,6 +98,7 @@ public class ChangeRequestService {
             String idempotencyKey
     ) {
         User staff = currentUserService.requireCurrentUser(Role.STAFF, ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN);
+        requireActiveActor(staff);
         requireDecisionRequest(request);
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("orderId", orderId);
@@ -149,6 +154,7 @@ public class ChangeRequestService {
         eventPublisher.publishAfterCommit(EventTypes.CHANGE_REQUEST_SUBMITTED,
                 new ChangeRequestSubmittedEvent(orderId, item.getId(), request.getId(), owner.getId(),
                         assignment.getStaffId(), item.getSpecVersion()));
+        cacheService.evictChangeRequestChanged(order, assignment.getStaffId());
         return toDto(request, order, item);
     }
 
@@ -208,6 +214,7 @@ public class ChangeRequestService {
         eventPublisher.publishAfterCommit(EventTypes.CHANGE_REQUEST_DECIDED,
                 new ChangeRequestDecidedEvent(orderId, item.getId(), request.getId(), request.getOwnerId(),
                         staff.getId(), request.getStatus(), request.getAppliedVersion()));
+        cacheService.evictChangeRequestChanged(order, staff.getId());
         return toDto(request, order, item);
     }
 
@@ -326,6 +333,12 @@ public class ChangeRequestService {
 
     private void requireOwner(Order order, String ownerId) {
         if (order.getUser() == null || !ownerId.equals(order.getUser().getId())) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN);
+        }
+    }
+
+    private void requireActiveActor(User actor) {
+        if (actor == null || actor.isDelete() || !Boolean.TRUE.equals(actor.getIsActive())) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN);
         }
     }

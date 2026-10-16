@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="11-delivery-receipt-contract" author="workflow">
+        <addColumn tableName="orders">
+            <column name="delivery_contract_version" type="int"/>
+            <column name="shipped_by_id" type="varchar(36)"/>
+            <column name="handover_note" type="varchar(2000)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="orders" baseColumnNames="shipped_by_id"
+            referencedTableName="users" referencedColumnNames="id" constraintName="fk_orders_shipped_by"/>
+        <createIndex tableName="orders" indexName="idx_orders_shipping_receipt">
+            <column name="status"/>
+            <column name="shipped_at"/>
+            <column name="delivered_at"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Existing SHIPPING rows remain null-version legacy rows. Receipt reads may
+         fall back to ordered quantity only for those rows. Every new WF07
+         handover writes contract version 1 and requires explicit quantities. -->
+    <changeSet id="11-delivery-existing-shipping-days" author="workflow">
+        <sql>UPDATE orders SET expected_shipping_days = 2 WHERE expected_shipping_days IS NULL OR expected_shipping_days &lt;= 0</sql>
+    </changeSet>
+</databaseChangeLog>

@@ -10,6 +10,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReorderItemDTO implements Serializable {
+    private Long orderItemId;
     private Long variantId;
     private String variantName;
     private int quantity;

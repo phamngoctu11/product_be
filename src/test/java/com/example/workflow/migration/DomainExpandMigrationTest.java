@@ -241,6 +241,77 @@ class DomainExpandMigrationTest {
     }
 
     @Test
+    void expandsLegacyChangeRequestsAndNormalizesTheirStatuses() throws Exception {
+        try (Connection connection = legacyDatabase()) {
+            applyChangelog(connection, "db/changelog/02-domain-expand.xml");
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO change_requests(
+                            id, version, order_id, owner_id, base_agreement_version,
+                            requested_details, status, created_at
+                        ) VALUES
+                            (1, 0, 1, 'staff-1', 1, 'Legacy pending', 'PENDING', CURRENT_TIMESTAMP),
+                            (2, 0, 1, 'staff-1', 1, 'Legacy accepted', 'ACCEPTED', CURRENT_TIMESTAMP)
+                        """);
+            }
+            connection.commit();
+
+            migrate(connection);
+
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery("SELECT status FROM change_requests ORDER BY id")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("PENDING_REVIEW");
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString(1)).isEqualTo("APPLIED");
+            }
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery("SELECT spec_version FROM order_item WHERE id = 1")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getInt(1)).isEqualTo(1);
+            }
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO change_requests(
+                            version, order_id, owner_id, order_item_id, assigned_staff_id,
+                            base_agreement_version, base_spec_version, requested_details,
+                            request_reason, status, created_at
+                        ) VALUES (
+                            0, 1, 'staff-1', 1, 'staff-1',
+                            1, 1, '{"description":"New"}',
+                            'Need a change', 'PENDING_REVIEW', CURRENT_TIMESTAMP
+                        )
+                        """);
+            }
+        }
+    }
+
+    @Test
+    void addsDeliveryContractWithoutMarkingLegacyShippingAsNewHandover() throws Exception {
+        try (Connection connection = legacyDatabase()) {
+            applyChangelog(connection, "db/changelog/02-domain-expand.xml");
+            try (var statement = connection.createStatement()) {
+                statement.executeUpdate("UPDATE orders SET status = 'SHIPPING', expected_shipping_days = 0 WHERE id = 1");
+            }
+            connection.commit();
+
+            migrate(connection);
+
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery("""
+                         SELECT delivery_contract_version, shipped_by_id, handover_note, expected_shipping_days
+                         FROM orders WHERE id = 1
+                         """)) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getObject("delivery_contract_version")).isNull();
+                assertThat(rows.getObject("shipped_by_id")).isNull();
+                assertThat(rows.getObject("handover_note")).isNull();
+                assertThat(rows.getInt("expected_shipping_days")).isEqualTo(2);
+            }
+        }
+    }
+
+    @Test
     void customContentMigrationBackfillsLegacyNullAttachmentsWithoutRenamingColumns() throws Exception {
         try (Connection connection = legacyDatabase()) {
             applyChangelog(connection, "db/changelog/02-domain-expand.xml");

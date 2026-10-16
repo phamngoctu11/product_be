@@ -11,4 +11,5 @@
     <include file="08-payment-start.xml" relativeToChangelogFile="true"/>
     <include file="09-production-checkpoint.xml" relativeToChangelogFile="true"/>
     <include file="10-change-request.xml" relativeToChangelogFile="true"/>
+    <include file="11-delivery-receipt.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

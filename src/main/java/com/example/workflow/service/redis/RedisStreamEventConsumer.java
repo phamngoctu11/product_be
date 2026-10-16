@@ -12,6 +12,7 @@ import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.event.payload.OrderAcceptedEvent;
 import com.example.workflow.event.payload.OrderAssignedEvent;
 import com.example.workflow.event.payload.OrderDeliveredEvent;
+import com.example.workflow.event.payload.OrderShippingEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.event.payload.PaymentOpenedEvent;
 import com.example.workflow.event.payload.ProductionStartedEvent;
@@ -19,7 +20,6 @@ import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
 import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
 import com.example.workflow.event.payload.OrderReadyToShipEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
-import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.event.payload.ChangeRequestSubmittedEvent;
 import com.example.workflow.event.payload.ChangeRequestDecidedEvent;
@@ -186,7 +186,6 @@ public class RedisStreamEventConsumer {
             case EventTypes.NOTIFICATION_REQUESTED -> handleNotificationRequested(payload);
             case EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED -> handleOrderConfirmationEmailRequested(payload);
             case EventTypes.ORDER_CANCELLATION_EMAIL_REQUESTED -> handleOrderCancellationEmailRequested(payload);
-            case EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED -> handleReceiptComplaintEmailRequested(payload);
             case EventTypes.PASSWORD_RESET_EMAIL_REQUESTED -> handlePasswordResetEmailRequested(payload);
             case EventTypes.WORKFLOW_EMAIL_REQUESTED -> handleWorkflowEmailRequested(payload);
             case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
@@ -196,6 +195,7 @@ public class RedisStreamEventConsumer {
             case EventTypes.ORDER_AGREEMENT_REVIEWED -> handleOrderAgreementReviewed(payload);
             case EventTypes.GUEST_ORDER_CREATED -> handleGuestOrderCreated(payload);
             case EventTypes.ORDER_DELIVERED -> handleOrderDelivered(payload);
+            case EventTypes.ORDER_SHIPPING -> handleOrderShipping(payload);
             case EventTypes.ORDER_CANCELLED -> handleOrderCancelled(payload);
             case EventTypes.PAYMENT_OPENED -> handlePaymentOpened(payload);
             case EventTypes.PAYMENT_CONFIRMED -> handlePaymentConfirmed(payload);
@@ -243,18 +243,6 @@ public class RedisStreamEventConsumer {
                 event.customerName(),
                 event.orderId(),
                 event.reason()
-        );
-    }
-
-    private void handleReceiptComplaintEmailRequested(String payload) {
-        ReceiptComplaintEmailRequestedEvent event = readPayload(payload, ReceiptComplaintEmailRequestedEvent.class);
-        emailService.sendReceiptComplaintEmailNowOrThrow(
-                event.toEmails(),
-                event.orderId(),
-                event.customerName(),
-                event.customerEmail(),
-                event.note(),
-                event.mismatches()
         );
     }
 
@@ -357,6 +345,10 @@ public class RedisStreamEventConsumer {
 
     private void handleOrderReadyToShip(String payload) {
         orderLifecycleEventHandler.handleOrderReadyToShip(readPayload(payload, OrderReadyToShipEvent.class));
+    }
+
+    private void handleOrderShipping(String payload) {
+        orderLifecycleEventHandler.handleOrderShipping(readPayload(payload, OrderShippingEvent.class));
     }
 
     private void handleChangeRequestSubmitted(String payload) {

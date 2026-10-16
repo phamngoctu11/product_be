@@ -1,11 +1,9 @@
 package com.example.workflow.service;
 
-import com.example.workflow.dto.ReceiptMismatchDTO;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCancellationEmailRequestedEvent;
 import com.example.workflow.event.payload.OrderConfirmationEmailRequestedEvent;
 import com.example.workflow.event.payload.PasswordResetEmailRequestedEvent;
-import com.example.workflow.event.payload.ReceiptComplaintEmailRequestedEvent;
 import com.example.workflow.event.payload.WorkflowEmailRequestedEvent;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import jakarta.mail.MessagingException;
@@ -303,62 +301,6 @@ public class EmailService {
         log.info("Sent order cancellation email for order {} to {}", orderId, toEmail);
     }
 
-    public void sendReceiptComplaintEmail(
-            List<String> toEmails,
-            Long orderId,
-            String customerName,
-            String customerEmail,
-            String note,
-            List<ReceiptMismatchDTO> mismatches
-    ) {
-        if (toEmails == null || toEmails.isEmpty()) {
-            return;
-        }
-        eventPublisher.publishAfterCommit(
-                EventTypes.RECEIPT_COMPLAINT_EMAIL_REQUESTED,
-                new ReceiptComplaintEmailRequestedEvent(toEmails, orderId, customerName, customerEmail, note, mismatches)
-        );
-    }
-
-    public void sendReceiptComplaintEmailNow(
-            List<String> toEmails,
-            Long orderId,
-            String customerName,
-            String customerEmail,
-            String note,
-            List<ReceiptMismatchDTO> mismatches
-    ) {
-        if (toEmails == null || toEmails.isEmpty()) {
-            return;
-        }
-
-        try {
-            sendReceiptComplaintEmailNowOrThrow(toEmails, orderId, customerName, customerEmail, note, mismatches);
-        } catch (RuntimeException e) {
-            log.warn("Optional receipt complaint email failed for order {}: {}", orderId, e.getMessage());
-        }
-    }
-
-    public void sendReceiptComplaintEmailNowOrThrow(
-            List<String> toEmails,
-            Long orderId,
-            String customerName,
-            String customerEmail,
-            String note,
-            List<ReceiptMismatchDTO> mismatches
-    ) {
-        if (toEmails == null || toEmails.isEmpty()) {
-            return;
-        }
-
-        sendHtmlEmailOrThrow(
-                toEmails.toArray(new String[0]),
-                "Receipt quantity complaint for order #" + orderId,
-                buildReceiptComplaintHtml(orderId, customerName, customerEmail, note, mismatches)
-        );
-        log.info("Sent receipt complaint email for order {}", orderId);
-    }
-
     public void sendPasswordResetEmail(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
         eventPublisher.publishAfterCommit(
                 EventTypes.PASSWORD_RESET_EMAIL_REQUESTED,
@@ -434,56 +376,6 @@ public class EmailService {
         } catch (MessagingException | RuntimeException e) {
             throw new IllegalStateException("Email delivery failed: " + e.getMessage(), e);
         }
-    }
-
-    private String buildReceiptComplaintHtml(
-            Long orderId,
-            String customerName,
-            String customerEmail,
-            String note,
-            List<ReceiptMismatchDTO> mismatches
-    ) {
-        StringBuilder rows = new StringBuilder();
-        for (ReceiptMismatchDTO mismatch : mismatches) {
-            rows.append("<tr>")
-                    .append("<td>").append(escapeHtml(String.valueOf(mismatch.getVariantId()))).append("</td>")
-                    .append("<td>").append(escapeHtml(mismatch.getVariantName())).append("</td>")
-                    .append("<td style=\"text-align:right\">").append(mismatch.getOrderedQuantity()).append("</td>")
-                    .append("<td style=\"text-align:right\">").append(mismatch.getExportedQuantity()).append("</td>")
-                    .append("<td style=\"text-align:right\">").append(mismatch.getReceivedQuantity()).append("</td>")
-                    .append("</tr>");
-        }
-
-        return """
-                <html>
-                <body style="font-family: Arial, sans-serif; color: #222;">
-                    <h2>Receipt quantity complaint for order #%s</h2>
-                    <p><b>Customer:</b> %s</p>
-                    <p><b>Customer email:</b> %s</p>
-                    <p><b>Note:</b> %s</p>
-                    <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%%;">
-                        <thead>
-                            <tr>
-                                <th>Variant ID</th>
-                                <th>Variant</th>
-                                <th>Ordered quantity</th>
-                                <th>Exported quantity</th>
-                                <th>Received quantity</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            %s
-                        </tbody>
-                    </table>
-                </body>
-                </html>
-                """.formatted(
-                orderId,
-                escapeHtml(customerName),
-                escapeHtml(customerEmail),
-                escapeHtml(note),
-                rows
-        );
     }
 
     private String buildPasswordResetHtml(String customerName, String resetLink, int expiresInMinutes) {

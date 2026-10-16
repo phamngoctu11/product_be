@@ -4,59 +4,39 @@ import com.example.workflow.dto.*;
 import com.example.workflow.cache.CacheNames;
 import com.example.workflow.entity.*;
 import com.example.workflow.event.EventTypes;
-import com.example.workflow.event.payload.OrderDeliveredEvent;
 import com.example.workflow.event.payload.PaymentConfirmedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.mapper.OrderMapper;
 import com.example.workflow.mapper.OrderStatusHistoryMapper;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.CancellationSource;
-import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.*;
 import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.RuntimeService;
-import org.camunda.bpm.engine.TaskService;
-import org.camunda.bpm.engine.task.Task;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class OrderService {
     private final OrderRepository orderRepository;
-    private final OrderMapper orderMapper;
-    private final UserRepository userRepository;
     private final OrderStatusHistoryRepository historyRepository;
     private final OrderStatusHistoryMapper historyMapper;
-    private final TaskService taskService;
     private final RuntimeService runtimeService;
-    private final NotificationService notificationService;
-    private final EmailService emailService;
     private final DomainEventPublisher eventPublisher;
     private final InventoryReservationService inventoryReservationService;
     private final CurrentUserService currentUserService;
-    private final UserService userService;
-    private final ReputationService reputationService;
-    private final CartService cartService;
     private final OrderDetailsAssembler orderDetailsAssembler;
     private final OrderLookupService orderLookupService;
     private final OrderStatusHistoryService orderStatusHistoryService;
@@ -71,297 +51,11 @@ public class OrderService {
         }
     }
 
-    private Task findWorkflowTask(Long orderId, String taskDefinitionKey, String missingMessage) {
-        Task task = queryWorkflowTask(orderId, taskDefinitionKey);
-        if (task == null) {
-            throw new RuntimeException(missingMessage);
-        }
-        return task;
-    }
-
-    private Task queryWorkflowTask(Long orderId, String taskDefinitionKey) {
-        return taskService.createTaskQuery()
-                .processVariableValueEquals("orderId", orderId)
-                .taskDefinitionKey(taskDefinitionKey)
-                .singleResult();
-    }
-
     private void saveOrderAndAuditStatusChange(Order order, OrderStatus oldStatus, String changerId) {
         orderRepository.save(order);
         if (oldStatus != order.getStatus()) {
             orderStatusHistoryService.record(order, oldStatus, order.getStatus(), changerId);
         }
-    }
-
-    // ==========================================
-    // Station 4: customer receipt confirmation
-    // ==========================================
-    @Transactional
-    public ReceiptConfirmResponse confirmCustomerReceipt(Long orderId, ReceiptConfirmRequest request) {
-        Order order = orderLookupService.require(orderId);
-        User currentUser = validateReceiptOwner(order);
-        Task task = findCustomerReceiptTask(orderId);
-
-        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
-        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
-        if (!mismatches.isEmpty() && !request.isAcceptMismatch()) {
-            return new ReceiptConfirmResponse(
-                    false,
-                    false,
-                    "So luong thuc nhan khong khop voi so luong da xuat. Vui long xac nhan co muon khieu nai hay khong.",
-                    mismatches
-            );
-        }
-
-        applyReceivedQuantities(order, receivedByVariant);
-
-        OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.DELIVERED);
-        order.setEndOrderTime(LocalDateTime.now());
-
-        reputationService.changeReputation(
-                currentUser,
-                2,
-                "Completed order #" + order.getId(),
-                "ORDER",
-                String.valueOf(order.getId())
-        );
-        saveOrderAndAuditStatusChange(order, oldStatus, currentUser.getId());
-        eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
-
-        taskService.complete(task.getId());
-
-        boolean matched = mismatches.isEmpty();
-        String message = matched
-                ? "Xac nhan nhan hang thanh cong. Cam on ban!"
-                : "Xac nhan nhan hang thanh cong voi so luong thuc nhan bi lech da duoc chap nhan.";
-        return new ReceiptConfirmResponse(matched, true, message, mismatches);
-    }
-
-    @Transactional
-    public ReceiptConfirmResponse sendReceiptComplaint(Long orderId, ReceiptComplaintRequest request) {
-        Order order = orderLookupService.require(orderId);
-        User currentUser = validateReceiptOwner(order);
-        findCustomerReceiptTask(orderId);
-
-        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
-        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
-        if (mismatches.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_MATCHES_EXPORTED);
-        }
-
-        List<String> managerEmails = userRepository.findByRoleInAndIsDeleteFalseAndEmailIsNotNull(List.of(Role.MANAGER))
-                .stream()
-                .map(User::getEmail)
-                .filter(email -> email != null && !email.isBlank())
-                .distinct()
-                .collect(Collectors.toList());
-        if (managerEmails.isEmpty()) {
-            log.warn("No manager email found for receipt complaint on order {}; storing notification only.", orderId);
-        } else {
-            emailService.sendReceiptComplaintEmail(
-                    managerEmails,
-                    orderId,
-                    userService.fullName(currentUser),
-                    currentUser.getEmail(),
-                    request.getNote(),
-                    mismatches
-            );
-        }
-
-        saveAndSendNotification(
-                "Khieu nai lech so luong",
-                "Khach hang " + userService.fullName(currentUser) + " khieu nai lech so luong don #" + orderId + ".",
-                orderId,
-                null,
-                "/topic/admin-notifications"
-        );
-
-        return new ReceiptConfirmResponse(
-                false,
-                false,
-                "Da gui khieu nai lech so luong den manager.",
-                mismatches
-        );
-    }
-
-    private User validateReceiptOwner(Order order) {
-        User currentUser = currentUserService.requireCurrentUser();
-        if (order.getUser() == null || !order.getUser().getId().equals(currentUser.getId())) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.ORDER_CONFIRMATION_FORBIDDEN);
-        }
-        return currentUser;
-    }
-
-    private Task findCustomerReceiptTask(Long orderId) {
-        Task task = queryWorkflowTask(orderId, "customer_confirm_receipt");
-        if (task == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_NOT_AWAITING_RECEIPT_CONFIRMATION);
-        }
-        return task;
-    }
-
-    private Map<Long, Integer> buildReceivedQuantityMap(Order order, List<ItemCheckRequest> receivedItems) {
-        if (receivedItems == null || receivedItems.isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_LIST_REQUIRED);
-        }
-        Map<Long, OrderItem> orderItemsByVariant = buildOrderItemsByVariant(order);
-        Map<Long, Integer> receivedByVariant = new HashMap<>();
-
-        for (ItemCheckRequest requestItem : receivedItems) {
-            if (requestItem == null || requestItem.getVariantId() == null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIPT_VARIANT_ID_REQUIRED);
-            }
-            if (requestItem.getQuantity() < 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_NEGATIVE);
-            }
-            if (!orderItemsByVariant.containsKey(requestItem.getVariantId())) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIPT_VARIANT_NOT_IN_ORDER, requestItem.getVariantId());
-            }
-            if (receivedByVariant.put(requestItem.getVariantId(), requestItem.getQuantity()) != null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.DUPLICATE_RECEIPT_VARIANT, requestItem.getVariantId());
-            }
-        }
-
-        for (Long variantId : orderItemsByVariant.keySet()) {
-            if (!receivedByVariant.containsKey(variantId)) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.RECEIVED_QUANTITY_MISSING, variantId);
-            }
-        }
-        return receivedByVariant;
-    }
-
-    private Map<Long, OrderItem> buildOrderItemsByVariant(Order order) {
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_ITEM_REQUIRED_FOR_CONFIRMATION);
-        }
-
-        Map<Long, OrderItem> orderItemsByVariant = new HashMap<>();
-        for (OrderItem item : order.getItems()) {
-            Long variantId = getOrderItemVariantId(item);
-            if (orderItemsByVariant.put(variantId, item) != null) {
-                throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.DUPLICATE_ORDER_VARIANT, variantId);
-            }
-        }
-        return orderItemsByVariant;
-    }
-
-    private List<ReceiptMismatchDTO> buildReceiptMismatches(Order order, Map<Long, Integer> receivedByVariant) {
-        List<ReceiptMismatchDTO> mismatches = new ArrayList<>();
-        for (OrderItem item : order.getItems()) {
-            Long variantId = getOrderItemVariantId(item);
-            int exportedQuantity = getExpectedReceiptQuantity(item);
-            int receivedQuantity = receivedByVariant.get(variantId);
-            if (receivedQuantity != exportedQuantity) {
-                mismatches.add(new ReceiptMismatchDTO(
-                        variantId,
-                        getVariantName(item),
-                        item.getQuantity(),
-                        exportedQuantity,
-                        receivedQuantity
-                ));
-            }
-        }
-        return mismatches;
-    }
-
-    private void applyReceivedQuantities(Order order, Map<Long, Integer> receivedByVariant) {
-        for (OrderItem item : order.getItems()) {
-            item.setReceivedQuantity(receivedByVariant.get(getOrderItemVariantId(item)));
-        }
-    }
-
-    private int getExpectedReceiptQuantity(OrderItem item) {
-        return item.getExportedQuantity() != null ? item.getExportedQuantity() : item.getQuantity();
-    }
-
-    private Long getOrderItemVariantId(OrderItem item) {
-        if (item == null || item.getProductVariant() == null || item.getProductVariant().getId() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_ITEM_VARIANT_INVALID);
-        }
-        return item.getProductVariant().getId();
-    }
-
-    private String getVariantName(OrderItem item) {
-        ProductVariant variant = item.getProductVariant();
-        if (variant == null || variant.getVariantName() == null || variant.getVariantName().isBlank()) {
-            return "Variant #" + getOrderItemVariantId(item);
-        }
-        return variant.getVariantName();
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public ReorderResponseDTO reorderOrder(Long orderId) {
-        Order order = orderLookupService.require(orderId);
-        String ownerId = order.getUser() == null ? null : order.getUser().getId();
-        if (!currentUserService.isCurrentUserOwner(ownerId)) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
-        }
-        if (order.getStatus() != OrderStatus.DELIVERED && order.getStatus() != OrderStatus.CANCELLED) {
-            throw new AppException(
-                    HttpStatus.BAD_REQUEST,
-                    ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Only delivered or cancelled orders can be reordered."
-            );
-        }
-
-        List<ReorderItemDTO> addedItems = new ArrayList<>();
-        List<ReorderItemDTO> skippedItems = new ArrayList<>();
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            return new ReorderResponseDTO(0, 0, addedItems, skippedItems);
-        }
-
-        for (OrderItem item : order.getItems()) {
-            Long variantId = item == null || item.getProductVariant() == null
-                    ? null
-                    : item.getProductVariant().getId();
-            String variantName = buildReorderVariantName(item, variantId);
-            int quantity = item == null ? 0 : Math.max(item.getQuantity(), 1);
-
-            try {
-                if (variantId == null) {
-                    throw new AppException(
-                            HttpStatus.BAD_REQUEST,
-                            ConstantErrorCode.BAD_REQUEST_DETAIL,
-                            "Order item does not have a valid product variant."
-                    );
-                }
-                validateReorderItemAvailable(item, variantId);
-                cartService.addToCart(CartService.CartOwner.user(ownerId), variantId, quantity);
-                addedItems.add(new ReorderItemDTO(variantId, variantName, quantity, null));
-            } catch (AppException e) {
-                skippedItems.add(new ReorderItemDTO(variantId, variantName, quantity, e.getMessage()));
-            } catch (RuntimeException e) {
-                String skipReason = e.getMessage() == null ? "Cannot add this item to cart." : e.getMessage();
-                skippedItems.add(new ReorderItemDTO(variantId, variantName, quantity, skipReason));
-            }
-        }
-
-        return new ReorderResponseDTO(addedItems.size(), skippedItems.size(), addedItems, skippedItems);
-    }
-
-    private void validateReorderItemAvailable(OrderItem item, Long variantId) {
-        ProductVariant variant = item == null ? null : item.getProductVariant();
-        if (variant == null || variant.isDelete() || variant.getProduct() == null || variant.getProduct().isDelete()) {
-            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND);
-        }
-        if (variant.getProduct().getAvailabilityStatus() != ProductAvailabilityStatus.ACCEPTING_ORDERS) {
-            throw new AppException(
-                    HttpStatus.BAD_REQUEST,
-                    ConstantErrorCode.PRODUCT_NOT_ACCEPTING_ORDERS,
-                    variant.getProduct().getId()
-            );
-        }
-    }
-
-    private String buildReorderVariantName(OrderItem item, Long variantId) {
-        if (item != null
-                && item.getProductVariant() != null
-                && item.getProductVariant().getVariantName() != null
-                && !item.getProductVariant().getVariantName().isBlank()) {
-            return item.getProductVariant().getVariantName();
-        }
-        return variantId == null ? "Unknown variant" : "Variant #" + variantId;
     }
 
     @Transactional(readOnly = true)
@@ -377,10 +71,6 @@ public class OrderService {
         assertCurrentUserCanViewOrder(order);
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
-    }
-
-    private void saveAndSendNotification(String title, String content, Long orderId, String targetUserId, String destination) {
-        notificationService.sendNotification(title, content, orderId, targetUserId, destination);
     }
 
     @Transactional
@@ -530,39 +220,5 @@ public class OrderService {
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }
 
-    @Transactional
-    public ReceiptConfirmResponse confirmGuestReceipt(Long orderId, String token, ReceiptConfirmRequest request) {
-        Order order = orderLookupService.require(orderId);
-        orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.CONFIRM_RECEIPT);
-        Task task = findCustomerReceiptTask(orderId);
-
-        Map<Long, Integer> receivedByVariant = buildReceivedQuantityMap(order, request.getReceivedItems());
-        List<ReceiptMismatchDTO> mismatches = buildReceiptMismatches(order, receivedByVariant);
-        if (!mismatches.isEmpty() && !request.isAcceptMismatch()) {
-            return new ReceiptConfirmResponse(
-                    false,
-                    false,
-                    "So luong thuc nhan khong khop voi so luong da xuat. Vui long xac nhan co muon khieu nai hay khong.",
-                    mismatches
-            );
-        }
-
-        applyReceivedQuantities(order, receivedByVariant);
-
-        OrderStatus oldStatus = order.getStatus();
-        order.setStatus(OrderStatus.DELIVERED);
-        order.setEndOrderTime(LocalDateTime.now());
-
-        saveOrderAndAuditStatusChange(order, oldStatus, null); // Guest has no changerId
-        eventPublisher.publishAfterCommit(EventTypes.ORDER_DELIVERED, new OrderDeliveredEvent(order.getId()));
-
-        taskService.complete(task.getId());
-
-        boolean matched = mismatches.isEmpty();
-        String message = matched
-                ? "Xac nhan nhan hang thanh cong. Cam on ban!"
-                : "Xac nhan nhan hang thanh cong voi so luong thuc nhan bi lech da duoc chap nhan.";
-        return new ReceiptConfirmResponse(matched, true, message, mismatches);
-    }
 }
 

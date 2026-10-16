@@ -10,7 +10,9 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReceiptMismatchDTO implements Serializable {
+    private Long orderItemId;
     private Long variantId;
+    private String productName;
     private String variantName;
     private int orderedQuantity;
     private int exportedQuantity;

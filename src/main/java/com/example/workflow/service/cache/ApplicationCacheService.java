@@ -104,6 +104,16 @@ public class ApplicationCacheService {
         }
     }
 
+    public void evictChangeRequestChanged(Order order, String staffId) {
+        evictUserOrdersAfterCommit(orderUserId(order));
+        evictStaffAssignedOrdersAfterCommit(staffId);
+    }
+
+    public void evictShippingHandover(Order order, String staffId) {
+        evictUserOrdersAfterCommit(orderUserId(order));
+        evictStaffAssignedOrdersAfterCommit(staffId);
+    }
+
     public void evictProductCreated() {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
         publishDeferredCacheEvictions("product created", wishlistEntries());

@@ -95,10 +95,8 @@ public interface OrderItemMapper {
         }
 
         ItemCheckRequest request = new ItemCheckRequest();
-        if (orderItem.getProductVariant() != null) {
-            request.setVariantId(orderItem.getProductVariant().getId());
-        }
-        request.setQuantity(orderItem.getExportedQuantity() != null
+        request.setOrderItemId(orderItem.getId());
+        request.setReceivedQuantity(orderItem.getExportedQuantity() != null
                 ? orderItem.getExportedQuantity()
                 : orderItem.getQuantity());
         return request;

@@ -8,9 +8,9 @@ import java.io.Serializable;
 
 @Data
 public class ItemCheckRequest implements Serializable {
-    @NotNull(message = "Variant id is required")
-    private Long variantId;
+    @NotNull(message = "Order item id is required")
+    private Long orderItemId;
 
     @Min(value = 0, message = "Quantity cannot be negative")
-    private int quantity; // So luong thuc xuat hoac thuc nhan
+    private int receivedQuantity;
 }
