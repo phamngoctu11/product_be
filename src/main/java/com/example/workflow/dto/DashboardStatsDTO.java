@@ -5,12 +5,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class DashboardStatsDTO implements Serializable {
-    private Double totalRevenue;     // Tổng doanh thu (Chỉ tính đơn Đã giao)
+    private BigDecimal totalRevenue; // Tổng doanh thu (Chỉ tính đơn Đã giao)
     private Long totalOrders;       // Tổng số đơn hàng
     private Long pendingWH;
     private Long pendingAP;

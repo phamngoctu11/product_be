@@ -138,7 +138,7 @@ public class PaymentService {
             return toDto(order, pendingAttempt);
         }
 
-        double amount = officialAmount(order);
+        BigDecimal amount = officialAmount(order);
         PaymentAttempt attempt = new PaymentAttempt();
         attempt.setOrderId(orderId);
         attempt.setProvider(normalizedProvider());
@@ -189,7 +189,7 @@ public class PaymentService {
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(qrBaseUrl.trim())
                 .queryParam("acc", accountNumber.trim())
                 .queryParam("bank", bankCode.trim())
-                .queryParam("amount", BigDecimal.valueOf(attempt.getExpectedAmount()).toBigIntegerExact())
+                .queryParam("amount", attempt.getExpectedAmount().toBigIntegerExact())
                 .queryParam("des", transferContent(attempt))
                 .queryParam("template", "compact")
                 .queryParam("showinfo", "true");
@@ -199,16 +199,16 @@ public class PaymentService {
         return builder.build().encode().toUriString();
     }
 
-    private double officialAmount(Order order) {
-        Double value = order.getFinalPrice();
-        if (value == null || !Double.isFinite(value) || value <= 0) {
+    private BigDecimal officialAmount(Order order) {
+        BigDecimal value = order.getFinalPrice();
+        if (value == null || value.signum() <= 0) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PAYMENT_NOT_AVAILABLE);
         }
-        BigDecimal amount = BigDecimal.valueOf(value).stripTrailingZeros();
+        BigDecimal amount = value.stripTrailingZeros();
         if (amount.scale() > 0) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PAYMENT_NOT_AVAILABLE);
         }
-        return value;
+        return value.setScale(2);
     }
 
     private void requireOwner(Order order, String ownerId) {

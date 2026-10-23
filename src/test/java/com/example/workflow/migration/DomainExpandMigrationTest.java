@@ -116,7 +116,7 @@ class DomainExpandMigrationTest {
     void paymentProviderReferenceCannotBeConsumedTwice() throws Exception {
         try (Connection connection = legacyDatabase()) {
             migrate(connection);
-            String insert = "INSERT INTO payment_attempts (order_id, provider, request_reference, provider_transaction_id, expected_amount, status, opened_at, due_at, reconciliation_required) VALUES (1, 'MOMO', '%s', 'txn-1', 123.45, 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE)";
+            String insert = "INSERT INTO payment_attempts (order_id, provider, request_reference, provider_transaction_id, expected_amount, status, opened_at, due_at, reconciliation_required) VALUES (1, 'SEPAY', '%s', 'txn-1', 123.45, 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE)";
             try (var statement = connection.createStatement()) {
                 statement.executeUpdate(insert.formatted("request-1"));
                 assertThatThrownBy(() -> statement.executeUpdate(insert.formatted("request-2"))).isInstanceOf(SQLException.class);

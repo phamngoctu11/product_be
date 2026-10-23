@@ -18,6 +18,8 @@ import com.example.workflow.nume.OrderAgreementDecision;
 import com.example.workflow.nume.OrderAgreementStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderType;
+import com.example.workflow.nume.PaymentMethod;
+import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.OrderAgreementRepository;
 import com.example.workflow.repository.OrderAssignmentRepository;
 import com.example.workflow.repository.OrderRepository;
@@ -147,7 +149,7 @@ public class OrderAgreementService {
         );
         eventPublisher.publishAfterCommit(
                 EventTypes.ORDER_AGREEMENT_SUBMITTED,
-                new OrderAgreementSubmittedEvent(orderId, agreementVersion)
+                new OrderAgreementSubmittedEvent(orderId, agreementVersion, data.paymentMethod())
         );
         return toDto(transitioned, agreement);
     }
@@ -219,20 +221,23 @@ public class OrderAgreementService {
                 || request.productionDurationDays() < 1) {
             throw badRequest("Custom agreement requires quantity, positive unitPrice and productionDurationDays.");
         }
+        PaymentMethod paymentMethod = requireCustomPaymentMethod(order, request.paymentMethod());
         List<String> imageUrls = validateImageUrls(request.imageUrls());
         BigDecimal subtotal = request.unitPrice().multiply(BigDecimal.valueOf(request.quantity())).setScale(2, RoundingMode.HALF_UP);
-        UserVoucher voucher = voucherService.previewVoucherForCheckout(request.userVoucherId(), userId, subtotal.doubleValue());
-        double discount = voucherService.calculateDiscountAmount(voucher, subtotal.doubleValue());
+        UserVoucher voucher = voucherService.previewVoucherForCheckout(request.userVoucherId(), userId, subtotal);
+        BigDecimal discount = voucherService.calculateDiscountAmount(voucher, subtotal);
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("description", description);
         snapshot.put("imageUrls", imageUrls);
         snapshot.put("quantity", request.quantity());
         snapshot.put("unitPrice", request.unitPrice().setScale(2, RoundingMode.HALF_UP));
         snapshot.put("productionDurationDays", request.productionDurationDays());
+        snapshot.put("paymentMethod", paymentMethod.name());
         snapshot.put("note", normalizedOptional(request.note()));
         return new SnapshotAndTotals(
                 JsonUtils.write(objectMapper, snapshot, "custom agreement snapshot"),
-                subtotal.doubleValue(), discount, Math.max(0, subtotal.doubleValue() - discount), request.userVoucherId()
+                subtotal, discount, floorZero(subtotal.subtract(discount)),
+                request.userVoucherId(), paymentMethod
         );
     }
 
@@ -252,15 +257,22 @@ public class OrderAgreementService {
             value.put("productionDurationDays", item.getProductionDurationDays());
             items.add(value);
         }
-        double subtotal = finiteNonNegative(order.getTotalPrice(), "Catalog subtotal is invalid.");
-        double discount = order.getDiscountAmount() == null ? 0 : finiteNonNegative(order.getDiscountAmount(), "Catalog discount is invalid.");
-        double finalPrice = order.getFinalPrice() == null ? Math.max(0, subtotal - discount)
-                : finiteNonNegative(order.getFinalPrice(), "Catalog final price is invalid.");
+        BigDecimal subtotal = nonNegative(order.getTotalPrice(), "Catalog subtotal is invalid.");
+        BigDecimal discount = order.getDiscountAmount() == null ? BigDecimal.ZERO : nonNegative(order.getDiscountAmount(), "Catalog discount is invalid.");
+        BigDecimal finalPrice = order.getFinalPrice() == null ? floorZero(subtotal.subtract(discount))
+                : nonNegative(order.getFinalPrice(), "Catalog final price is invalid.");
         Long voucherId = order.getUserVoucher() == null ? null : order.getUserVoucher().getId();
+        PaymentMethod paymentMethod = order.getPaymentMethodType();
+        if (request.paymentMethod() != null && request.paymentMethod() != paymentMethod) {
+            throw badRequest("Catalog payment method cannot be changed during agreement.");
+        }
         if (request.userVoucherId() != null && !Objects.equals(request.userVoucherId(), voucherId)) {
             throw badRequest("Catalog voucher cannot be changed during agreement.");
         }
-        return new SnapshotAndTotals(JsonUtils.write(objectMapper, items, "catalog agreement snapshot"), subtotal, discount, finalPrice, voucherId);
+        return new SnapshotAndTotals(
+                JsonUtils.write(objectMapper, items, "catalog agreement snapshot"),
+                subtotal, discount, finalPrice, voucherId, paymentMethod
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -275,7 +287,7 @@ public class OrderAgreementService {
         }
         OrderItem item = items.get(0);
         int quantity = ((Number) snapshot.get("quantity")).intValue();
-        double unitPrice = ((Number) snapshot.get("unitPrice")).doubleValue();
+        BigDecimal unitPrice = new BigDecimal(String.valueOf(snapshot.get("unitPrice"))).setScale(2, RoundingMode.HALF_UP);
         int duration = ((Number) snapshot.get("productionDurationDays")).intValue();
         UserVoucher voucher = voucherService.useVoucherForCheckout(
                 agreement.getUserVoucherId(), order.getUser().getId(), agreement.getSubtotal()
@@ -288,6 +300,15 @@ public class OrderAgreementService {
         order.setDiscountAmount(agreement.getDiscountAmount());
         order.setFinalPrice(agreement.getFinalPrice());
         order.setUserVoucher(voucher);
+        PaymentMethod paymentMethod;
+        try {
+            paymentMethod = PaymentMethod.valueOf(String.valueOf(snapshot.get("paymentMethod")));
+        } catch (IllegalArgumentException exception) {
+            throw badRequest("Custom agreement payment method is invalid.");
+        }
+        order.setPaymentMethodType(paymentMethod);
+        order.setPaymentMethod(paymentMethod.name());
+        order.setPaymentStatus(PaymentStatus.NOT_DUE);
     }
 
     private void authorizeParticipant(Order order, String actorId) {
@@ -361,7 +382,6 @@ public class OrderAgreementService {
 
     private List<String> validateImageUrls(List<String> values) {
         if (values == null) return List.of();
-        if (values.size() > 10) throw badRequest("At most 10 images are allowed.");
         return values.stream().map(value -> {
             try {
                 URI uri = URI.create(value == null ? "" : value.trim());
@@ -375,6 +395,17 @@ public class OrderAgreementService {
         }).toList();
     }
 
+    private PaymentMethod requireCustomPaymentMethod(Order order, PaymentMethod paymentMethod) {
+        if (paymentMethod == null) {
+            throw badRequest("Custom agreement paymentMethod is required.");
+        }
+        if (paymentMethod == PaymentMethod.COD
+                && (order.getUser() == null || order.getUser().getReputation() < 20)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.LOW_REPUTATION_REQUIRES_ONLINE_PAYMENT);
+        }
+        return paymentMethod;
+    }
+
     private String normalizedReason(String value) {
         if (!StringUtils.hasText(value)) throw badRequest("A reason is required when requesting changes.");
         return value.trim();
@@ -384,15 +415,26 @@ public class OrderAgreementService {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
-    private double finiteNonNegative(double value, String message) {
-        if (!Double.isFinite(value) || value < 0) throw badRequest(message);
+    private BigDecimal nonNegative(BigDecimal value, String message) {
+        if (value == null || value.signum() < 0) throw badRequest(message);
         return value;
+    }
+
+    private BigDecimal floorZero(BigDecimal value) {
+        return value.signum() < 0 ? BigDecimal.ZERO.setScale(2) : value.setScale(2, RoundingMode.HALF_UP);
     }
 
     private AppException badRequest(String message) {
         return new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, message);
     }
 
-    private record SnapshotAndTotals(String snapshot, double subtotal, double discount, double finalPrice, Long userVoucherId) {
+    private record SnapshotAndTotals(
+            String snapshot,
+            BigDecimal subtotal,
+            BigDecimal discount,
+            BigDecimal finalPrice,
+            Long userVoucherId,
+            PaymentMethod paymentMethod
+    ) {
     }
 }

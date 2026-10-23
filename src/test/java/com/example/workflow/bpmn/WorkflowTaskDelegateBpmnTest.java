@@ -1,8 +1,9 @@
 package com.example.workflow.bpmn;
 
 import com.example.workflow.delegate.WorkflowTaskDelegate;
+import com.example.workflow.workflow.WorkflowTaskContext;
+import com.example.workflow.workflow.WorkflowTaskHandler;
 import com.example.workflow.workflow.WorkflowTaskHandlerRegistry;
-import com.example.workflow.workflow.handler.ResolveGuestSessionWorkflowTaskHandler;
 import org.camunda.bpm.engine.ProcessEngine;
 import org.camunda.bpm.engine.ProcessEngineConfiguration;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
@@ -17,7 +18,18 @@ class WorkflowTaskDelegateBpmnTest {
 
     @Test
     void serviceTaskInvokesSharedDelegateAndWritesProcessVariable() {
-        var registry = new WorkflowTaskHandlerRegistry(List.of(new ResolveGuestSessionWorkflowTaskHandler()));
+        WorkflowTaskHandler testHandler = new WorkflowTaskHandler() {
+            @Override
+            public String taskType() {
+                return "TEST_TASK";
+            }
+
+            @Override
+            public void handle(WorkflowTaskContext context) {
+                context.setVariable("delegateInvoked", true);
+            }
+        };
+        var registry = new WorkflowTaskHandlerRegistry(List.of(testHandler));
         var delegate = new WorkflowTaskDelegate(registry);
         ProcessEngineConfigurationImpl configuration = (ProcessEngineConfigurationImpl) ProcessEngineConfiguration
                 .createStandaloneInMemProcessEngineConfiguration()
@@ -35,10 +47,10 @@ class WorkflowTaskDelegateBpmnTest {
 
             var processInstance = engine.getRuntimeService().startProcessInstanceByKey(
                     "WorkflowTaskDelegateTestProcess",
-                    Map.of("guestSessionId", "guest-session-0001")
+                    Map.of()
             );
 
-            assertThat(engine.getRuntimeService().getVariable(processInstance.getId(), "guestSessionResolved"))
+            assertThat(engine.getRuntimeService().getVariable(processInstance.getId(), "delegateInvoked"))
                     .isEqualTo(true);
             assertThat(engine.getTaskService().createTaskQuery().processInstanceId(processInstance.getId()).singleResult())
                     .extracting("taskDefinitionKey")

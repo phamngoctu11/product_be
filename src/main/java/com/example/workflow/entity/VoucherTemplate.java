@@ -9,6 +9,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 @Entity
 @Table(name = "voucher_templates")
 @Setter
@@ -29,14 +30,14 @@ public class VoucherTemplate {
     @Column(name = "point_cost")
     private int pointCost;
     @PositiveOrZero(message = "Minimum order value must be zero or positive")
-    @Column(name = "min_order_value")
-    private double minOrderValue;
+    @Column(name = "min_order_value", nullable = false, precision = 19, scale = 2)
+    private BigDecimal minOrderValue = BigDecimal.ZERO;
     @PositiveOrZero(message = "Discount percent must be zero or positive")
-    @Column(name = "discount_percent")
-    private double discountPercent;
+    @Column(name = "discount_percent", nullable = false, precision = 7, scale = 4)
+    private BigDecimal discountPercent = BigDecimal.ZERO;
     @PositiveOrZero(message = "Maximum discount amount must be zero or positive")
-    @Column(name = "max_discount_amount")
-    private double maxDiscountAmount;
+    @Column(name = "max_discount_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal maxDiscountAmount = BigDecimal.ZERO;
     @Min(value = 0, message = "Quantity must be zero or positive")
     @Column(name = "quantity")
     private int quantity;

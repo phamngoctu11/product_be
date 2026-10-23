@@ -207,7 +207,7 @@ public class PaymentWebhookService {
                 && !expectedAccountNumber.trim().equals(payload.accountNumber())) {
             return "accountNumber mismatch";
         }
-        if (BigDecimal.valueOf(attempt.getExpectedAmount()).compareTo(payload.transferAmount()) != 0) {
+        if (attempt.getExpectedAmount().compareTo(payload.transferAmount()) != 0) {
             return "transferAmount mismatch";
         }
         return null;

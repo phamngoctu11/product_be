@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record CreateVoucherTemplateRequest(
@@ -14,9 +15,9 @@ public record CreateVoucherTemplateRequest(
         @NotBlank String name,
         String description,
         @Min(0) int pointCost,
-        @PositiveOrZero double minOrderValue,
-        @PositiveOrZero double discountPercent,
-        @PositiveOrZero double maxDiscountAmount,
+        @NotNull @PositiveOrZero BigDecimal minOrderValue,
+        @NotNull @PositiveOrZero BigDecimal discountPercent,
+        @NotNull @PositiveOrZero BigDecimal maxDiscountAmount,
         @Min(0) int quantity,
         boolean guestVoucher,
         @NotNull @Future LocalDateTime expiryDate

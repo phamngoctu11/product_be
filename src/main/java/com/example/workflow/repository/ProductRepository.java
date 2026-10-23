@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
@@ -34,8 +36,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                     "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
     Page<Product> searchByAvailabilityPriority(
             @Param("keyword") String keyword,
-            @Param("minPrice") Double minPrice,
-            @Param("maxPrice") Double maxPrice,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
             @Param("acceptingStatus") ProductAvailabilityStatus acceptingStatus,
             Pageable pageable
     );

@@ -10,6 +10,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 @Mapper(config = CentralMapperConfig.class)
 public interface CartMapper {
@@ -29,12 +30,12 @@ public interface CartMapper {
     @AfterMapping
     default void calculateTotalPrice(Cart cart, @MappingTarget CartResDTO dto) {
         if (dto.getItems() != null) {
-            double total = dto.getItems().stream()
-                    .mapToDouble(item -> item.getPrice() * item.getQuantity())
-                    .sum();
+            BigDecimal total = dto.getItems().stream()
+                    .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             dto.setTotalPrice(total);
         } else {
-            dto.setTotalPrice(0.0);
+            dto.setTotalPrice(BigDecimal.ZERO);
         }
     }
 

@@ -15,10 +15,19 @@ public class WorkflowTaskHandlerRegistry {
     public WorkflowTaskHandlerRegistry(List<WorkflowTaskHandler> handlers) {
         Map<String, WorkflowTaskHandler> registeredHandlers = new LinkedHashMap<>();
         for (WorkflowTaskHandler handler : handlers) {
-            String taskType = normalize(handler.taskType());
-            WorkflowTaskHandler previous = registeredHandlers.putIfAbsent(taskType, handler);
-            if (previous != null) {
-                throw new IllegalStateException("Duplicate workflow task handler for taskType '" + taskType + "'");
+            List<String> supportedTaskTypes = handler.taskTypes();
+            // Mockito-based tests and third-party implementations compiled before
+            // taskTypes() was introduced can return an empty collection. Preserve
+            // the original one-task-type contract in that case.
+            if (supportedTaskTypes == null || supportedTaskTypes.isEmpty()) {
+                supportedTaskTypes = List.of(handler.taskType());
+            }
+            for (String supportedTaskType : supportedTaskTypes) {
+                String taskType = normalize(supportedTaskType);
+                WorkflowTaskHandler previous = registeredHandlers.putIfAbsent(taskType, handler);
+                if (previous != null) {
+                    throw new IllegalStateException("Duplicate workflow task handler for taskType '" + taskType + "'");
+                }
             }
         }
         this.handlers = Map.copyOf(registeredHandlers);

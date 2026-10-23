@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -90,8 +91,8 @@ public class CartService {
         List<CartItemDTO> activeItems = cartMapper.toItemDtos(activeEntities);
         dto.setItems(activeItems);
         dto.setTotalPrice(activeItems.stream()
-                .mapToDouble(item -> item.getPrice() * item.getQuantity())
-                .sum());
+                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
         return dto;
     }
 

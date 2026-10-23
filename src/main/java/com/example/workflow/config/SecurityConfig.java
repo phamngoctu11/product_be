@@ -54,10 +54,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/guest/orders/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guest/orders/*/cancellation").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guest/orders/*/receipt").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/payment/momo-callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/sepay").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/payment/momo-mock-success").permitAll()
-                        .requestMatchers("/ws/**", "/camunda/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/camunda/**").hasAuthority("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 ).oauth2ResourceServer(oauth2 -> oauth2

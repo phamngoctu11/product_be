@@ -10,6 +10,8 @@ import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
 import com.example.workflow.entity.User;
+import com.example.workflow.event.EventTypes;
+import com.example.workflow.event.payload.OrderReviewedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ManagerReviewMapper;
@@ -25,6 +27,7 @@ import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OrderTransitionService;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
 import com.example.workflow.util.PageableUtils;
 import com.example.workflow.util.TextNormalizer;
@@ -60,7 +63,7 @@ public class ManagerOrderReviewService {
     private final ManagerReviewMapper reviewMapper;
     private final OrderAssignmentMapper assignmentMapper;
     private final ApplicationCacheService cacheService;
-    private final OrderWorkflowService orderWorkflowService;
+    private final DomainEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -178,7 +181,16 @@ public class ManagerOrderReviewService {
                 ? approvedAt.plusHours(CUSTOM_CONFIRMATION_HOURS)
                 : null);
         Order saved = orderRepository.saveAndFlush(order);
-        orderWorkflowService.completeManagerReview(saved.getId(), true, manager.getId());
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_REVIEWED,
+                new OrderReviewedEvent(
+                        saved.getId(),
+                        ManagerReviewDecision.APPROVED,
+                        manager.getId(),
+                        assigned == null ? null : assigned.assignment().staffId(),
+                        saved.getConfirmationDueAt()
+                )
+        );
         cacheService.evictManagerReviewed(
                 saved,
                 true,
@@ -214,7 +226,12 @@ public class ManagerOrderReviewService {
         order.setManagerApprovedAt(null);
         order.setConfirmationDueAt(null);
         Order saved = orderRepository.saveAndFlush(order);
-        orderWorkflowService.completeManagerReview(saved.getId(), false, manager.getId());
+        eventPublisher.publishAfterCommit(
+                EventTypes.ORDER_REVIEWED,
+                new OrderReviewedEvent(
+                        saved.getId(), ManagerReviewDecision.REJECTED, manager.getId(), null, null
+                )
+        );
         return result(saved, ManagerReviewDecision.REJECTED, manager, rejectedAt, normalizedReason, null);
     }
 

@@ -4,6 +4,7 @@ import com.example.workflow.nume.*;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /** Domain contract for the new order lifecycle; endpoints are implemented in later phases. */
@@ -35,14 +36,14 @@ public class OrderAgreement {
     @Column(name = "item_snapshot", nullable = false, columnDefinition = "text")
     private String itemSnapshot;
 
-    @Column(name = "subtotal", nullable = true, columnDefinition = "double")
-    private Double subtotal;
+    @Column(name = "subtotal", precision = 19, scale = 2)
+    private BigDecimal subtotal;
 
-    @Column(name = "discount_amount", nullable = true, columnDefinition = "double")
-    private Double discountAmount;
+    @Column(name = "discount_amount", precision = 19, scale = 2)
+    private BigDecimal discountAmount;
 
-    @Column(name = "final_price", nullable = true, columnDefinition = "double")
-    private Double finalPrice;
+    @Column(name = "final_price", precision = 19, scale = 2)
+    private BigDecimal finalPrice;
 
     @Column(name = "user_voucher_id", nullable = true, columnDefinition = "bigint")
     private Long userVoucherId;

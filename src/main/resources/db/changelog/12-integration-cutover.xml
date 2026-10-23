@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="12-outbox-operations-index" author="workflow">
+        <preConditions onFail="MARK_RAN">
+            <not><indexExists tableName="workflow_outbox" indexName="idx_outbox_operations"/></not>
+        </preConditions>
+        <createIndex tableName="workflow_outbox" indexName="idx_outbox_operations">
+            <column name="published_at"/>
+            <column name="attempts"/>
+            <column name="due_at"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Made-to-order cutover: inventory history and stock flags are not part of
+         any Order lifecycle. Product availability remains the catalog gate. -->
+    <changeSet id="12-drop-inventory-transaction" author="workflow">
+        <preConditions onFail="MARK_RAN"><tableExists tableName="inventory_transaction"/></preConditions>
+        <dropTable tableName="inventory_transaction" cascadeConstraints="true"/>
+    </changeSet>
+    <changeSet id="12-drop-order-stock-reserved" author="workflow">
+        <preConditions onFail="MARK_RAN"><columnExists tableName="orders" columnName="stock_reserved"/></preConditions>
+        <dropColumn tableName="orders" columnName="stock_reserved"/>
+    </changeSet>
+    <changeSet id="12-drop-order-stock-deducted" author="workflow">
+        <preConditions onFail="MARK_RAN"><columnExists tableName="orders" columnName="stock_deducted"/></preConditions>
+        <dropColumn tableName="orders" columnName="stock_deducted"/>
+    </changeSet>
+    <changeSet id="12-drop-product-variant-stock-quantity" author="workflow">
+        <preConditions onFail="MARK_RAN"><columnExists tableName="product_variants" columnName="quantity"/></preConditions>
+        <dropColumn tableName="product_variants" columnName="quantity"/>
+    </changeSet>
+</databaseChangeLog>

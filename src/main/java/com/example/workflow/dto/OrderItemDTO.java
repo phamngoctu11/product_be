@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -18,7 +19,7 @@ public class OrderItemDTO implements Serializable {
     private int quantity;
     private Integer exportedQuantity;
     private Integer receivedQuantity;
-    private Double price;
+    private BigDecimal price;
     private OrderItemSourceType sourceType;
     private String specSnapshot;
     private int specVersion;

@@ -43,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -61,9 +62,9 @@ public class OrderController {
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
-            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) BigDecimal minPrice,
             @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
-            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         validatePriceRange(minPrice, maxPrice);
@@ -76,9 +77,9 @@ public class OrderController {
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyCancelledOrders(
             @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
-            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) BigDecimal minPrice,
             @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
-            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         validatePriceRange(minPrice, maxPrice);
@@ -169,8 +170,8 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
 
-    private void validatePriceRange(Double minPrice, Double maxPrice) {
-        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+    private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,

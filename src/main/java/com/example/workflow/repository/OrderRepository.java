@@ -15,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -121,8 +122,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("shippingStatus") OrderStatus shippingStatus,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
             @Param("cancelledStatus") OrderStatus cancelledStatus,
-            @Param("minPrice") Double minPrice,
-            @Param("maxPrice") Double maxPrice,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
             Pageable pageable
     );
 
@@ -144,8 +145,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("userId") String userId,
             @Param("status") OrderStatus status,
             @Param("deliveredStatus") OrderStatus deliveredStatus,
-            @Param("minPrice") Double minPrice,
-            @Param("maxPrice") Double maxPrice,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
             Pageable pageable
     );
 
@@ -226,7 +227,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // ==============================================================
 
     @Query("SELECT SUM(o.finalPrice) FROM Order o WHERE o.status = :status")
-    Double calculateTotalRevenue(@Param("status") OrderStatus status);
+    BigDecimal calculateTotalRevenue(@Param("status") OrderStatus status);
 
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status in :status")
     Long countOrdersByStatus(@Param("status") OrderStatus status);

@@ -5,6 +5,7 @@ import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentMethod;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 public record ManagerOrderReviewSummaryDTO(
         Long orderId,
@@ -13,7 +14,7 @@ public record ManagerOrderReviewSummaryDTO(
         String customerName,
         boolean guest,
         int totalQuantity,
-        Double finalPrice,
+        BigDecimal finalPrice,
         PaymentMethod paymentMethod,
         OrderStatus status,
         LocalDateTime createdAt

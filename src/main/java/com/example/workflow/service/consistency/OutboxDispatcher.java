@@ -31,7 +31,8 @@ public class OutboxDispatcher {
 
     public boolean dispatchOne() {
         return Boolean.TRUE.equals(transaction.execute(status -> {
-            var rows = jdbc.query("SELECT * FROM workflow_outbox WHERE published_at IS NULL AND due_at<=? ORDER BY due_at,event_id LIMIT 1 FOR UPDATE",
+            var rows = jdbc.query("SELECT * FROM workflow_outbox WHERE published_at IS NULL AND due_at<=? "
+                            + "ORDER BY occurred_at,event_id LIMIT 1 FOR UPDATE",
                     (rs, index) -> Map.<String,Object>of("event_id", rs.getString("event_id"), "event_type", rs.getString("event_type"),
                             "payload", rs.getString("payload"), "occurred_at", rs.getTimestamp("occurred_at").toLocalDateTime(),
                             "attempts", rs.getInt("attempts")), LocalDateTime.now());

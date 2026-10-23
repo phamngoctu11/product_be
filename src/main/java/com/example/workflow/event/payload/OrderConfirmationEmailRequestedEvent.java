@@ -1,10 +1,12 @@
 package com.example.workflow.event.payload;
 
+import java.math.BigDecimal;
+
 public record OrderConfirmationEmailRequestedEvent(
         String toEmail,
         String customerName,
         Long orderId,
-        Double totalPrice,
+        BigDecimal totalPrice,
         String paymentMethod,
         String orderAccessUrl,
         Integer productionDurationDays,
@@ -15,7 +17,7 @@ public record OrderConfirmationEmailRequestedEvent(
             String toEmail,
             String customerName,
             Long orderId,
-            Double totalPrice,
+            BigDecimal totalPrice,
             String paymentMethod
     ) {
         this(toEmail, customerName, orderId, totalPrice, paymentMethod, null, null, null, null);

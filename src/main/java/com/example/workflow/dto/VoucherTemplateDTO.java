@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -15,9 +16,9 @@ public class VoucherTemplateDTO {
     private String name;
     private String description;
     private int pointCost;
-    private double minOrderValue;
-    private double discountPercent;
-    private double maxDiscountAmount;
+    private BigDecimal minOrderValue;
+    private BigDecimal discountPercent;
+    private BigDecimal maxDiscountAmount;
     private int quantity;
     private boolean isActive;
     private boolean guestVoucher;

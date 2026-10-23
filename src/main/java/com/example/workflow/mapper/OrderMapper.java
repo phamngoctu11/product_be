@@ -8,6 +8,8 @@ import com.example.workflow.util.UserDisplayNameUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import java.math.BigDecimal;
+
 @Mapper(config = CentralMapperConfig.class, uses = OrderItemMapper.class)
 public interface OrderMapper {
 
@@ -88,16 +90,16 @@ public interface OrderMapper {
         return firstPresent(order.getEmail(), order.getUser() == null ? null : order.getUser().getEmail());
     }
 
-    default double resolveTotalPrice(Order order) {
+    default BigDecimal resolveTotalPrice(Order order) {
         if (order == null) {
-            return 0.0;
+            return BigDecimal.ZERO;
         }
         return order.getTotalPrice();
     }
 
-    default Double resolveFinalPrice(Order order) {
+    default BigDecimal resolveFinalPrice(Order order) {
         if (order == null) {
-            return 0.0;
+            return BigDecimal.ZERO;
         }
         if (order.getFinalPrice() != null) {
             return order.getFinalPrice();
@@ -105,8 +107,9 @@ public interface OrderMapper {
         if (order.getOrderType() == OrderType.CUSTOM) {
             return null;
         }
-        double discountAmount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
-        return Math.max(0.0, order.getTotalPrice() - discountAmount);
+        BigDecimal discountAmount = order.getDiscountAmount() == null ? BigDecimal.ZERO : order.getDiscountAmount();
+        BigDecimal result = order.getTotalPrice().subtract(discountAmount);
+        return result.signum() < 0 ? BigDecimal.ZERO : result;
     }
 
     default String resolveVoucherName(Order order) {

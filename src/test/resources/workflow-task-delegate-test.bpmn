@@ -10,7 +10,7 @@
     <bpmn:serviceTask id="ResolveGuestSession" camunda:delegateExpression="${workflowTaskDelegate}">
       <bpmn:extensionElements>
         <camunda:inputOutput>
-          <camunda:inputParameter name="taskType">RESOLVE_GUEST_SESSION</camunda:inputParameter>
+          <camunda:inputParameter name="taskType">TEST_TASK</camunda:inputParameter>
         </camunda:inputOutput>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Start_Resolve</bpmn:incoming>

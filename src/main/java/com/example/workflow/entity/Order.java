@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Getter
@@ -37,7 +38,8 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items;
 
-    private double totalPrice;
+    @Column(name = "total_price", nullable = false, precision = 19, scale = 2)
+    private BigDecimal totalPrice = BigDecimal.ZERO;
     private LocalDateTime startOrderTime;
     private LocalDateTime endOrderTime;
 
@@ -73,11 +75,11 @@ public class Order {
     @JoinColumn(name = "guest_voucher_template_id")
     private VoucherTemplate guestVoucherTemplate;
 
-    @Column(name = "discount_amount")
-    private Double discountAmount = 0.0;
+    @Column(name = "discount_amount", precision = 19, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO;
 
-    @Column(name = "final_price")
-    private Double finalPrice;
+    @Column(name = "final_price", precision = 19, scale = 2)
+    private BigDecimal finalPrice;
 
     @Column(name = "payment_method")
     private String paymentMethod;
@@ -218,12 +220,6 @@ public class Order {
 
     @Column(name = "tracking_code")
     private String trackingCode;
-
-    @Column(name = "stock_reserved", nullable = false, columnDefinition = "boolean default false")
-    private boolean stockReserved = false;
-
-    @Column(name = "stock_deducted", nullable = false, columnDefinition = "boolean default false")
-    private boolean stockDeducted = false;
 
     public String getNote() {
         return contactSnapshot == null ? null : contactSnapshot.getNote();

@@ -17,6 +17,7 @@ import com.example.workflow.service.assembler.OrderDetailsAssembler;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OrderTransitionService;
+import com.example.workflow.service.redis.DomainEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,12 +48,12 @@ class ManagerOrderReviewServiceTest {
     private final ManagerReviewMapper reviewMapper = new ManagerReviewMapper() { };
     private final OrderAssignmentMapper assignmentMapper = new OrderAssignmentMapper() { };
     private final ApplicationCacheService cacheService = mock(ApplicationCacheService.class);
-    private final OrderWorkflowService orderWorkflowService = mock(OrderWorkflowService.class);
+    private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final ManagerOrderReviewService service = new ManagerOrderReviewService(
             orderRepository, assignmentRepository, currentUserService, durableRequests,
             transitionService, cancellationService, assignmentService, historyService,
-            detailsAssembler, reviewMapper, assignmentMapper, cacheService, orderWorkflowService, objectMapper
+            detailsAssembler, reviewMapper, assignmentMapper, cacheService, eventPublisher, objectMapper
     );
 
     @BeforeEach
@@ -83,7 +84,10 @@ class ManagerOrderReviewServiceTest {
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.PENDING_ASSIGNMENT);
         assertThat(order.getManager()).isSameAs(manager);
         assertThat(order.getConfirmationDueAt()).isEqualTo(order.getManagerApprovedAt().plusHours(24));
-        verify(orderWorkflowService).completeManagerReview(10L, true, "manager-1");
+        verify(eventPublisher).publishAfterCommit(
+                eq(com.example.workflow.event.EventTypes.ORDER_REVIEWED),
+                any(com.example.workflow.event.payload.OrderReviewedEvent.class)
+        );
         verify(assignmentService, never()).assignApprovedOrderWithinTransaction(anyLong(), anyLong(), anyString(), anyString());
     }
 
@@ -122,7 +126,10 @@ class ManagerOrderReviewServiceTest {
         verify(cancellationService).cancelByManagerReject(
                 eq(20L), eq(0L), anyString(), eq("manager-2"), anyString(), eq("reject-key")
         );
-        verify(orderWorkflowService).completeManagerReview(20L, false, "manager-2");
+        verify(eventPublisher).publishAfterCommit(
+                eq(com.example.workflow.event.EventTypes.ORDER_REVIEWED),
+                any(com.example.workflow.event.payload.OrderReviewedEvent.class)
+        );
     }
 
     @Test

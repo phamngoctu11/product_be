@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @Entity
@@ -22,17 +24,8 @@ public class ProductVariant {
     @Column(name = "variant_name", nullable = false)
     private String variantName;
 
-    @Column(name = "price", nullable = false)
-    private double price;
-
-    /**
-     * Transitional legacy stock column. Made-to-order business logic must not
-     * read or write this value. The column will be removed with the inventory
-     * schema cleanup after all legacy inventory consumers are migrated.
-     */
-    @Deprecated(forRemoval = true)
-    @Column(name = "quantity", nullable = false, columnDefinition = "integer default 0")
-    private int quantity;
+    @Column(name = "price", nullable = false, precision = 19, scale = 2)
+    private BigDecimal price = BigDecimal.ZERO;
 
     @Column(name = "attributes", columnDefinition = "JSON")
     private String attributes;

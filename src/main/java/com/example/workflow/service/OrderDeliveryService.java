@@ -251,7 +251,7 @@ public class OrderDeliveryService {
         if (!matched && !request.isAcceptMismatch()) {
             return new ReceiptConfirmResponse(
                     order.getId(), order.getVersion(), order.getStatus(), false, false, false, null,
-                    "Received quantities do not match the shipping handover.", mismatches
+                    "Số lượng thực nhận không khớp với số lượng đã bàn giao vận chuyển.", mismatches
             );
         }
 
@@ -285,8 +285,8 @@ public class OrderDeliveryService {
         return new ReceiptConfirmResponse(
                 order.getId(), order.getVersion(), order.getStatus(), matched, true, !matched, now,
                 matched
-                        ? "Receipt confirmed successfully."
-                        : "Receipt confirmed with an accepted quantity mismatch.",
+                        ? "Xác nhận nhận hàng thành công."
+                        : "Đã xác nhận nhận hàng và chấp nhận chênh lệch số lượng.",
                 mismatches
         );
     }

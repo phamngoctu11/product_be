@@ -79,7 +79,8 @@ class OrderAgreementServiceTest {
                 11L,
                 new SubmitOrderAgreementRequest(
                         3L, "Túi đan theo mẫu", List.of("https://example.com/design.png"),
-                        2, new BigDecimal("250000"), 5, null, "Màu nâu"
+                        2, new BigDecimal("250000"), 5,
+                        com.example.workflow.nume.PaymentMethod.ONLINE, null, "Màu nâu"
                 ),
                 "user-1"
         );
@@ -104,7 +105,10 @@ class OrderAgreementServiceTest {
 
         assertThrows(AppException.class, () -> service.submitWithinTransaction(
                 11L,
-                new SubmitOrderAgreementRequest(3L, null, null, 2, new BigDecimal("1"), 1, null, null),
+                new SubmitOrderAgreementRequest(
+                        3L, null, null, 2, new BigDecimal("1"), 1,
+                        com.example.workflow.nume.PaymentMethod.ONLINE, null, null
+                ),
                 "user-1"
         ));
 

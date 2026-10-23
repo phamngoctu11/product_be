@@ -17,6 +17,7 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +28,7 @@ public class EmailService {
     private final TemplateEngine templateEngine;
     private final DomainEventPublisher eventPublisher;
 
-    public void sendOrderConfirmationEmail(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+    public void sendOrderConfirmationEmail(String toEmail, String customerName, Long orderId, BigDecimal totalPrice, String paymentMethod) {
         eventPublisher.publishAfterCommit(
                 EventTypes.ORDER_CONFIRMATION_EMAIL_REQUESTED,
                 new OrderConfirmationEmailRequestedEvent(toEmail, customerName, orderId, totalPrice, paymentMethod)
@@ -38,7 +39,7 @@ public class EmailService {
             String toEmail,
             String customerName,
             Long orderId,
-            Double totalPrice,
+            BigDecimal totalPrice,
             String paymentMethod,
             String orderAccessUrl,
             Integer productionDurationDays
@@ -79,7 +80,7 @@ public class EmailService {
             Long orderId,
             String orderAccessUrl,
             String productSummary,
-            Double finalPrice,
+            BigDecimal finalPrice,
             Integer quantity,
             Integer productionDurationDays
     ) {
@@ -222,7 +223,7 @@ public class EmailService {
         );
     }
 
-    public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+    public void sendOrderConfirmationEmailNow(String toEmail, String customerName, Long orderId, BigDecimal totalPrice, String paymentMethod) {
         try {
             sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod);
         } catch (RuntimeException e) {
@@ -230,7 +231,7 @@ public class EmailService {
         }
     }
 
-    public void sendOrderConfirmationEmailNowOrThrow(String toEmail, String customerName, Long orderId, Double totalPrice, String paymentMethod) {
+    public void sendOrderConfirmationEmailNowOrThrow(String toEmail, String customerName, Long orderId, BigDecimal totalPrice, String paymentMethod) {
         sendOrderConfirmationEmailNowOrThrow(toEmail, customerName, orderId, totalPrice, paymentMethod, null, null);
     }
 
@@ -238,7 +239,7 @@ public class EmailService {
             String toEmail,
             String customerName,
             Long orderId,
-            Double totalPrice,
+            BigDecimal totalPrice,
             String paymentMethod,
             String orderAccessUrl,
             Integer productionDurationDays
@@ -253,7 +254,7 @@ public class EmailService {
             String toEmail,
             String customerName,
             Long orderId,
-            Double totalPrice,
+            BigDecimal totalPrice,
             String paymentMethod,
             String orderAccessUrl,
             Integer productionDurationDays,

@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 @Data
 @AllArgsConstructor
@@ -15,11 +16,11 @@ public class CartItemDTO implements Serializable {
     private Long variantId;
     private String variantName;
     private int quantity;
-    private double price;
+    private BigDecimal price;
     @JsonProperty("image_url")
     private String imageUrl;
 
-    public CartItemDTO(Long variantId, String variantName, int quantity, double price, String imageUrl) {
+    public CartItemDTO(Long variantId, String variantName, int quantity, BigDecimal price, String imageUrl) {
         this.variantId = variantId;
         this.variantName = variantName;
         this.quantity = quantity;

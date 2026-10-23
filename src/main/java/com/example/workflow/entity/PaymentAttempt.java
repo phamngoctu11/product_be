@@ -4,6 +4,7 @@ import com.example.workflow.nume.*;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /** Domain contract for the new order lifecycle; endpoints are implemented in later phases. */
@@ -35,8 +36,8 @@ public class PaymentAttempt {
     @Column(name = "provider_transaction_id", nullable = true, columnDefinition = "varchar(128)")
     private String providerTransactionId;
 
-    @Column(name = "expected_amount", nullable = false, columnDefinition = "double")
-    private Double expectedAmount;
+    @Column(name = "expected_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal expectedAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, columnDefinition = "varchar(24)")

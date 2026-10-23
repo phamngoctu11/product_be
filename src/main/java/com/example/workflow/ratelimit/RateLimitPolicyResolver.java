@@ -18,18 +18,17 @@ public class RateLimitPolicyResolver {
             "/ws/**",
             "/camunda/**",
             "/api/auth/login",
-            "/api/payment/momo-callback",
             "/api/webhooks/sepay"
     );
     private final List<RateLimitRule> rules = List.of(
             sliding("auth-forgot-password", Set.of("POST"), Set.of("/api/auth/forgot-password"), 5, Duration.ofHours(1), true, RateLimitIdentity.IP),
             sliding("auth-reset-password", Set.of("POST"), Set.of("/api/auth/reset-password"), 10, Duration.ofMinutes(15), true, RateLimitIdentity.IP),
             sliding("auth-register", Set.of("POST"), Set.of("/api/users"), 3, Duration.ofHours(1), true, RateLimitIdentity.IP),
-            sliding("payment-create", Set.of("POST"), Set.of("/api/payment/momo-pay", "/api/payments/orders/*/attempts"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
+            sliding("payment-create", Set.of("POST"), Set.of("/api/payments/orders/*/attempts"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("upload-image", Set.of("POST"), Set.of("/api/upload/**"), 20, Duration.ofHours(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("voucher-redeem", Set.of("POST"), Set.of("/api/vouchers/redeem"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("cart-write", WRITE_METHODS, Set.of("/api/cart/items", "/api/cart/items/**"), 60, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
-            sliding("order-create", Set.of("POST"), Set.of("/api/cart/approve/**"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
+            sliding("order-create", Set.of("POST"), Set.of("/api/checkout", "/api/guest-checkout"), 10, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("order-write", WRITE_METHODS, Set.of("/api/orders/**"), 20, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),
             sliding("product-write", WRITE_METHODS, Set.of("/api/products/**", "/api/products"), 30, Duration.ofMinutes(1), true, RateLimitIdentity.USER_OR_IP),
             sliding("user-write", Set.of("PUT", "DELETE"), Set.of("/api/users/**"), 30, Duration.ofMinutes(10), true, RateLimitIdentity.USER_OR_IP),

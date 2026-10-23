@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -241,14 +242,14 @@ public class OrderCancellationService {
         );
     }
 
-    static int cancellationPenalty(Double finalPrice) {
+    static int cancellationPenalty(BigDecimal finalPrice) {
         if (finalPrice == null) return 0;
-        if (!Double.isFinite(finalPrice) || finalPrice < 0) {
+        if (finalPrice.signum() < 0) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Official final price is invalid.");
         }
-        if (finalPrice < 1_000_000d) return 1;
-        if (finalPrice <= 5_000_000d) return 2;
-        if (finalPrice <= 10_000_000d) return 3;
+        if (finalPrice.compareTo(BigDecimal.valueOf(1_000_000)) < 0) return 1;
+        if (finalPrice.compareTo(BigDecimal.valueOf(5_000_000)) <= 0) return 2;
+        if (finalPrice.compareTo(BigDecimal.valueOf(10_000_000)) <= 0) return 3;
         return 5;
     }
 

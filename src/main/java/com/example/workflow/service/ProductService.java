@@ -3,15 +3,14 @@ package com.example.workflow.service;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
-import com.example.workflow.dto.StockImportRequest;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
-import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
 import com.example.workflow.nume.ProductAvailabilityStatus;
-import com.example.workflow.repository.InventoryTransactionRepository;
+import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
@@ -25,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
@@ -39,15 +39,14 @@ public class ProductService {
 
     private final ProductRepository repository;
     private final ProductMapper mapper;
-    private final InventoryTransactionRepository inventoryRepo;
-    private final UserService userService;
+    private final OrderItemRepository orderItemRepository;
+    private final CurrentUserService currentUserService;
     private final ProductVariantRepository variantRepository;
-    private final InventoryTransactionService inventoryTransactionService;
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable)")
-    public Page<ProductDTO> getAllProducts(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {
+    public Page<ProductDTO> getAllProducts(String keyword, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         return repository.searchByAvailabilityPriority(
                 normalizeSearchKeyword(keyword),
                 normalizePrice(minPrice),
@@ -61,7 +60,12 @@ public class ProductService {
     @Cacheable(value = "bestSellingProducts", key = "#period + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()")
     public Page<BestSellerProductDTO> getBestSellingProducts(String period, Pageable pageable) {
         BestSellerRange range = resolveBestSellerRange(period);
-        return inventoryRepo.findBestSellingProducts(range.fromTime(), range.toTime(), PageableUtils.normalize(pageable, 20, 100));
+        return orderItemRepository.findBestSellingProducts(
+                OrderStatus.DELIVERED,
+                range.fromTime(),
+                range.toTime(),
+                PageableUtils.normalize(pageable, 20, 100)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -71,8 +75,8 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDTO createProduct(ProductDTO dto, String userId) {
-        userService.requireUser(userId);
+    public ProductDTO createProduct(ProductDTO dto) {
+        currentUserService.requireCurrentUserId();
         validateMadeDay(dto.getMadeDay());
         Product entity = mapper.toEntity(dto);
         prepareProductForCreate(entity);
@@ -83,8 +87,8 @@ public class ProductService {
     }
 
     @Transactional
-    public void updateProduct(Long id, ProductDTO dto, String userId) {
-        userService.requireUser(userId);
+    public void updateProduct(Long id, ProductDTO dto) {
+        currentUserService.requireCurrentUserId();
         validateMadeDay(dto.getMadeDay());
         Product existingProduct = requireActiveProduct(id);
         mapper.updateCatalogInfo(dto, existingProduct);
@@ -144,8 +148,8 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDTO addVariant(Long productId, ProductVariantDTO dto, String userId) {
-        userService.requireUser(userId);
+    public ProductDTO addVariant(Long productId, ProductVariantDTO dto) {
+        currentUserService.requireCurrentUserId();
         Product product = requireActiveProduct(productId);
 
         ProductVariant variant = createVariant(product, dto);
@@ -161,21 +165,8 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductVariantDTO importStock(Long variantId, StockImportRequest request, String userId) {
-        User actor = userService.requireUser(userId);
-        ProductVariant variant = requireActiveVariant(variantId);
-
-        variant.setQuantity(variant.getQuantity() + request.getQuantity());
-        ProductVariant savedVariant = variantRepository.saveAndFlush(variant);
-        saveInventoryTransaction(savedVariant, request.getQuantity(), "RESTOCK", actor);
-
-        applicationCacheService.evictStockImported();
-        return mapper.variantToDto(savedVariant);
-    }
-
-    @Transactional
-    public void deleteProduct(Long id, String userId) {
-        userService.requireUser(userId);
+    public void deleteProduct(Long id) {
+        currentUserService.requireCurrentUserId();
         Product product = requireActiveProduct(id);
         product.setDelete(true);
         if (product.getVariants() != null) {
@@ -230,23 +221,12 @@ public class ProductService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.VARIANT_NOT_FOUND));
     }
 
-    private void saveInventoryTransaction(ProductVariant variant, int changeAmount, String type, User actor) {
-        if (variant.getId() == null) {
-            if (variant.getProduct() == null || variant.getProduct().getId() == null) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_VARIANT_MUST_BE_SAVED);
-            }
-            variant = variantRepository.saveAndFlush(variant);
-        }
-
-        inventoryTransactionService.record(null, variant, actor, changeAmount, type);
-    }
-
-    public static String productsCacheKey(String keyword, Double minPrice, Double maxPrice, Pageable pageable) {
+    public static String productsCacheKey(String keyword, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         int page = pageable == null ? 0 : Math.max(pageable.getPageNumber(), 0);
         int size = pageable == null ? 20 : Math.min(Math.max(pageable.getPageSize(), 1), 100);
         String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
-        String normalizedMinPrice = minPrice == null || minPrice < 0 ? "" : String.valueOf(minPrice);
-        String normalizedMaxPrice = maxPrice == null || maxPrice < 0 ? "" : String.valueOf(maxPrice);
+        String normalizedMinPrice = minPrice == null || minPrice.signum() < 0 ? "" : minPrice.stripTrailingZeros().toPlainString();
+        String normalizedMaxPrice = maxPrice == null || maxPrice.signum() < 0 ? "" : maxPrice.stripTrailingZeros().toPlainString();
         return normalizedKeyword + '-' + normalizedMinPrice + '-' + normalizedMaxPrice + '-' + page + '-' + size;
     }
 
@@ -257,8 +237,8 @@ public class ProductService {
         return keyword.trim().toLowerCase(Locale.ROOT);
     }
 
-    private Double normalizePrice(Double price) {
-        return price == null || price < 0 ? null : price;
+    private BigDecimal normalizePrice(BigDecimal price) {
+        return price == null || price.signum() < 0 ? null : price;
     }
 
     private BestSellerRange resolveBestSellerRange(String period) {

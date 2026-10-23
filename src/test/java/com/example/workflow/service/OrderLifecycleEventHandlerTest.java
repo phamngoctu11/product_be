@@ -49,7 +49,7 @@ class OrderLifecycleEventHandlerTest {
     @Mock private ApplicationCacheService applicationCacheService;
     @Mock private OrderWorkflowService orderWorkflowService;
     @Mock private OrderChatService orderChatService;
-    @Mock private GuestPurchaseWorkflowService guestPurchaseWorkflowService;
+    @Mock private GuestPurchaseWorkflowStateService guestWorkflowStateService;
     @Mock private OrderLookupTokenService orderLookupTokenService;
 
     private OrderLifecycleEventHandler handler;
@@ -63,7 +63,7 @@ class OrderLifecycleEventHandlerTest {
                 applicationCacheService,
                 orderWorkflowService,
                 orderChatService,
-                guestPurchaseWorkflowService,
+                guestWorkflowStateService,
                 orderLookupTokenService,
                 new ObjectMapper()
         );
@@ -154,11 +154,17 @@ class OrderLifecycleEventHandlerTest {
         legacyItem.setHandmade(false);
         order.setItems(List.of(legacyItem));
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderWorkflowService.startAfterOrderCreated(
+                eq(10L), eq(true), eq("CATALOG"), eq("PENDING"), org.mockito.ArgumentMatchers.anyList()
+        )).thenReturn(new OrderWorkflowService.StartResult("process-10", true));
 
         handler.handleGuestOrderCreated(new GuestOrderCreatedEvent(10L, "raw-token", 5));
 
         verify(applicationCacheService).evictOrderCreated(order);
-        verify(guestPurchaseWorkflowService).startAfterOrderCreated(10L, null);
+        verify(orderWorkflowService).startAfterOrderCreated(
+                eq(10L), eq(true), eq("CATALOG"), eq("PENDING"), org.mockito.ArgumentMatchers.anyList()
+        );
+        verify(guestWorkflowStateService).markStarted(10L, "process-10");
         verify(emailService).sendGuestOrderConfirmationEmail(
                 "guest@example.com",
                 "Guest One",

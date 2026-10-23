@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,7 +50,7 @@ public class CatalogOrderFactory {
         order.setGuestSessionId(guestSessionId);
         order.setItems(new ArrayList<>());
 
-        double subtotal = 0.0;
+        BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem cartItem : cartItems) {
             ProductVariant variant = cartItem.getProductVariant();
             Product product = variant.getProduct();
@@ -73,9 +74,9 @@ public class CatalogOrderFactory {
             item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
             order.getItems().add(item);
 
-            double lineTotal = variant.getPrice() * cartItem.getQuantity();
-            double updatedSubtotal = subtotal + lineTotal;
-            if (!Double.isFinite(lineTotal) || lineTotal < 0 || !Double.isFinite(updatedSubtotal)) {
+            BigDecimal lineTotal = variant.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));
+            BigDecimal updatedSubtotal = subtotal.add(lineTotal);
+            if (lineTotal.signum() < 0 || updatedSubtotal.precision() > 19) {
                 throw new AppException(
                         HttpStatus.BAD_REQUEST,
                         ConstantErrorCode.BAD_REQUEST_DETAIL,

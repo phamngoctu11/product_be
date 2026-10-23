@@ -41,12 +41,12 @@ public class CustomAgreementTimeoutService {
         }
     }
 
-    void cancelIfStillExpired(Long orderId) {
+    public boolean cancelIfStillExpired(Long orderId) {
         Order snapshot = orderRepository.findById(orderId).orElse(null);
         if (snapshot == null || snapshot.getUserSubmittedAt() != null || snapshot.getConfirmationDueAt() == null
                 || !TIMEOUT_STATUSES.contains(snapshot.getStatus())
                 || LocalDateTime.now().isBefore(snapshot.getConfirmationDueAt())) {
-            return;
+            return false;
         }
         String dueKey = snapshot.getConfirmationDueAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         try {
@@ -58,9 +58,11 @@ public class CustomAgreementTimeoutService {
                     "custom-confirm-timeout:" + orderId,
                     "custom-confirm-timeout:" + orderId + ":" + dueKey
             );
+            return true;
         } catch (AppException exception) {
             // A concurrent valid submit or another terminal transition won the order lock.
             log.debug("Skipped custom agreement timeout for order {}: {}", orderId, exception.getMessage());
+            return false;
         }
     }
 }

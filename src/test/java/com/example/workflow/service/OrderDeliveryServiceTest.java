@@ -125,6 +125,7 @@ class OrderDeliveryServiceTest {
 
         assertFalse(response.isMatched());
         assertFalse(response.isCompleted());
+        assertEquals("Số lượng thực nhận không khớp với số lượng đã bàn giao vận chuyển.", response.getMessage());
         assertEquals(OrderStatus.SHIPPING, order.getStatus());
         assertNull(item.getReceivedQuantity());
         verify(orderRepository, never()).saveAndFlush(any());
@@ -147,6 +148,7 @@ class OrderDeliveryServiceTest {
 
         assertTrue(response.isMatched());
         assertTrue(response.isCompleted());
+        assertEquals("Xác nhận nhận hàng thành công.", response.getMessage());
         assertEquals(OrderStatus.DELIVERED, order.getStatus());
         assertEquals(2, item.getReceivedQuantity());
         assertNotNull(order.getDeliveredAt());

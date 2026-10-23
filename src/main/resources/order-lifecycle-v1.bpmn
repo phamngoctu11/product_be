@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_OrderLifecycleV1"
+                  targetNamespace="http://handmade-shop/process/order-lifecycle">
+  <bpmn:message id="Message_OrderCancelled" name="ORDER_CANCELLED" />
+  <bpmn:message id="Message_AgreementSubmitted" name="ORDER_AGREEMENT_SUBMITTED" />
+  <bpmn:message id="Message_PaymentOpened" name="PAYMENT_OPENED" />
+  <bpmn:message id="Message_PaymentSuccess" name="PAYMENT_SUCCESS" />
+  <bpmn:message id="Message_OrderReadyToShip" name="ORDER_READY_TO_SHIP" />
+  <bpmn:message id="Message_OrderShipping" name="ORDER_SHIPPING" />
+  <bpmn:message id="Message_OrderDelivered" name="ORDER_DELIVERED" />
+
+  <bpmn:process id="OrderLifecycle" name="Made-to-order lifecycle" isExecutable="true"
+                camunda:versionTag="1" camunda:historyTimeToLive="180">
+    <bpmn:documentation>
+      One process instance per Order. The business database owns every state transition;
+      this process only coordinates human tasks, messages and durable timeout jobs.
+    </bpmn:documentation>
+
+    <bpmn:startEvent id="order_created" />
+    <bpmn:userTask id="manager_approve_order" name="Manager reviews order" camunda:candidateGroups="MANAGER" />
+    <bpmn:exclusiveGateway id="manager_review_decision" name="Approved?" />
+    <bpmn:endEvent id="manager_rejected" name="Rejected by manager" />
+    <bpmn:userTask id="manager_assign_order" name="Assign production staff" camunda:candidateGroups="MANAGER" />
+    <bpmn:exclusiveGateway id="agreement_required" name="Customer agreement required?" />
+    <bpmn:exclusiveGateway id="custom_agreement" name="Custom agreement timer?" />
+
+    <bpmn:eventBasedGateway id="wait_first_custom_agreement" />
+    <bpmn:intermediateCatchEvent id="custom_agreement_submitted">
+      <bpmn:messageEventDefinition messageRef="Message_AgreementSubmitted" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="custom_agreement_timeout">
+      <bpmn:timerEventDefinition><bpmn:timeDate xsi:type="bpmn:tFormalExpression">${confirmationDueAt}</bpmn:timeDate></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="cancel_custom_agreement_timeout" name="Cancel expired custom agreement"
+                      camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements><camunda:inputOutput>
+        <camunda:inputParameter name="taskType">CANCEL_CUSTOM_AGREEMENT_TIMEOUT</camunda:inputParameter>
+      </camunda:inputOutput></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="custom_timeout_result" name="Cancellation won?" />
+    <bpmn:endEvent id="custom_timeout_cancelled" name="Custom confirmation expired" />
+    <bpmn:intermediateCatchEvent id="custom_agreement_after_timeout_race">
+      <bpmn:messageEventDefinition messageRef="Message_AgreementSubmitted" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:intermediateCatchEvent id="catalog_agreement_submitted">
+      <bpmn:messageEventDefinition messageRef="Message_AgreementSubmitted" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:userTask id="staff_review_agreement" name="Staff reviews agreement" camunda:candidateGroups="STAFF" />
+    <bpmn:exclusiveGateway id="agreement_review_decision" name="Agreement confirmed?" />
+    <bpmn:intermediateCatchEvent id="revised_agreement_submitted">
+      <bpmn:messageEventDefinition messageRef="Message_AgreementSubmitted" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:exclusiveGateway id="payment_method" name="Online payment?" />
+    <bpmn:intermediateCatchEvent id="payment_opened">
+      <bpmn:messageEventDefinition messageRef="Message_PaymentOpened" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:eventBasedGateway id="wait_payment_result" />
+    <bpmn:intermediateCatchEvent id="payment_succeeded">
+      <bpmn:messageEventDefinition messageRef="Message_PaymentSuccess" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="payment_timeout">
+      <bpmn:timerEventDefinition><bpmn:timeDate xsi:type="bpmn:tFormalExpression">${paymentDueAt}</bpmn:timeDate></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="cancel_payment_timeout" name="Cancel expired online payment"
+                      camunda:delegateExpression="${workflowTaskDelegate}">
+      <bpmn:extensionElements><camunda:inputOutput>
+        <camunda:inputParameter name="taskType">CANCEL_PAYMENT_TIMEOUT</camunda:inputParameter>
+      </camunda:inputOutput></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="payment_timeout_result" name="Cancellation won?" />
+    <bpmn:endEvent id="payment_timeout_cancelled" name="Payment expired" />
+    <bpmn:intermediateCatchEvent id="payment_success_after_timeout_race">
+      <bpmn:messageEventDefinition messageRef="Message_PaymentSuccess" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:userTask id="staff_start_production" name="Staff starts production" camunda:candidateGroups="STAFF" />
+    <bpmn:subProcess id="produce_order_item" name="Produce each OrderItem">
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false"
+          camunda:collection="${orderItemIds}" camunda:elementVariable="orderItemId" />
+      <bpmn:startEvent id="item_production_started" />
+      <bpmn:userTask id="staff_submit_initial_shape" name="Submit initial shape" camunda:candidateGroups="STAFF" />
+      <bpmn:userTask id="staff_submit_final_product" name="Submit final product" camunda:candidateGroups="STAFF" />
+      <bpmn:userTask id="manager_review_final_product" name="Manager final KCS" camunda:candidateGroups="MANAGER" />
+      <bpmn:exclusiveGateway id="final_kcs_decision" name="KCS passed?" />
+      <bpmn:endEvent id="item_production_completed" />
+      <bpmn:sequenceFlow id="item_1" sourceRef="item_production_started" targetRef="staff_submit_initial_shape" />
+      <bpmn:sequenceFlow id="item_2" sourceRef="staff_submit_initial_shape" targetRef="staff_submit_final_product" />
+      <bpmn:sequenceFlow id="item_3" sourceRef="staff_submit_final_product" targetRef="manager_review_final_product" />
+      <bpmn:sequenceFlow id="item_4" sourceRef="manager_review_final_product" targetRef="final_kcs_decision" />
+      <bpmn:sequenceFlow id="item_passed" sourceRef="final_kcs_decision" targetRef="item_production_completed">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${kcsPassed == true}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="item_rework" sourceRef="final_kcs_decision" targetRef="staff_submit_final_product">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${kcsPassed == false}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+    </bpmn:subProcess>
+
+    <bpmn:intermediateCatchEvent id="order_ready_to_ship">
+      <bpmn:messageEventDefinition messageRef="Message_OrderReadyToShip" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="order_shipping">
+      <bpmn:messageEventDefinition messageRef="Message_OrderShipping" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="order_delivered">
+      <bpmn:messageEventDefinition messageRef="Message_OrderDelivered" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="order_completed" name="Order delivered" />
+
+    <bpmn:subProcess id="cancel_order_event" name="Order cancelled" triggeredByEvent="true">
+      <bpmn:startEvent id="order_cancelled_message" isInterrupting="true">
+        <bpmn:messageEventDefinition messageRef="Message_OrderCancelled" />
+      </bpmn:startEvent>
+      <bpmn:endEvent id="order_cancelled_end"><bpmn:terminateEventDefinition /></bpmn:endEvent>
+      <bpmn:sequenceFlow id="cancel_1" sourceRef="order_cancelled_message" targetRef="order_cancelled_end" />
+    </bpmn:subProcess>
+
+    <bpmn:sequenceFlow id="flow_01" sourceRef="order_created" targetRef="manager_approve_order" />
+    <bpmn:sequenceFlow id="flow_02" sourceRef="manager_approve_order" targetRef="manager_review_decision" />
+    <bpmn:sequenceFlow id="flow_rejected" sourceRef="manager_review_decision" targetRef="manager_rejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_approved" sourceRef="manager_review_decision" targetRef="manager_assign_order">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${isApproved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_03" sourceRef="manager_assign_order" targetRef="agreement_required" />
+    <bpmn:sequenceFlow id="flow_guest_catalog" sourceRef="agreement_required" targetRef="payment_method">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${conversationRequired == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_user_agreement" sourceRef="agreement_required" targetRef="custom_agreement">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${conversationRequired == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_custom_first" sourceRef="custom_agreement" targetRef="wait_first_custom_agreement">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${orderType == 'CUSTOM'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_catalog_first" sourceRef="custom_agreement" targetRef="catalog_agreement_submitted">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${orderType == 'CATALOG'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_custom_message" sourceRef="wait_first_custom_agreement" targetRef="custom_agreement_submitted" />
+    <bpmn:sequenceFlow id="flow_custom_timer" sourceRef="wait_first_custom_agreement" targetRef="custom_agreement_timeout" />
+    <bpmn:sequenceFlow id="flow_custom_to_review" sourceRef="custom_agreement_submitted" targetRef="staff_review_agreement" />
+    <bpmn:sequenceFlow id="flow_catalog_to_review" sourceRef="catalog_agreement_submitted" targetRef="staff_review_agreement" />
+    <bpmn:sequenceFlow id="flow_custom_timeout_task" sourceRef="custom_agreement_timeout" targetRef="cancel_custom_agreement_timeout" />
+    <bpmn:sequenceFlow id="flow_custom_timeout_gateway" sourceRef="cancel_custom_agreement_timeout" targetRef="custom_timeout_result" />
+    <bpmn:sequenceFlow id="flow_custom_timeout_won" sourceRef="custom_timeout_result" targetRef="custom_timeout_cancelled">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${timeoutCancelled == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_custom_timeout_lost" sourceRef="custom_timeout_result" targetRef="custom_agreement_after_timeout_race">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${timeoutCancelled == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_custom_timeout_race_to_review" sourceRef="custom_agreement_after_timeout_race" targetRef="staff_review_agreement" />
+    <bpmn:sequenceFlow id="flow_review_decision" sourceRef="staff_review_agreement" targetRef="agreement_review_decision" />
+    <bpmn:sequenceFlow id="flow_agreement_confirmed" sourceRef="agreement_review_decision" targetRef="payment_method">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${agreementDecision == 'CONFIRM'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_agreement_changes" sourceRef="agreement_review_decision" targetRef="revised_agreement_submitted">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${agreementDecision == 'REQUEST_CHANGES'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_revised_to_review" sourceRef="revised_agreement_submitted" targetRef="staff_review_agreement" />
+    <bpmn:sequenceFlow id="flow_cod" sourceRef="payment_method" targetRef="staff_start_production">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentMethod == 'COD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_online" sourceRef="payment_method" targetRef="payment_opened">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentMethod == 'ONLINE'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_payment_wait" sourceRef="payment_opened" targetRef="wait_payment_result" />
+    <bpmn:sequenceFlow id="flow_payment_success" sourceRef="wait_payment_result" targetRef="payment_succeeded" />
+    <bpmn:sequenceFlow id="flow_payment_timer" sourceRef="wait_payment_result" targetRef="payment_timeout" />
+    <bpmn:sequenceFlow id="flow_paid_to_start" sourceRef="payment_succeeded" targetRef="staff_start_production" />
+    <bpmn:sequenceFlow id="flow_payment_timeout_task" sourceRef="payment_timeout" targetRef="cancel_payment_timeout" />
+    <bpmn:sequenceFlow id="flow_payment_timeout_gateway" sourceRef="cancel_payment_timeout" targetRef="payment_timeout_result" />
+    <bpmn:sequenceFlow id="flow_payment_timeout_won" sourceRef="payment_timeout_result" targetRef="payment_timeout_cancelled">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${timeoutCancelled == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_payment_timeout_lost" sourceRef="payment_timeout_result" targetRef="payment_success_after_timeout_race">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${timeoutCancelled == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_payment_timeout_race_to_start" sourceRef="payment_success_after_timeout_race" targetRef="staff_start_production" />
+    <bpmn:sequenceFlow id="flow_start_to_items" sourceRef="staff_start_production" targetRef="produce_order_item" />
+    <bpmn:sequenceFlow id="flow_items_to_ready" sourceRef="produce_order_item" targetRef="order_ready_to_ship" />
+    <bpmn:sequenceFlow id="flow_ready_to_shipping" sourceRef="order_ready_to_ship" targetRef="order_shipping" />
+    <bpmn:sequenceFlow id="flow_shipping_to_delivered" sourceRef="order_shipping" targetRef="order_delivered" />
+    <bpmn:sequenceFlow id="flow_delivered_to_end" sourceRef="order_delivered" targetRef="order_completed" />
+  </bpmn:process>
+</bpmn:definitions>

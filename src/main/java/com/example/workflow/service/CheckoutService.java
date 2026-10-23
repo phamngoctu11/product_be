@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -64,14 +65,6 @@ public class CheckoutService {
 
     public CheckoutResponseDTO checkoutCurrentUser(CheckoutRequest request, String idempotencyKey) {
         return checkoutUser(currentUserService.requireCurrentUserId(), request, idempotencyKey);
-    }
-
-    public CheckoutResponseDTO checkoutLegacyUser(String claimedUserId, CheckoutRequest request, String idempotencyKey) {
-        String authenticatedUserId = currentUserService.requireCurrentUserId();
-        if (!authenticatedUserId.equals(claimedUserId)) {
-            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.NOT_THE_OWNER);
-        }
-        return checkoutUser(authenticatedUserId, request, idempotencyKey);
     }
 
     public CheckoutResponseDTO checkoutGuest(
@@ -143,7 +136,7 @@ public class CheckoutService {
                 TextNormalizer.optional(request.getNote())
         ), user, null, selectedItems);
 
-        double totalPrice = order.getTotalPrice();
+        BigDecimal totalPrice = order.getTotalPrice();
         UserVoucher voucher = voucherService.useVoucherForCheckout(request.getUserVoucherId(), userId, totalPrice);
         applyTotals(order, totalPrice, voucherService.calculateDiscountAmount(voucher, totalPrice));
         order.setUserVoucher(voucher);
@@ -172,11 +165,11 @@ public class CheckoutService {
                 TextNormalizer.optional(request.getNote())
         ), null, guestSessionId, selectedItems);
 
-        double totalPrice = order.getTotalPrice();
+        BigDecimal totalPrice = order.getTotalPrice();
         VoucherService.AppliedGuestVoucher voucher = voucherService.applyGuestVoucherForCheckout(
                 request.getVoucherCode(), totalPrice, guestSessionId, request.getEmail(), request.getPhone()
         );
-        double discount = voucher == null ? 0.0 : voucher.discountAmount();
+        BigDecimal discount = voucher == null ? BigDecimal.ZERO : voucher.discountAmount();
         applyTotals(order, totalPrice, discount);
         if (voucher != null && voucher.template() != null) order.setGuestVoucherTemplate(voucher.template());
 
@@ -216,7 +209,7 @@ public class CheckoutService {
                     "Product " + product.getId() + " is not accepting orders."
             );
         }
-        if (!Double.isFinite(variant.getPrice()) || variant.getPrice() < 0.0) {
+        if (variant.getPrice() == null || variant.getPrice().signum() < 0) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Catalog price is invalid.");
         }
         return variant;
@@ -245,13 +238,14 @@ public class CheckoutService {
         cartRepository.save(cart);
     }
 
-    private void applyTotals(Order order, double totalPrice, double discountAmount) {
-        if (!Double.isFinite(discountAmount) || discountAmount < 0.0) {
+    private void applyTotals(Order order, BigDecimal totalPrice, BigDecimal discountAmount) {
+        if (discountAmount == null || discountAmount.signum() < 0) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher discount is invalid.");
         }
         order.setTotalPrice(totalPrice);
         order.setDiscountAmount(discountAmount);
-        order.setFinalPrice(Math.max(0.0, totalPrice - discountAmount));
+        BigDecimal finalPrice = totalPrice.subtract(discountAmount);
+        order.setFinalPrice(finalPrice.signum() < 0 ? BigDecimal.ZERO : finalPrice);
     }
 
     private CheckoutResponseDTO response(Order order, String lookupToken) {

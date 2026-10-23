@@ -288,7 +288,6 @@ class CartServiceTest {
         variant.setId(id);
         variant.setVariantName(name);
         variant.setPrice(price);
-        variant.setQuantity(quantity);
         variant.setDelete(deleted);
         variant.setProduct(product);
         return variant;

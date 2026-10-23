@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 @AllArgsConstructor
@@ -29,9 +30,9 @@ public class OrderDTO implements Serializable {
     private String customerName;
     private CustomerInfo customer;
     private List<OrderItemDTO> items;
-    private double totalPrice;
-    private double discountAmount;
-    private Double finalPrice;
+    private BigDecimal totalPrice;
+    private BigDecimal discountAmount;
+    private BigDecimal finalPrice;
     private String voucherName;
     private LocalDateTime startOrderTime;
     private LocalDateTime endOrderTime;

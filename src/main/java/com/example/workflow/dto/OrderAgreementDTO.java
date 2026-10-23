@@ -5,6 +5,7 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderType;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 public record OrderAgreementDTO(
         Long id,
@@ -15,9 +16,9 @@ public record OrderAgreementDTO(
         Integer agreementVersion,
         OrderAgreementStatus agreementStatus,
         String itemSnapshot,
-        Double subtotal,
-        Double discountAmount,
-        Double finalPrice,
+        BigDecimal subtotal,
+        BigDecimal discountAmount,
+        BigDecimal finalPrice,
         Long userVoucherId,
         String submittedBy,
         LocalDateTime submittedAt,

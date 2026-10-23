@@ -2,10 +2,9 @@ package com.example.workflow.service;
 
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.entity.Product;
-import com.example.workflow.entity.User;
 import com.example.workflow.mapper.ProductMapper;
 import com.example.workflow.nume.ProductAvailabilityStatus;
-import com.example.workflow.repository.InventoryTransactionRepository;
+import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
@@ -22,30 +21,28 @@ import static org.mockito.Mockito.when;
 class ProductServiceTest {
     private final ProductRepository productRepository = mock(ProductRepository.class);
     private final ProductMapper productMapper = mock(ProductMapper.class);
-    private final InventoryTransactionRepository inventoryTransactionRepository = mock(InventoryTransactionRepository.class);
-    private final UserService userService = mock(UserService.class);
+    private final OrderItemRepository orderItemRepository = mock(OrderItemRepository.class);
+    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final ProductVariantRepository productVariantRepository = mock(ProductVariantRepository.class);
-    private final InventoryTransactionService inventoryTransactionService = mock(InventoryTransactionService.class);
     private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
     private final ProductService productService = new ProductService(
             productRepository,
             productMapper,
-            inventoryTransactionRepository,
-            userService,
+            orderItemRepository,
+            currentUserService,
             productVariantRepository,
-            inventoryTransactionService,
             applicationCacheService
     );
 
     @Test
     void managerCannotSetMissingNonFiniteOrShortDuration() {
-        when(userService.requireUser("manager-1")).thenReturn(new User());
+        when(currentUserService.requireCurrentUserId()).thenReturn("manager-1");
         for (Double value : new Double[]{null, Double.NaN, Double.POSITIVE_INFINITY, 1.99}) {
             ProductDTO request = new ProductDTO();
             request.setMadeDay(value);
-            assertThatThrownBy(() -> productService.createProduct(request, "manager-1"))
+            assertThatThrownBy(() -> productService.createProduct(request))
                     .isInstanceOf(com.example.workflow.exception.AppException.class);
-            assertThatThrownBy(() -> productService.updateProduct(10L, request, "manager-1"))
+            assertThatThrownBy(() -> productService.updateProduct(10L, request))
                     .isInstanceOf(com.example.workflow.exception.AppException.class);
         }
     }
@@ -60,10 +57,10 @@ class ProductServiceTest {
         request.setProduct_name("Updated sample");
         request.setMadeDay(3.0);
 
-        when(userService.requireUser("manager-1")).thenReturn(new User());
+        when(currentUserService.requireCurrentUserId()).thenReturn("manager-1");
         when(productRepository.findById(10L)).thenReturn(Optional.of(product));
 
-        productService.updateProduct(10L, request, "manager-1");
+        productService.updateProduct(10L, request);
 
         assertThat(product.getAvailabilityStatus()).isEqualTo(ProductAvailabilityStatus.PAUSED);
     }

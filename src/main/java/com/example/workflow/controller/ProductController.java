@@ -5,7 +5,6 @@ import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductAvailabilityUpdateRequest;
 import com.example.workflow.dto.ProductVariantDTO;
-import com.example.workflow.dto.StockImportRequest;
 import com.example.workflow.service.ProductService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -18,6 +17,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
@@ -29,18 +30,17 @@ public class ProductController {
     @PostMapping
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductDTO>> createProduct(
-            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductDTO dto
     ) {
-        return ResponseEntity.ok(ApiResponse.success(service.createProduct(dto, userId)));
+        return ResponseEntity.ok(ApiResponse.success(service.createProduct(dto)));
     }
 
     // API GET cho phép tất cả mọi người (kể cả khách chưa đăng nhập) xem
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ProductDTO>>> getAllProducts(
             @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "minPrice", required = false) Double minPrice,
-            @RequestParam(value = "maxPrice", required = false) Double maxPrice,
+            @RequestParam(value = "minPrice", required = false) BigDecimal minPrice,
+            @RequestParam(value = "maxPrice", required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.success(service.getAllProducts(keyword, minPrice, maxPrice, pageable)));
@@ -64,14 +64,13 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> updateProduct(
             @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductDTO dto
     ) {
-        service.updateProduct(id, dto, userId);
+        service.updateProduct(id, dto);
         return ResponseEntity.ok(ApiResponse.success("Product updated successfully"));
     }
 
-    // STAFF can update basic product info, add variants, and import stock; product create/delete stays manager/admin only.
+    // STAFF can update basic product info and add variants; product create/delete stays manager/admin only.
     @PatchMapping("/{id}/staff-info")
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> updateProductBasicInfo(
@@ -96,30 +95,18 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductDTO>> addVariant(
             @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @RequestParam("userId") String userId,
             @Valid @RequestBody ProductVariantDTO dto
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Variant created successfully", service.addVariant(id, dto, userId)));
-    }
-
-    @PostMapping("/variants/{variantId}/restock")
-    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
-    public ResponseEntity<ApiResponse<ProductVariantDTO>> importStock(
-            @Positive(message = "Variant id must be positive") @PathVariable Long variantId,
-            @RequestParam("userId") String userId,
-            @Valid @RequestBody StockImportRequest request
-    ) {
-        return ResponseEntity.ok(ApiResponse.success("Stock imported successfully", service.importStock(variantId, request, userId)));
+        return ResponseEntity.ok(ApiResponse.success("Variant created successfully", service.addVariant(id, dto)));
     }
 
     // Only MANAGER or ADMIN can delete products.
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteProduct(
-            @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @RequestParam("userId") String userId
+            @Positive(message = "Product id must be positive") @PathVariable Long id
     ) {
-        service.deleteProduct(id, userId);
+        service.deleteProduct(id);
         return ResponseEntity.ok(ApiResponse.success("Product deleted successfully"));
     }
 }

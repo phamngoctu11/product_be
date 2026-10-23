@@ -57,6 +57,12 @@ public class PaymentTimeoutService {
         if (expired > 0) log.info("Expired {} SePay payment attempts", expired);
     }
 
+    public boolean expireIfStillDue(Long attemptId) {
+        return Boolean.TRUE.equals(transactionTemplate.execute(
+                status -> expireWithinTransaction(attemptId, LocalDateTime.now())
+        ));
+    }
+
     boolean expireWithinTransaction(Long attemptId, LocalDateTime now) {
         PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(attemptId).orElse(null);
         if (attempt == null
@@ -72,6 +78,7 @@ public class PaymentTimeoutService {
 
         attempt.setStatus(PaymentAttemptStatus.EXPIRED);
         order.setPaymentStatus(PaymentStatus.EXPIRED);
+        orderRepository.saveAndFlush(order);
         cancellationService.cancelBySystem(
                 order.getId(),
                 order.getVersion(),

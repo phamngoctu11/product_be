@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Getter
 @Setter
@@ -23,8 +24,8 @@ public class Product {
     @Column(name = "product_name")
     private String productName;
 
-    @Column(name = "price")
-    private double price;
+    @Column(name = "price", precision = 19, scale = 2)
+    private BigDecimal price = BigDecimal.ZERO;
 
     @DecimalMin(value = "2.0", message = "Made day must be at least 2")
     @Column(name = "made_day")

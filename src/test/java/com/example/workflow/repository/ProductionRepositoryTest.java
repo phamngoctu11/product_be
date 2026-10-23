@@ -145,7 +145,6 @@ class ProductionRepositoryTest {
         variant.setProduct(product);
         variant.setVariantName("Default");
         variant.setPrice(100.0);
-        variant.setQuantity(5);
         entityManager.persist(variant);
 
         Order order = new Order();

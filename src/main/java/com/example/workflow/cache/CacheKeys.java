@@ -3,11 +3,13 @@ package com.example.workflow.cache;
 import com.example.workflow.nume.OrderStatus;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
+
 public final class CacheKeys {
     private CacheKeys() {
     }
 
-    public static String userOrders(String userId, Double minPrice, Double maxPrice, Pageable pageable) {
+    public static String userOrders(String userId, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         return userOrdersPrefix(userId) + priceAndPageSuffix(minPrice, maxPrice, pageable);
     }
 
@@ -15,7 +17,7 @@ public final class CacheKeys {
         return "user:" + safe(userId) + ":orders:";
     }
 
-    public static String userCancelledOrders(String userId, Double minPrice, Double maxPrice, Pageable pageable) {
+    public static String userCancelledOrders(String userId, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         return userCancelledOrdersPrefix(userId) + priceAndPageSuffix(minPrice, maxPrice, pageable);
     }
 
@@ -55,7 +57,7 @@ public final class CacheKeys {
         return "user:" + safe(userId) + ":reputation:";
     }
 
-    private static String priceAndPageSuffix(Double minPrice, Double maxPrice, Pageable pageable) {
+    private static String priceAndPageSuffix(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         return "min:" + safe(minPrice) + ":max:" + safe(maxPrice) + ":" + pageSuffix(pageable);
     }
 

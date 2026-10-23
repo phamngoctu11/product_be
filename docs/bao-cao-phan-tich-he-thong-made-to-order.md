@@ -24,6 +24,12 @@ Hệ thống là nền tảng bán sản phẩm handmade đa danh mục theo mô
 
 Khách hàng có thể đặt nhiều loại mẫu catalog trong cùng một Order, mỗi OrderItem có quantity riêng. Khách có tài khoản còn được lưu nhiều custom draft gồm description, quantity và danh sách URL ảnh minh họa; submit một draft tạo Order CUSTOM ở PENDING_APPROVAL với đúng một loại OrderItem nhưng quantity có thể lớn hơn một, sau đó mới đi qua manager review, phân staff và xác nhận agreement/giá. Khách vãng lai được sử dụng giỏ hàng theo phiên, đặt hàng bằng thông tin liên hệ và theo dõi đơn qua liên kết bảo mật.
 
+Định hướng bổ sung cho custom: mỗi sản phẩm custom thuộc một `ProductType` chính do MANAGER quản lý; `ProductType` cấu hình bộ trường động gồm mã ổn định, nhãn tiếng Việt, kiểu dữ liệu, tính bắt buộc/tùy chọn, quy tắc kiểm tra, lựa chọn và thứ tự hiển thị. `Tag` là nhãn độc lập để phân loại/tìm kiếm/lọc catalog; tag không tự định nghĩa các trường custom. Form hiển thị các trường theo `ProductType` để gợi ý thông tin nền tảng, đồng thời giữ trường mô tả tự do và ảnh tham khảo để USER nêu ý tưởng riêng, không ép sản phẩm vào mẫu cố định. Mọi nội dung giao diện quản lý và mua hàng dùng tiếng Việt, ngoại trừ tên thương hiệu Clay Art.
+
+Định hướng dữ liệu: cấu hình `ProductType` và các trường của nó phải được lưu bền vững, có thứ tự hiển thị và version; không dùng `HashSet` làm kho cấu hình. Câu trả lời của USER có thể biểu diễn thành object/map theo mã trường ổn định, kèm snapshot schema để đọc lại chính xác sau khi manager cập nhật cấu hình.
+
+USER và assigned STAFF tiếp tục trao đổi thiết kế qua chat theo Order. Tin nhắn là phương tiện thương lượng, không tự trở thành đặc tả sản xuất: trước khi bắt đầu làm, nội dung hai bên thống nhất phải được xác nhận thành một phiên bản đặc tả/thỏa thuận có cấu trúc và snapshot theo OrderItem. Nếu thay đổi đã chốt làm đổi giá hoặc thời hạn thì cần cập nhật thỏa thuận và được USER xác nhận lại.
+
 Mỗi đơn có đúng một staff phụ trách do quản lý phân công hoặc staff tự nhận. Người này vừa là đầu mối trao đổi với khách vừa thực hiện sản xuất các OrderItem của toàn đơn. Quy trình/checkpoint vẫn tách theo từng OrderItem, nhưng không tạo phân công staff riêng cho từng item và không cho nhiều staff đồng thời chia việc trong một Order.
 
 Hệ thống tính thời gian sản xuất tham khảo theo mẫu và số lượng. Nhân viên chính lập đề xuất thời hạn có cấu trúc, khách xác nhận đề xuất để hình thành cam kết. Chỉ bắt đầu sản xuất khi đơn hợp lệ, điều kiện thanh toán/checkout được đáp ứng và phiên bản thời hạn hiện hành đã được xác nhận.
@@ -257,16 +263,18 @@ Việc sơ đồ online nối USER phản ánh phạm vi hiện có được k�
 
 **Tác nhân:** USER. **Tiền điều kiện:** user đăng nhập.
 
-1. User nhập description mô tả sản phẩm custom tối đa 4.000 từ, quantity và danh sách `imageUrls` ảnh tham khảo.
-2. Hệ thống lưu nhiều CustomRequest DRAFT của cùng user. `imageUrls` là list chuỗi URL HTTP/HTTPS có thể rỗng; không phải chuỗi attachment ghép tay.
+1. User chọn `ProductType` custom và nhập các giá trị cho trường động do MANAGER cấu hình; trường tự do mô tả ý tưởng, quantity và `imageUrls` ảnh tham khảo vẫn được hỗ trợ.
+2. Hệ thống lưu nhiều CustomRequest DRAFT của cùng user. Các giá trị có cấu trúc được gắn với mã trường ổn định; draft ghi nhận phiên bản cấu hình ProductType để việc manager chỉnh form sau này không làm đổi ý nghĩa yêu cầu đã lưu. `imageUrls` là list chuỗi URL HTTP/HTTPS có thể rỗng; không phải chuỗi attachment ghép tay.
 3. User chọn một draft và submit bằng idempotency key.
 4. Hệ thống khóa draft, kiểm tra owner/version/dữ liệu, tạo một Order CUSTOM PENDING_APPROVAL và một OrderItem chưa có giá chính thức.
-5. Description và toàn bộ imageUrls được snapshot bất biến vào OrderItem; draft liên kết Order và chuyển SUBMITTED trong cùng transaction.
-6. Sau commit, phát ORDER_CREATED để gửi email/notification và đăng ký manager review. Manager review, assignment và agreement thuộc workflow kế tiếp.
+5. ProductType, phiên bản schema, các giá trị đã nhập, mô tả tự do và toàn bộ imageUrls được snapshot bất biến theo OrderItem; draft liên kết Order và chuyển SUBMITTED trong cùng transaction.
+6. Sau commit, phát ORDER_CREATED để gửi email/notification và đăng ký manager review. Manager review, assignment, trao đổi chat và agreement thuộc workflow kế tiếp.
 
 **Ngoại lệ:** owner sai; version cũ; description quá 4.000 từ; URL không hợp lệ; quantity sai; draft đã submit; idempotency key xung đột. **Hậu điều kiện:** retry không tạo nhiều Order và lỗi giữa transaction không để Order thiếu item/snapshot.
 
 Giá custom chưa tồn tại tại WF01 và phải là `null`, không dùng 0 làm giá giả. Đơn custom không bắt buộc có ProductVariant công khai và không tự đưa thiết kế riêng lên catalog. Giá/spec chính thức được chốt ở Agreement sau manager review và assignment.
+
+Các trường do ProductType quản lý chỉ là hướng dẫn đầu vào, không giới hạn thiết kế. Mô tả tự do và ảnh tham khảo là nội dung chính do USER cung cấp; chat giúp USER và assigned STAFF làm rõ phương án. Trước sản xuất, bản đặc tả được hai bên chốt phải được lưu thành snapshot có version trên OrderItem/Agreement thay vì chỉ dựa vào lịch sử chat. Cấu hình ProductType/tag và các giá trị của CustomRequest không đặt trực tiếp vào Order header vì chúng thuộc loại sản phẩm hoặc từng OrderItem.
 
 ### UC10–UC14 — Phân công và thỏa thuận deadline
 
@@ -740,6 +748,8 @@ Các phase trong target.txt là kế hoạch triển khai theo giai đoạn, kh�
 7. Quote hết hạn, nhiều vòng báo giá, reorder custom và trộn catalog/custom trong cùng đơn.
 8. Thời gian tính theo ngày lịch/ngày làm việc; múi giờ và khoảng vận chuyển sau hoàn thành sản xuất.
 9. Phạm vi kế thừa thưởng uy tín, đánh giá và hoa hồng từ hệ thống cũ.
+10. Cấu trúc quản trị ProductType và bộ trường động: kiểu dữ liệu/validation/options được hỗ trợ, quy tắc sửa/ẩn/xóa trường đã dùng trong draft, và cách migrate tag catalog hiện có sang tag có cấu trúc.
+11. Giới hạn mô tả tự do: tài liệu/code hiện tại quy định tối đa 4.000 từ; cần xác nhận đây là 4.000 từ hay 4.000 ký tự trước khi đồng bộ giao diện, API và validation.
 
 Các mục này không cản trở vẽ happy path. Hãy đặt điều kiện `theo policy` hoặc note bên cạnh nhánh tương ứng, không tự điền quy tắc như thể đã chốt.
 

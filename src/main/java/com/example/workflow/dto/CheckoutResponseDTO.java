@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -14,9 +15,9 @@ public class CheckoutResponseDTO implements Serializable {
     private String message;
     private Long orderId;
     private Long version;
-    private Double totalPrice;
-    private Double discountAmount;
-    private Double finalPrice;
+    private BigDecimal totalPrice;
+    private BigDecimal discountAmount;
+    private BigDecimal finalPrice;
     private String paymentMethod;
     private String paymentStatus;
     private String voucherCode;

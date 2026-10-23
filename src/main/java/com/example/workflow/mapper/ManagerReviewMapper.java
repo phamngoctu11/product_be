@@ -9,6 +9,8 @@ import com.example.workflow.util.UserDisplayNameUtils;
 import org.mapstruct.Mapper;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
+
 @Mapper(config = CentralMapperConfig.class)
 public interface ManagerReviewMapper {
 
@@ -37,12 +39,13 @@ public interface ManagerReviewMapper {
         );
     }
 
-    private Double catalogFinalPrice(Order order) {
+    private BigDecimal catalogFinalPrice(Order order) {
         if (order.getFinalPrice() != null) {
             return order.getFinalPrice();
         }
-        double discount = order.getDiscountAmount() == null ? 0.0 : order.getDiscountAmount();
-        return Math.max(0.0, order.getTotalPrice() - discount);
+        BigDecimal discount = order.getDiscountAmount() == null ? BigDecimal.ZERO : order.getDiscountAmount();
+        BigDecimal result = order.getTotalPrice().subtract(discount);
+        return result.signum() < 0 ? BigDecimal.ZERO : result;
     }
 
     private PaymentMethod paymentMethod(Order order) {

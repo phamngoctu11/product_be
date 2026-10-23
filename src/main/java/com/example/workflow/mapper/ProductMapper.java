@@ -35,7 +35,6 @@ public interface ProductMapper {
     @Mapping(source = "imageUrl", target = "imageUrl")
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "product", ignore = true)
-    @Mapping(target = "quantity", ignore = true)
     @Mapping(target = "delete", ignore = true)
     ProductVariant variantToEntity(ProductVariantDTO dto);
 

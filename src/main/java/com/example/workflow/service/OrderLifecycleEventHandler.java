@@ -17,6 +17,7 @@ import com.example.workflow.event.payload.ProductionStartedEvent;
 import com.example.workflow.event.payload.ProductionCheckpointSubmittedEvent;
 import com.example.workflow.event.payload.ProductionCheckpointReviewedEvent;
 import com.example.workflow.event.payload.OrderReadyToShipEvent;
+import com.example.workflow.event.payload.OrderReviewedEvent;
 import com.example.workflow.event.payload.ChangeRequestSubmittedEvent;
 import com.example.workflow.event.payload.ChangeRequestDecidedEvent;
 import com.example.workflow.nume.ProductionCheckpointStage;
@@ -49,7 +50,7 @@ public class OrderLifecycleEventHandler {
     private final ApplicationCacheService applicationCacheService;
     private final OrderWorkflowService orderWorkflowService;
     private final OrderChatService orderChatService;
-    private final GuestPurchaseWorkflowService guestPurchaseWorkflowService;
+    private final GuestPurchaseWorkflowStateService guestWorkflowStateService;
     private final OrderLookupTokenService orderLookupTokenService;
     private final ObjectMapper objectMapper;
 
@@ -67,6 +68,9 @@ public class OrderLifecycleEventHandler {
     public void handleOrderCreated(OrderCreatedEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CREATED");
         applicationCacheService.evictOrderCreated(order);
+        if (order.getStatus() != OrderStatus.CANCELLED) {
+            startLifecycle(order);
+        }
 
         if (order.getUser() == null) {
             return;
@@ -142,10 +146,10 @@ public class OrderLifecycleEventHandler {
         }
 
         applicationCacheService.evictOrderCreated(order);
-        guestPurchaseWorkflowService.startAfterOrderCreated(
-                order.getId(),
-                order.getGuestSessionId()
-        );
+        if (order.getStatus() != OrderStatus.CANCELLED) {
+            OrderWorkflowService.StartResult workflow = startLifecycle(order);
+            guestWorkflowStateService.markStarted(order.getId(), workflow.processInstanceId());
+        }
         String accessUrl = StringUtils.hasText(event.lookupToken())
                 ? UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
                         .path("/guest/orders/")
@@ -172,10 +176,37 @@ public class OrderLifecycleEventHandler {
                 || !Objects.equals(event.staffId(), assignedStaffId(order))) {
             return;
         }
+        startLifecycle(order);
         if (order.getUser() != null) {
             orderChatService.ensureThreadForAssignedOrder(order.getId());
         }
-        orderWorkflowService.advanceAfterAssignment(order.getId(), event.staffId());
+        requireWorkflowAdvance(
+                order.getId(),
+                orderWorkflowService.advanceAfterAssignment(order.getId(), event.staffId()),
+                "ORDER_ASSIGNED"
+        );
+    }
+
+    public void handleOrderReviewed(OrderReviewedEvent event) {
+        Order order = requireOrder(event.orderId(), "ORDER_REVIEWED");
+        boolean approved = event.decision() == com.example.workflow.nume.ManagerReviewDecision.APPROVED;
+        if (approved) {
+            startLifecycle(order);
+        }
+        requireWorkflowAdvance(
+                order.getId(),
+                orderWorkflowService.completeManagerReview(
+                        order.getId(), approved, event.managerId(), event.confirmationDueAt()
+                ),
+                "ORDER_REVIEWED"
+        );
+        if (approved && StringUtils.hasText(event.assignedStaffId())) {
+            requireWorkflowAdvance(
+                    order.getId(),
+                    orderWorkflowService.advanceAfterAssignment(order.getId(), event.assignedStaffId()),
+                    "ORDER_REVIEWED_ASSIGNMENT"
+            );
+        }
     }
 
     public void handleOrderAgreementSubmitted(OrderAgreementSubmittedEvent event) {
@@ -185,7 +216,15 @@ public class OrderLifecycleEventHandler {
                 || order.getUserSubmittedAt() == null) {
             return;
         }
-        orderWorkflowService.correlateAgreementSubmitted(event.orderId(), event.agreementVersion());
+        requireWorkflowAdvance(
+                order.getId(),
+                orderWorkflowService.correlateAgreementSubmitted(
+                        event.orderId(),
+                        event.agreementVersion(),
+                        event.paymentMethod() == null ? null : event.paymentMethod().name()
+                ),
+                "ORDER_AGREEMENT_SUBMITTED"
+        );
     }
 
     public void handleOrderAgreementReviewed(OrderAgreementReviewedEvent event) {
@@ -194,13 +233,18 @@ public class OrderLifecycleEventHandler {
                 || !order.getCurrentAgreementVersion().equals(event.agreementVersion())) {
             return;
         }
-        orderWorkflowService.completeAgreementReview(
-                event.orderId(), event.agreementVersion(), event.decision().name(), event.staffId()
+        requireWorkflowAdvance(
+                order.getId(),
+                orderWorkflowService.completeAgreementReview(
+                        event.orderId(), event.agreementVersion(), event.decision().name(), event.staffId()
+                ),
+                "ORDER_AGREEMENT_REVIEWED"
         );
     }
 
     public void handleOrderDelivered(OrderDeliveredEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_DELIVERED");
+        requireWorkflowAdvance(order.getId(), orderWorkflowService.correlateDelivered(order.getId()), "ORDER_DELIVERED");
         if (order.getUser() == null) {
             return;
         }
@@ -220,6 +264,11 @@ public class OrderLifecycleEventHandler {
 
     public void handleOrderShipping(OrderShippingEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_SHIPPING");
+        requireWorkflowAdvance(
+                order.getId(),
+                orderWorkflowService.correlateShipping(order.getId(), event.staffId()),
+                "ORDER_SHIPPING"
+        );
         applicationCacheService.evictShippingHandover(order, event.staffId());
     }
 
@@ -419,6 +468,33 @@ public class OrderLifecycleEventHandler {
         }
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalStateException("Order not found for " + eventType + " event: " + orderId));
+    }
+
+    private OrderWorkflowService.StartResult startLifecycle(Order order) {
+        String paymentMethod = resolvePaymentMethod(order);
+        return orderWorkflowService.startAfterOrderCreated(
+                order.getId(),
+                order.getUser() == null,
+                order.getOrderType() == null ? OrderType.CATALOG.name() : order.getOrderType().name(),
+                paymentMethod,
+                order.getItems() == null
+                        ? java.util.List.of()
+                        : order.getItems().stream().map(OrderItem::getId).filter(Objects::nonNull).toList()
+        );
+    }
+
+    private String resolvePaymentMethod(Order order) {
+        if (order.getPaymentMethodType() != null) return order.getPaymentMethodType().name();
+        if (StringUtils.hasText(order.getPaymentMethod())) return order.getPaymentMethod().trim().toUpperCase();
+        return "PENDING";
+    }
+
+    private void requireWorkflowAdvance(Long orderId, boolean advanced, String eventType) {
+        if (!advanced && orderWorkflowService.hasActiveProcess(orderId)) {
+            throw new IllegalStateException(
+                    "Workflow for order " + orderId + " is not ready for " + eventType
+            );
+        }
     }
 
     private OrderItem firstItem(Order order) {

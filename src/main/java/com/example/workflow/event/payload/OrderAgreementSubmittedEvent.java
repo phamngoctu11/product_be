@@ -1,4 +1,6 @@
 package com.example.workflow.event.payload;
 
-public record OrderAgreementSubmittedEvent(Long orderId, Integer agreementVersion) {
+import com.example.workflow.nume.PaymentMethod;
+
+public record OrderAgreementSubmittedEvent(Long orderId, Integer agreementVersion, PaymentMethod paymentMethod) {
 }

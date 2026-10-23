@@ -147,12 +147,6 @@ public class ApplicationCacheService {
         publishDeferredCacheEvictions("product variant added", wishlistEntries());
     }
 
-    public void evictStockImported() {
-        optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
-        optionalCacheService.clearAfterCommit(CacheNames.PRODUCT);
-        publishDeferredCacheEvictions("stock imported", wishlistEntries());
-    }
-
     public void evictProductDeleted(Long productId) {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
         optionalCacheService.evictAfterCommit(CacheNames.PRODUCT, productId);

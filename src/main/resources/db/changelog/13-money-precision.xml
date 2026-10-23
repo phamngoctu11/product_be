@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!-- Align persisted monetary values with the BigDecimal entity mappings. -->
+    <changeSet id="13-money-columns-decimal" author="workflow">
+        <preConditions onFail="HALT" onError="HALT">
+            <and>
+                <tableExists tableName="order_agreements"/>
+                <columnExists tableName="order_agreements" columnName="subtotal"/>
+                <columnExists tableName="order_agreements" columnName="discount_amount"/>
+                <columnExists tableName="order_agreements" columnName="final_price"/>
+                <tableExists tableName="orders"/>
+                <columnExists tableName="orders" columnName="total_price"/>
+                <columnExists tableName="orders" columnName="discount_amount"/>
+                <columnExists tableName="orders" columnName="final_price"/>
+                <tableExists tableName="order_item"/>
+                <columnExists tableName="order_item" columnName="price"/>
+                <tableExists tableName="payment_attempts"/>
+                <columnExists tableName="payment_attempts" columnName="expected_amount"/>
+                <tableExists tableName="products"/>
+                <columnExists tableName="products" columnName="price"/>
+                <tableExists tableName="product_variants"/>
+                <columnExists tableName="product_variants" columnName="price"/>
+                <tableExists tableName="voucher_templates"/>
+                <columnExists tableName="voucher_templates" columnName="min_order_value"/>
+                <columnExists tableName="voucher_templates" columnName="discount_percent"/>
+                <columnExists tableName="voucher_templates" columnName="max_discount_amount"/>
+            </and>
+        </preConditions>
+
+        <modifyDataType tableName="order_agreements" columnName="subtotal" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="order_agreements" columnName="discount_amount" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="order_agreements" columnName="final_price" newDataType="decimal(19,2)"/>
+
+        <modifyDataType tableName="orders" columnName="total_price" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="orders" columnName="discount_amount" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="orders" columnName="final_price" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="order_item" columnName="price" newDataType="decimal(19,2)"/>
+
+        <modifyDataType tableName="payment_attempts" columnName="expected_amount" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="products" columnName="price" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="product_variants" columnName="price" newDataType="decimal(19,2)"/>
+
+        <modifyDataType tableName="voucher_templates" columnName="min_order_value" newDataType="decimal(19,2)"/>
+        <modifyDataType tableName="voucher_templates" columnName="discount_percent" newDataType="decimal(7,4)"/>
+        <modifyDataType tableName="voucher_templates" columnName="max_discount_amount" newDataType="decimal(19,2)"/>
+    </changeSet>
+</databaseChangeLog>

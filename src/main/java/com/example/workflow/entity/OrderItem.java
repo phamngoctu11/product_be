@@ -9,6 +9,7 @@ import lombok.ToString;
 
 import java.util.ArrayList;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Getter
@@ -35,8 +36,8 @@ public class OrderItem {
     @JoinColumn(name = "product_variant_id")
     private ProductVariant productVariant;
 
-    @Column(name="price")
-    private Double price;
+    @Column(name="price", precision = 19, scale = 2)
+    private BigDecimal price;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", length = 20, columnDefinition = "varchar(20)")

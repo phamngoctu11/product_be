@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,8 +37,8 @@ public class CustomOrderFactory {
         order.setPaymentMethodType(null);
         order.setProductionStatus(OrderProductionStatus.WAITING_PRODUCTION);
         order.setStartOrderTime(LocalDateTime.now());
-        order.setTotalPrice(0.0);
-        order.setDiscountAmount(0.0);
+        order.setTotalPrice(BigDecimal.ZERO);
+        order.setDiscountAmount(BigDecimal.ZERO);
         order.setFinalPrice(null);
         order.setContactSnapshot(contact);
         order.setItems(new ArrayList<>());

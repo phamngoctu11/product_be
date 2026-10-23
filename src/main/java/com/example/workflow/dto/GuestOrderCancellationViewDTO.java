@@ -1,6 +1,7 @@
 package com.example.workflow.dto;
 
 import com.example.workflow.nume.OrderStatus;
+import java.math.BigDecimal;
 
 public record GuestOrderCancellationViewDTO(
         Long orderId,
@@ -8,7 +9,7 @@ public record GuestOrderCancellationViewDTO(
         OrderStatus status,
         String recipientName,
         String maskedEmail,
-        Double finalPrice,
+        BigDecimal finalPrice,
         boolean cancellable
 ) {
 }

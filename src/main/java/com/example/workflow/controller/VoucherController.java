@@ -18,6 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -42,7 +43,7 @@ public class VoucherController {
 
     @GetMapping("/guest")
     public ResponseEntity<ApiResponse<List<VoucherCartOptionDTO>>> getGuestVouchers(
-            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal,
+            @RequestParam(value = "subtotal", defaultValue = "0") BigDecimal subtotal,
             @RequestHeader(value = "X-Guest-Session-Id", required = false) String guestSessionId
     ) {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getGuestVoucherOptions(subtotal, guestSessionId)));
@@ -57,7 +58,7 @@ public class VoucherController {
     @GetMapping("/me/cart-options")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<CartVoucherOptionsDTO>> getMyCartVoucherOptions(
-            @RequestParam(value = "subtotal", defaultValue = "0") double subtotal
+            @RequestParam(value = "subtotal", defaultValue = "0") BigDecimal subtotal
     ) {
         return ResponseEntity.ok(ApiResponse.success(voucherService.getCartVoucherOptions(subtotal)));
     }

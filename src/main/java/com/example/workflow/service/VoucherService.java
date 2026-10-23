@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -68,13 +70,13 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal) {
+    public List<VoucherCartOptionDTO> getGuestVoucherOptions(BigDecimal subtotal) {
         return getGuestVoucherOptions(subtotal, null);
     }
 
     @Transactional(readOnly = true)
-    public List<VoucherCartOptionDTO> getGuestVoucherOptions(double subtotal, String guestSessionId) {
-        double safeSubtotal = Math.max(0, subtotal);
+    public List<VoucherCartOptionDTO> getGuestVoucherOptions(BigDecimal subtotal, String guestSessionId) {
+        BigDecimal safeSubtotal = nonNegative(subtotal);
         return templateRepository.findAvailableGuestTemplates(LocalDateTime.now())
                 .stream()
                 .map(template -> buildGuestCartOption(template, safeSubtotal, guestSessionId))
@@ -97,11 +99,11 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    public CartVoucherOptionsDTO getCartVoucherOptions(double subtotal) {
+    public CartVoucherOptionsDTO getCartVoucherOptions(BigDecimal subtotal) {
         String userId = currentUserService.requireCurrentUserId();
         LocalDateTime now = LocalDateTime.now();
         User user = userService.requireUser(userId, ConstantErrorCode.USER_NOT_FOUND);
-        double safeSubtotal = Math.max(0, subtotal);
+        BigDecimal safeSubtotal = nonNegative(subtotal);
         int redeemableReputation = Math.max(0, user.getReputation() - 40);
 
         List<VoucherCartOptionDTO> walletOptions = userVoucherRepository.findAvailableWallet(userId, now)
@@ -178,7 +180,7 @@ public class VoucherService {
     }
 
     @Transactional
-    public UserVoucher useVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
+    public UserVoucher useVoucherForCheckout(Long userVoucherId, String userId, BigDecimal totalPrice) {
         if (userVoucherId == null) {
             return null;
         }
@@ -193,7 +195,7 @@ public class VoucherService {
 
     /** Validate an agreement voucher without consuming it; confirmation performs the locked consume. */
     @Transactional(readOnly = true)
-    public UserVoucher previewVoucherForCheckout(Long userVoucherId, String userId, double totalPrice) {
+    public UserVoucher previewVoucherForCheckout(Long userVoucherId, String userId, BigDecimal totalPrice) {
         if (userVoucherId == null) {
             return null;
         }
@@ -206,7 +208,7 @@ public class VoucherService {
     @Transactional
     public AppliedGuestVoucher applyGuestVoucherForCheckout(
             String voucherCode,
-            double totalPrice,
+            BigDecimal totalPrice,
             String guestSessionId,
             String email,
             String phone
@@ -225,7 +227,7 @@ public class VoucherService {
         String phoneHash = sha256(normalizePhone(phone));
         validateGuestVoucherNotAlreadyUsed(template.getId(), guestSessionId, emailHash, phoneHash);
 
-        double discountAmount = calculateDiscountAmount(template, totalPrice);
+        BigDecimal discountAmount = calculateDiscountAmount(template, totalPrice);
         int updatedRows = templateRepository.decrementGuestQuantity(template.getId(), now);
         if (updatedRows == 0) {
             throw new AppException(
@@ -289,9 +291,9 @@ public class VoucherService {
         return restored;
     }
 
-    public double calculateDiscountAmount(UserVoucher voucher, double totalPrice) {
+    public BigDecimal calculateDiscountAmount(UserVoucher voucher, BigDecimal totalPrice) {
         if (voucher == null) {
-            return 0.0;
+            return BigDecimal.ZERO;
         }
         return calculateDiscountAmount(voucher.getTemplate(), totalPrice);
     }
@@ -350,12 +352,12 @@ public class VoucherService {
         return userVoucher;
     }
 
-    private VoucherCartOptionDTO buildCartOption(Long userVoucherId, VoucherTemplate template, String source, double subtotal) {
-        boolean applicable = subtotal >= template.getMinOrderValue();
-        double discountAmount = applicable ? calculateDiscountAmount(template, subtotal) : 0.0;
+    private VoucherCartOptionDTO buildCartOption(Long userVoucherId, VoucherTemplate template, String source, BigDecimal subtotal) {
+        boolean applicable = subtotal.compareTo(template.getMinOrderValue()) >= 0;
+        BigDecimal discountAmount = applicable ? calculateDiscountAmount(template, subtotal) : BigDecimal.ZERO;
         String unavailableReason = applicable
                 ? null
-                : "Can them " + Math.ceil(template.getMinOrderValue() - subtotal) + "d de ap dung voucher nay.";
+                : "Can them " + template.getMinOrderValue().subtract(subtotal).setScale(0, RoundingMode.CEILING) + "d de ap dung voucher nay.";
 
         return new VoucherCartOptionDTO(
                 userVoucherId,
@@ -365,7 +367,7 @@ public class VoucherService {
                 applicable,
                 false,
                 discountAmount,
-                Math.max(0, subtotal - discountAmount),
+                floorZero(subtotal.subtract(discountAmount)),
                 unavailableReason
         );
     }
@@ -374,7 +376,7 @@ public class VoucherService {
         VoucherCartOptionDTO bestOption = options.stream()
                 .filter(VoucherCartOptionDTO::isApplicable)
                 .max(Comparator
-                        .comparingDouble(VoucherCartOptionDTO::getDiscountAmount)
+                        .comparing(VoucherCartOptionDTO::getDiscountAmount)
                         .thenComparing(option -> option.getTemplate().getMinOrderValue(), Comparator.reverseOrder()))
                 .orElse(null);
         if (bestOption != null) {
@@ -391,7 +393,7 @@ public class VoucherService {
                 .thenComparing(option -> option.getTemplate().getExpiryDate());
     }
 
-    private void validateVoucherForCheckout(UserVoucher voucher, String userId, double totalPrice) {
+    private void validateVoucherForCheckout(UserVoucher voucher, String userId, BigDecimal totalPrice) {
         if (voucher.isUsed()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_ALREADY_USED);
         }
@@ -401,24 +403,24 @@ public class VoucherService {
         if (!voucher.getUser().getId().equals(userId)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.VOUCHER_INVALID);
         }
-        if (totalPrice < voucher.getTemplate().getMinOrderValue()) {
+        if (totalPrice.compareTo(voucher.getTemplate().getMinOrderValue()) < 0) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
         }
     }
 
-    private VoucherCartOptionDTO buildGuestCartOption(VoucherTemplate template, double subtotal, String guestSessionId) {
+    private VoucherCartOptionDTO buildGuestCartOption(VoucherTemplate template, BigDecimal subtotal, String guestSessionId) {
         VoucherCartOptionDTO option = buildCartOption(null, template, "GUEST", subtotal);
         if (org.springframework.util.StringUtils.hasText(guestSessionId)
                 && guestVoucherUsageRepository.existsByVoucherTemplateIdAndGuestSessionId(template.getId(), guestSessionId.trim())) {
             option.setApplicable(false);
-            option.setDiscountAmount(0);
+            option.setDiscountAmount(BigDecimal.ZERO);
             option.setFinalPrice(subtotal);
             option.setUnavailableReason("Voucher này đã được sử dụng trong phiên khách hiện tại.");
         }
         return option;
     }
 
-    private void validateGuestVoucherForCheckout(VoucherTemplate template, double totalPrice, LocalDateTime now) {
+    private void validateGuestVoucherForCheckout(VoucherTemplate template, BigDecimal totalPrice, LocalDateTime now) {
         if (!template.isGuestVoucher()) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
         }
@@ -428,7 +430,7 @@ public class VoucherService {
         if (template.getExpiryDate().isBefore(now)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
         }
-        if (totalPrice < template.getMinOrderValue()) {
+        if (totalPrice.compareTo(template.getMinOrderValue()) < 0) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.ORDER_MINIMUM_NOT_MET);
         }
     }
@@ -487,31 +489,41 @@ public class VoucherService {
         }
     }
 
-    private double calculateDiscountAmount(VoucherTemplate template, double totalPrice) {
-        if (template.getDiscountPercent() <= 0) {
-            return Math.min(totalPrice, template.getMaxDiscountAmount());
+    private BigDecimal calculateDiscountAmount(VoucherTemplate template, BigDecimal totalPrice) {
+        if (template.getDiscountPercent().signum() <= 0) {
+            return totalPrice.min(template.getMaxDiscountAmount()).setScale(2, RoundingMode.HALF_UP);
         }
 
-        double discountAmount = (totalPrice * template.getDiscountPercent()) / 100;
-        if (template.getMaxDiscountAmount() > 0 && discountAmount > template.getMaxDiscountAmount()) {
-            return template.getMaxDiscountAmount();
+        BigDecimal discountAmount = totalPrice.multiply(template.getDiscountPercent())
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        if (template.getMaxDiscountAmount().signum() > 0
+                && discountAmount.compareTo(template.getMaxDiscountAmount()) > 0) {
+            return template.getMaxDiscountAmount().setScale(2, RoundingMode.HALF_UP);
         }
-        return Math.min(totalPrice, discountAmount);
+        return totalPrice.min(discountAmount).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal nonNegative(BigDecimal value) {
+        return value == null || value.signum() < 0 ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal floorZero(BigDecimal value) {
+        return value.signum() < 0 ? BigDecimal.ZERO : value;
     }
 
     public record AppliedGuestVoucher(
             VoucherTemplate template,
-            double discountAmount,
+            BigDecimal discountAmount,
             String guestSessionId,
             String emailHash,
             String phoneHash
     ) {
         public static AppliedGuestVoucher none() {
-            return new AppliedGuestVoucher(null, 0.0, null, null, null);
+            return new AppliedGuestVoucher(null, BigDecimal.ZERO, null, null, null);
         }
 
         public boolean applied() {
-            return template != null && discountAmount > 0;
+            return template != null && discountAmount.signum() > 0;
         }
     }
 }

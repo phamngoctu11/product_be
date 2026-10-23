@@ -3,6 +3,7 @@ package com.example.workflow.dto;
 import com.example.workflow.nume.PaymentAttemptStatus;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 public record PaymentAttemptDTO(
         Long attemptId,
@@ -10,7 +11,7 @@ public record PaymentAttemptDTO(
         Long orderVersion,
         String provider,
         String paymentCode,
-        Double expectedAmount,
+        BigDecimal expectedAmount,
         PaymentAttemptStatus status,
         LocalDateTime openedAt,
         LocalDateTime dueAt,

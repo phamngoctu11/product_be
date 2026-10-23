@@ -8,6 +8,8 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
@@ -16,9 +18,9 @@ public class DashboardService {
     @Transactional(readOnly = true)
     @Cacheable(value = "dashboardStats", key = "'summary'", unless = "#result == null")
     public DashboardStatsDTO getDashboardStats() {
-        Double totalRevenue = orderRepository.calculateTotalRevenue(OrderStatus.DELIVERED);
+        BigDecimal totalRevenue = orderRepository.calculateTotalRevenue(OrderStatus.DELIVERED);
         if (totalRevenue == null) {
-            totalRevenue = 0.0;
+            totalRevenue = BigDecimal.ZERO;
         }
 
         return new DashboardStatsDTO(
