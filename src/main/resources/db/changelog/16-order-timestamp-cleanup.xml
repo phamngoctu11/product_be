@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="16-drop-orders-end-order-time" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="end_order_time"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="end_order_time"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-order-lookup-token-created-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="order_lookup_token_created_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="order_lookup_token_created_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-order-lookup-token-revoked-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="order_lookup_token_revoked_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="order_lookup_token_revoked_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-guest-workflow-started-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="guest_workflow_started_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="guest_workflow_started_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-manager-approved-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="manager_approved_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="manager_approved_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-manager-rejected-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="manager_rejected_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="manager_rejected_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-user-submitted-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="user_submitted_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="user_submitted_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-order-accepted-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="order_accepted_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="order_accepted_at"/>
+    </changeSet>
+    <changeSet id="16-drop-orders-ready-to-ship-at" author="codex">
+        <preConditions onFail="MARK_RAN"><and><tableExists tableName="orders"/><columnExists tableName="orders" columnName="ready_to_ship_at"/></and></preConditions>
+        <dropColumn tableName="orders" columnName="ready_to_ship_at"/>
+    </changeSet>
+</databaseChangeLog>

@@ -8,6 +8,7 @@ import com.example.workflow.dto.UpdateCustomRequest;
 import com.example.workflow.entity.CustomRequest;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderContactSnapshot;
+import com.example.workflow.entity.ProductType;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
@@ -18,6 +19,7 @@ import com.example.workflow.mapper.CustomRequestSubmissionMapper;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.ProductTypeRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.factory.CustomOrderFactory;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -25,6 +27,8 @@ import com.example.workflow.util.JsonUtils;
 import com.example.workflow.util.PageableUtils;
 import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.workflow.dto.ProductTypeFieldDTO;
+import com.example.workflow.nume.ProductTypeFieldKind;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +63,7 @@ public class CustomRequestService {
     private final DurableRequestExecutor durableRequests;
     private final DomainEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ProductTypeRepository productTypeRepository;
 
     public CustomRequestDTO create(CreateCustomRequest request, String idempotencyKey) {
         requireCreateRequest(request);
@@ -71,6 +76,8 @@ public class CustomRequestService {
         canonical.put("description", normalizeDescription(request.description()));
         canonical.put("imageUrls", normalizeImageUrls(request.imageUrls()));
         canonical.put("quantity", request.quantity());
+        canonical.put("productTypeId", request.productTypeId());
+        canonical.put("fieldValues", request.fieldValues());
         String result = durableRequests.execute(
                 "custom-request:create:" + ownerId,
                 idempotencyKey,
@@ -107,6 +114,7 @@ public class CustomRequestService {
         draft.setDescription(normalizeDescription(request.description()));
         draft.setImageUrls(normalizeImageUrls(request.imageUrls()));
         draft.setQuantity(requirePositive(request.quantity()));
+        applyProductType(draft, draft.getProductType() == null ? null : draft.getProductType().getId(), request.fieldValues());
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
 
@@ -160,6 +168,7 @@ public class CustomRequestService {
         draft.setDescription(normalizeDescription(request.description()));
         draft.setImageUrls(normalizeImageUrls(request.imageUrls()));
         draft.setQuantity(requirePositive(request.quantity()));
+        applyProductType(draft, request.productTypeId(), request.fieldValues());
         return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
     }
 
@@ -209,6 +218,60 @@ public class CustomRequestService {
         normalizeDescription(draft.getDescription());
         normalizeImageUrls(draft.getImageUrls());
         requirePositive(draft.getQuantity());
+        if (draft.getProductType() == null || draft.getProductTypeSchemaSnapshot() == null) {
+            throw invalid("Product type must be selected before submitting.");
+        }
+        validateFieldValues(readProductTypeFields(draft.getProductTypeSchemaSnapshot()), readFieldValues(draft.getFieldValuesJson()));
+    }
+
+    private void applyProductType(CustomRequest draft, Long typeId, Map<String, Object> values) {
+        if (typeId == null) throw invalid("Product type is required.");
+        boolean keepExistingSnapshot = draft.getProductType() != null && typeId.equals(draft.getProductType().getId())
+                && draft.getProductTypeSchemaSnapshot() != null;
+        ProductType type = keepExistingSnapshot ? draft.getProductType() : productTypeRepository.findById(typeId)
+                .filter(ProductType::isActive)
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_TYPE_NOT_FOUND));
+        String schema = keepExistingSnapshot ? draft.getProductTypeSchemaSnapshot() : type.getFieldsJson();
+        List<ProductTypeFieldDTO> fields = readProductTypeFields(schema);
+        validateFieldValues(fields, values == null ? Map.of() : values);
+        draft.setProductType(type);
+        if (!keepExistingSnapshot) {
+            draft.setProductTypeSchemaSnapshot(schema);
+        }
+        draft.setFieldValuesJson(JsonUtils.write(objectMapper, values == null ? Map.of() : values, "custom field values"));
+    }
+
+    private void validateFieldValues(List<ProductTypeFieldDTO> fields, Map<String, Object> values) {
+        for (ProductTypeFieldDTO field : fields) {
+            Object value = values.get(field.code());
+            if (value == null || value instanceof String text && text.isBlank()
+                    || value instanceof List<?> list && list.isEmpty())
+                throw invalid("TrÆ°á»ng báº¯t buá»™c chÆ°a Ä‘Æ°á»£c nháº­p: " + field.label());
+            boolean valid = switch (field.kind()) {
+                case TEXT -> value instanceof String text && (field.maxLength() == null || text.length() <= field.maxLength());
+                case NUMBER -> value instanceof Number number
+                        && (field.minimum() == null || new java.math.BigDecimal(number.toString()).compareTo(field.minimum()) >= 0)
+                        && (field.maximum() == null || new java.math.BigDecimal(number.toString()).compareTo(field.maximum()) <= 0);
+                case BOOLEAN -> value instanceof Boolean;
+                case SINGLE_SELECT -> value instanceof String selected && field.options() != null && field.options().contains(selected);
+                case MULTI_SELECT -> value instanceof List<?> selected && field.options() != null
+                        && selected.stream().allMatch(option -> option instanceof String text && field.options().contains(text));
+            };
+            if (!valid) throw invalid("Giá trị không hợp lệ cho trường: " + field.label());
+        }
+        if (values.keySet().stream().anyMatch(key -> fields.stream().noneMatch(field -> field.code().equals(key))))
+            throw invalid("Có giá trị trường không thuộc loại sản phẩm đã chọn.");
+    }
+
+    private Map<String, Object> readFieldValues(String json) {
+        if (json == null) return Map.of();
+        try { return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {}); }
+        catch (Exception exception) { throw invalid("Không thể đọc giá trị trường đã lưu."); }
+    }
+
+    private List<ProductTypeFieldDTO> readProductTypeFields(String json) {
+        try { return objectMapper.readValue(json == null ? "[]" : json, new com.fasterxml.jackson.core.type.TypeReference<>() {}); }
+        catch (Exception exception) { throw invalid("Không thể đọc cấu hình trường của loại sản phẩm."); }
     }
 
     private String requireActiveOwnerId() {

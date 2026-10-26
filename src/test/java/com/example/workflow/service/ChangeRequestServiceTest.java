@@ -243,7 +243,6 @@ class ChangeRequestServiceTest {
     private OrderItem item() {
         OrderItem value = new OrderItem();
         value.setId(20L);
-        value.setHandmade(true);
         value.setProductionStatus(OrderItemProductionStatus.INITIAL_IN_PROGRESS);
         value.setSpecVersion(1);
         value.setSpecSnapshot("{\"description\":\"Original\",\"quantity\":2,\"unitPrice\":100}");

@@ -16,7 +16,6 @@ class ProductionDomainModelTest {
         OrderItem item = new OrderItem();
 
         assertThat(order.getProductionStatus()).isEqualTo(OrderProductionStatus.NOT_REQUIRED);
-        assertThat(item.isHandmade()).isFalse();
         assertThat(item.getProductionStatus()).isEqualTo(OrderItemProductionStatus.NOT_REQUIRED);
         assertThat(item.getProductionCheckpoints()).isEmpty();
     }

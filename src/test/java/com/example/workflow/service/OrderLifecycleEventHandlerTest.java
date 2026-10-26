@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.entity.Order;
+import com.example.workflow.entity.OrderAgreement;
 import com.example.workflow.entity.OrderItem;
 import com.example.workflow.entity.User;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
@@ -21,6 +22,7 @@ import com.example.workflow.nume.AssignmentSource;
 import com.example.workflow.nume.ProductionCheckpointStage;
 import com.example.workflow.nume.ProductionDecisionType;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.OrderAgreementRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +46,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OrderLifecycleEventHandlerTest {
     @Mock private OrderRepository orderRepository;
+    @Mock private OrderAgreementRepository orderAgreementRepository;
     @Mock private EmailService emailService;
     @Mock private NotificationService notificationService;
     @Mock private ApplicationCacheService applicationCacheService;
@@ -58,6 +61,7 @@ class OrderLifecycleEventHandlerTest {
     void setUp() {
         handler = new OrderLifecycleEventHandler(
                 orderRepository,
+                orderAgreementRepository,
                 emailService,
                 notificationService,
                 applicationCacheService,
@@ -147,11 +151,10 @@ class OrderLifecycleEventHandlerTest {
     }
 
     @Test
-    void guestCatalogWithLegacyHandmadeFalseStillStartsMandatoryAssignmentWorkflow() {
+    void guestCatalogOrderStartsMandatoryAssignmentWorkflow() {
         Order order = guestOrder();
         order.setOrderType(OrderType.CATALOG);
         OrderItem legacyItem = new OrderItem();
-        legacyItem.setHandmade(false);
         order.setItems(List.of(legacyItem));
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
         when(orderWorkflowService.startAfterOrderCreated(
@@ -347,14 +350,12 @@ class OrderLifecycleEventHandlerTest {
     @Test
     void readyToShipEmailsAndNotifiesUserWithoutAdvancingToShipping() {
         Order order = userOrder();
-        LocalDateTime readyAt = LocalDateTime.of(2026, 10, 13, 16, 0);
         order.setStatus(OrderStatus.READY_TO_SHIP);
-        order.setReadyToShipAt(readyAt);
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
 
-        handler.handleOrderReadyToShip(new OrderReadyToShipEvent(10L, 70L, "manager-1", readyAt));
+        handler.handleOrderReadyToShip(new OrderReadyToShipEvent(10L, 70L, "manager-1"));
 
-        verify(orderWorkflowService).completeProduction(10L, readyAt);
+        verify(orderWorkflowService).completeProduction(10L);
         verify(emailService).sendReadyToShipEmail(
                 "user@example.com", "User One", 10L, "http://localhost:4200/orders/10"
         );

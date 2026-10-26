@@ -119,22 +119,16 @@ public class ApplicationCacheService {
         publishDeferredCacheEvictions("product created", wishlistEntries());
     }
 
+    public void evictCatalogTaxonomyChanged() {
+        optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
+        optionalCacheService.clearAfterCommit(CacheNames.PRODUCT);
+    }
+
     public void evictProductUpdated(Long productId) {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
         optionalCacheService.evictAfterCommit(CacheNames.PRODUCT, productId);
         publishDeferredCacheEvictions(
                 "product updated",
-                CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS),
-                CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS),
-                CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS_BATCH)
-        );
-    }
-
-    public void evictProductBasicInfoUpdated(Long productId) {
-        optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
-        optionalCacheService.evictAfterCommit(CacheNames.PRODUCT, productId);
-        publishDeferredCacheEvictions(
-                "product basic info updated",
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_PRODUCTS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS),
                 CacheEvictionEntry.allEntries(CacheNames.WISHLIST_STATUS_BATCH)

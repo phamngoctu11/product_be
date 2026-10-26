@@ -12,7 +12,7 @@ import com.example.workflow.event.EventTypes;
 import com.example.workflow.event.payload.OrderCreatedEvent;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.mapper.CustomRequestMapperImpl;
+import com.example.workflow.mapper.CustomRequestMapper;
 import com.example.workflow.mapper.CustomRequestSubmissionMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.OrderItemProductionStatus;
@@ -23,6 +23,8 @@ import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.ProductTypeRepository;
+import com.example.workflow.entity.ProductType;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.service.factory.CustomOrderFactory;
@@ -39,6 +41,7 @@ import org.springframework.http.HttpStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +62,7 @@ class CustomRequestServiceTest {
     @Mock private OrderRepository orderRepository;
     @Mock private DurableRequestExecutor durableRequests;
     @Mock private DomainEventPublisher eventPublisher;
+    @Mock private ProductTypeRepository productTypeRepository;
 
     private ObjectMapper objectMapper;
     private CustomRequestService service;
@@ -71,13 +75,16 @@ class CustomRequestServiceTest {
                 userService,
                 customRequestRepository,
                 orderRepository,
-                new CustomRequestMapperImpl(),
+                new CustomRequestMapper(objectMapper),
                 new CustomRequestSubmissionMapperImpl(),
                 new CustomOrderFactory(objectMapper),
                 durableRequests,
                 eventPublisher,
-                objectMapper
+                objectMapper,
+                productTypeRepository
         );
+        ProductType type = new ProductType(); type.setId(5L); type.setCode("gom"); type.setName("Đồ gốm"); type.setFieldsJson("[]");
+        lenient().when(productTypeRepository.findById(5L)).thenReturn(Optional.of(type));
         lenient().when(userService.requireActiveUser(anyString())).thenReturn(owner());
     }
 
@@ -90,7 +97,7 @@ class CustomRequestServiceTest {
                 new CreateCustomRequest(
                         "  nhẫn bạc khắc tên  ",
                         List.of(" https://cdn.example.com/image-1.jpg "),
-                        2
+                        2, 5L, Map.of()
                 ),
                 null
         );
@@ -155,7 +162,6 @@ class CustomRequestServiceTest {
             assertThat(item.getProductVariant()).isNull();
             assertThat(item.getPrice()).isNull();
             assertThat(item.getQuantity()).isEqualTo(2);
-            assertThat(item.isHandmade()).isTrue();
             assertThat(item.getProductionStatus()).isEqualTo(OrderItemProductionStatus.WAITING_ASSIGNMENT);
         });
         JsonNode snapshot = objectMapper.readTree(order.getItems().getFirst().getSpecSnapshot());
@@ -229,11 +235,11 @@ class CustomRequestServiceTest {
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
         String accepted = "word ".repeat(4_000);
 
-        CustomRequestDTO result = service.create(new CreateCustomRequest(accepted, List.of(), 1), null);
+        CustomRequestDTO result = service.create(new CreateCustomRequest(accepted, List.of(), 1, 5L, Map.of()), null);
 
         assertThat(result.description()).isEqualTo(accepted.trim());
         assertThatThrownBy(() -> service.create(
-                new CreateCustomRequest("word ".repeat(4_001), List.of(), 1), null
+                new CreateCustomRequest("word ".repeat(4_001), List.of(), 1, 5L, Map.of()), null
         )).isInstanceOfSatisfying(AppException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ConstantErrorCode.CUSTOM_REQUEST_INVALID));
     }
@@ -243,10 +249,10 @@ class CustomRequestServiceTest {
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
 
         assertThatThrownBy(() -> service.create(
-                new CreateCustomRequest("description", List.of("/image.jpg"), 1), null
+                new CreateCustomRequest("description", List.of("/image.jpg"), 1, 5L, Map.of()), null
         )).isInstanceOf(AppException.class);
         assertThatThrownBy(() -> service.create(
-                new CreateCustomRequest("description", List.of("file:///tmp/image.jpg"), 1), null
+                new CreateCustomRequest("description", List.of("file:///tmp/image.jpg"), 1, 5L, Map.of()), null
         )).isInstanceOf(AppException.class);
     }
 
@@ -258,7 +264,7 @@ class CustomRequestServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(
-                new CreateCustomRequest("description", List.of(), 1), null
+                new CreateCustomRequest("description", List.of(), 1, 5L, Map.of()), null
         )).isInstanceOf(AppException.class);
 
         verifyNoInteractions(customRequestRepository);
@@ -266,6 +272,11 @@ class CustomRequestServiceTest {
 
     private CustomRequest draft() {
         CustomRequest draft = new CustomRequest();
+        ProductType type = new ProductType();
+        type.setId(5L); type.setCode("gom"); type.setName("Đồ gốm"); type.setFieldsJson("[]");
+        draft.setProductType(type);
+        draft.setProductTypeSchemaSnapshot("[]");
+        draft.setFieldValuesJson("{}");
         draft.setId(41L);
         draft.setVersion(2L);
         draft.setOwnerId("user-1");

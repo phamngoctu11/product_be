@@ -153,6 +153,11 @@ for data in [
     ("Entity", "InventoryTransaction.java", "entity", "LOẠI SAU MIGRATION", "13", "Ngoài phạm vi", "Không thuộc hệ thống made-to-order mới; chỉ xóa sau khi không còn consumer.", "")
 ]: obj(*data)
 
+for data in [
+    ("Entity", "ProductType.java", "entity", "TẠO MỚI", "14", "Catalog/WF01", "Cấu hình loại sản phẩm do manager quản lý; định nghĩa các trường custom có kiểu dữ liệu, bắt buộc/tùy chọn và lựa chọn hợp lệ.", "Product, CustomRequest"),
+    ("Entity", "ProductTag.java", "entity", "TẠO MỚI", "14", "Catalog", "Thẻ chuẩn hóa do manager quản lý, dùng phân loại và lọc catalog; tách biệt với loại sản phẩm custom.", "Product"),
+]: obj(*data)
+
 for name, status, phase, purpose in [
     ("OrderRepository.java", "SỬA", "03-12", "Khóa Order, query theo actor/status và optimistic version."),
     ("OrderItemRepository.java", "SỬA", "04,10,12", "Truy vấn toàn bộ dòng hàng và checkpoint/receipt theo Order."),
@@ -170,6 +175,8 @@ for name, status, phase, purpose in [
     ("CartRepository.java", "SỬA", "04", "Khóa giỏ USER/Guest trong checkout."),
     ("CartItemRepository.java", "SỬA", "04", "Xóa đúng các item đã checkout."),
     ("ProductRepository.java", "SỬA", "04", "Catalog availability/madeDay."),
+    ("ProductTypeRepository.java", "TẠO MỚI", "14", "Tìm cấu hình loại sản phẩm đang hoạt động và quản lý phiên bản."),
+    ("ProductTagRepository.java", "TẠO MỚI", "14", "Tra cứu thẻ chuẩn hóa theo trạng thái và tên."),
     ("ProductVariantRepository.java", "SỬA", "04", "Khóa/đọc giá server và trạng thái variant."),
     ("UserVoucherRepository.java", "SỬA", "04,08", "Consume/restore voucher USER nguyên tử."),
     ("GuestVoucherUsageRepository.java", "SỬA", "04,06", "Quota guest nguyên tử, giữ anti-spam khi hoàn quota."),
@@ -177,6 +184,8 @@ for name, status, phase, purpose in [
 
 for name, status, phase, wf, purpose, dep in [
     ("ProductService.java", "SỬA", "04", "Catalog", "Quản lý mẫu catalog, madeDay và availability nhận Order mới; không quản lý tồn thành phẩm.", "ProductRepository"),
+    ("ProductTypeService.java", "TẠO MỚI", "14", "Catalog/WF01", "Manager cấu hình schema động và validate trường của loại sản phẩm.", "ProductTypeRepository"),
+    ("ProductTagService.java", "TẠO MỚI", "14", "Catalog", "Quản lý thẻ phân loại và kiểm tra thẻ hoạt động.", "ProductTagRepository"),
     ("CatalogDurationCalculator.java", "TẠO MỚI", "04", "Checkout", "Tính thời lượng từng OrderItem đúng công thức và làm tròn đã chốt.", "Không truy cập DB"),
     ("ProductionCalendarService.java", "TẠO MỚI", "04,09", "WF04", "Cộng số ngày sản xuất, không tính ngày bắt đầu, Chủ nhật và ngày nghỉ cấu hình.", "Holiday source"),
     ("CartService.java", "SỬA", "04", "Checkout", "Chỉ quản lý thêm/sửa/xóa/đọc giỏ; tách checkout ra service riêng.", "CartRepository"),
@@ -203,6 +212,8 @@ for name, status, phase, wf, purpose, dep in [
 
 for name, status, phase, purpose in [
     ("ProductController.java", "SỬA", "04", "API catalog và madeDay/availability."),
+    ("ProductTypeController.java", "TẠO MỚI", "14", "API công khai danh sách loại active; manager quản lý schema."),
+    ("ProductTagController.java", "TẠO MỚI", "14", "API danh sách thẻ công khai; manager quản lý thẻ."),
     ("CartController.java", "SỬA", "04", "API giỏ; bỏ userId do client tự nhận và route approve legacy."),
     ("CheckoutController.java", "TẠO MỚI", "04", "Checkout USER từ JWT."),
     ("GuestCheckoutController.java", "SỬA", "04", "Checkout Guest COD."),
@@ -235,10 +246,12 @@ dto_rows = [
     ["CheckoutRequest.java", "Request", "TẠO MỚI", "04", "selectedVariantIds, userVoucherId, paymentMethod, note", "USER checkout; actor lấy từ JWT."],
     ["GuestCheckoutRequest.java", "Request", "SỬA", "04", "selectedVariantIds, contact, guestVoucherCode, note", "Guest chỉ CATALOG + COD."],
     ["CheckoutResponseDTO.java", "Response", "SỬA", "04", "orderId, status, version, totals, paymentMethod", "Không trả payment URL trước review."],
-    ["CreateCustomRequest.java", "Request", "SỬA", "05", "description <= 4.000 từ, imageUrls: string[], quantity", "Tạo draft; imageUrls có thể rỗng, mỗi URL dùng HTTP/HTTPS."],
-    ["UpdateCustomRequest.java", "Request", "SỬA", "05", "expectedVersion, description, imageUrls, quantity", "Chỉ draft owner; cùng validation create."],
+    ["CreateCustomRequest.java", "Request", "SỬA", "05,14", "description <= 4.000 từ, imageUrls: string[], quantity, productTypeId, fieldValues", "Tạo draft; giá trị trường được validate theo schema của loại sản phẩm."],
+    ["UpdateCustomRequest.java", "Request", "SỬA", "05,14", "expectedVersion, description, imageUrls, quantity, productTypeId, fieldValues", "Chỉ draft owner; thay loại sẽ chụp schema phiên bản hiện hành."],
     ["SubmitCustomRequest.java", "Request", "TẠO MỚI", "05", "expectedVersion, contact/note", "Idempotency-Key ở header."],
-    ["CustomRequestDTO.java", "Response", "TẠO MỚI", "05", "draft, status, orderId, version", "Không lộ draft user khác."],
+    ["CustomRequestDTO.java", "Response", "SỬA", "05,14", "draft, productType, schema snapshot, fieldValues, status, orderId, version", "Không lộ draft user khác; snapshot giữ nguyên khi manager sửa cấu hình."],
+    ["ProductTypeDTO.java / ProductTypeFieldDTO.java", "Response/Model", "TẠO MỚI", "14", "code, name, active, fields(code, kind, required, options, bounds)", "Schema biểu mẫu custom do manager kiểm soát."],
+    ["ProductTagDTO.java", "Response", "TẠO MỚI", "14", "id, code, name, active", "Danh mục thẻ dùng lọc catalog."],
     ["CustomRequestSubmissionDTO.java", "Response", "TẠO MỚI", "05", "draftId, orderId, version, orderType, status, message", "Không trả giá custom chưa thỏa thuận."],
     ["ReviewOrderRequest.java", "Request", "TẠO MỚI", "07", "decision, reason, optional staffId, expectedVersion", "Manager review."],
     ["AssignOrderRequest.java", "Request", "TẠO MỚI", "07", "staffId, expectedVersion", "Manager assign."],
@@ -270,7 +283,10 @@ dto_rows = [
 
 
 endpoint_rows = [
-    ["CAT-01", "Catalog", "GET", "/api/products", "PUBLIC", "Tra cứu danh sách catalog/filter; chỉ hiển thị dữ liệu công khai.", "Query params", "ProductDTO page", "ProductService", "-", "GIỮ"],
+    ["CAT-01", "Catalog", "GET", "/api/products", "PUBLIC", "Tra cứu catalog theo từ khóa, giá và tagId thực; chỉ hiển thị dữ liệu công khai.", "keyword, minPrice, maxPrice, tagId", "ProductDTO page", "ProductService", "Cache key chứa tagId", "SỬA"],
+    ["CAT-05", "Catalog", "GET", "/api/tags", "PUBLIC", "Danh sách tag active dùng làm danh mục và bộ lọc catalog.", "-", "ProductTagDTO[]", "ProductTagService", "-", "TẠO MỚI"],
+    ["CAT-06", "Catalog", "GET", "/api/product-types", "PUBLIC", "Danh sách loại sản phẩm active và schema trường custom.", "-", "ProductTypeDTO[]", "ProductTypeService", "-", "TẠO MỚI"],
+    ["CAT-07", "Catalog", "POST/PUT", "/api/tags, /api/product-types", "MANAGER/ADMIN", "Tạo/cập nhật tag và schema; optimistic version khi cập nhật.", "SaveProductTagRequest / SaveProductTypeRequest", "DTO tương ứng", "ProductTagService/ProductTypeService", "expectedVersion", "TẠO MỚI"],
     ["CAT-02", "Catalog", "GET", "/api/products/{id}", "PUBLIC", "Xem chi tiết catalog và madeDay tham khảo.", "path id", "ProductDTO", "ProductService", "-", "GIỮ"],
     ["CAT-03", "Catalog", "POST", "/api/products", "MANAGER", "Tạo catalog; bắt buộc madeDay hữu hạn >= 2.", "CreateProductRequest", "ProductDTO", "ProductService", "Idempotency-Key khuyến nghị", "SỬA"],
     ["CAT-04", "Catalog", "PUT", "/api/products/{id}", "MANAGER", "Cập nhật catalog; giá mới không sửa ngược OrderItem snapshot.", "UpdateProductRequest", "ProductDTO", "ProductService", "expectedVersion", "SỬA"],
@@ -280,10 +296,10 @@ endpoint_rows = [
     ["CART-04", "Cart", "DELETE", "/api/cart/items/{variantId}", "USER/GUEST", "Xóa dòng khỏi đúng giỏ của actor.", "path", "204", "CartService", "-", "GIỮ"],
     ["CO-01", "Checkout", "POST", "/api/checkout", "USER", "Checkout các item được chọn, áp voucher, snapshot và tạo PENDING_APPROVAL; chưa tạo payment.", "CheckoutRequest", "CheckoutResponseDTO", "CheckoutService", "Bắt buộc Idempotency-Key", "TẠO MỚI"],
     ["CO-02", "Checkout", "POST", "/api/guest-checkout", "GUEST", "Checkout CATALOG COD, contact bắt buộc, tạo token link và PENDING_APPROVAL.", "GuestCheckoutRequest", "CheckoutResponseDTO", "CheckoutService", "Bắt buộc Idempotency-Key", "SỬA"],
-    ["CR-01", "WF01", "POST", "/api/custom-requests", "USER", "Tạo một draft custom mới.", "CreateCustomRequest", "CustomRequestDTO", "CustomRequestService", "Idempotency-Key khuyến nghị", "TẠO MỚI"],
+    ["CR-01", "WF01", "POST", "/api/custom-requests", "USER", "Tạo draft custom theo productTypeId; backend validate fieldValues theo schema active.", "description, imageUrls, quantity, productTypeId, fieldValues", "CustomRequestDTO", "CustomRequestService", "Idempotency-Key khuyến nghị", "SỬA"],
     ["CR-02", "WF01", "GET", "/api/custom-requests", "USER", "Danh sách các draft/yêu cầu custom của chính USER.", "page/status", "CustomRequestDTO page", "CustomRequestService", "-", "TẠO MỚI"],
     ["CR-03", "WF01", "GET", "/api/custom-requests/{id}", "USER", "Xem draft của chính mình.", "path", "CustomRequestDTO", "CustomRequestService", "-", "TẠO MỚI"],
-    ["CR-04", "WF01", "PUT", "/api/custom-requests/{id}", "USER", "Cập nhật draft chưa submit.", "UpdateCustomRequest", "CustomRequestDTO", "CustomRequestService", "expectedVersion", "TẠO MỚI"],
+    ["CR-04", "WF01", "PUT", "/api/custom-requests/{id}", "USER", "Cập nhật draft chưa submit; lưu schema snapshot và fieldValues.", "UpdateCustomRequest", "CustomRequestDTO", "CustomRequestService", "expectedVersion", "SỬA"],
     ["CR-05", "WF01", "DELETE", "/api/custom-requests/{id}", "USER", "Xóa draft chưa submit.", "path + expectedVersion", "204", "CustomRequestService", "Idempotency-Key", "TẠO MỚI"],
     ["CR-06", "WF01", "POST", "/api/custom-requests/{id}/submit", "USER", "Chụp snapshot draft thành CUSTOM Order PENDING_APPROVAL đúng một lần.", "SubmitCustomRequest", "CustomRequestSubmissionDTO", "CustomRequestService", "Bắt buộc Idempotency-Key", "TẠO MỚI"],
     ["ORD-01", "Order query", "GET", "/api/orders/me", "USER", "Danh sách Order của USER theo filter trạng thái.", "page/status/type", "OrderListDTO page", "OrderQueryService", "-", "SỬA"],
@@ -335,9 +351,13 @@ entity_fields = {
         ["userId / user", "Long/User", "N", "null với guest", "Chủ tài khoản"], ["guestSessionId", "String", "N", "guest only", "Không phải quyền tra cứu Order"],
         ["contactSnapshot", "Embedded", "Y", "server snapshot", "Liên hệ tại checkout"], ["assignedStaffId", "Long", "N", "history retained", "Staff đã phụ trách"],
         ["totalPrice", "double", "Y", ">=0", "Tổng trước voucher"], ["discountAmount", "Double", "Y", ">=0", "Giảm giá"], ["finalPrice", "Double", "N", "CUSTOM pre-agreement=null", "Giá cuối"],
-        ["managerApprovedAt", "LocalDateTime", "N", "server time", "Manager duyệt"], ["confirmationDueAt", "LocalDateTime", "N", "+24h CUSTOM", "Hạn gửi form"],
-        ["productionStartedAt", "LocalDateTime", "N", "ORDER_CREATING", "Mốc tính deadline"], ["readyToShipAt", "LocalDateTime", "N", "checkpoint 2 pass", "Sẵn sàng giao"],
-        ["cancelledAt/reason/source", "metadata", "N", "CANCELLED", "Audit hủy"], ["guestTokenHash/scopes/expiry/revoked", "security", "N", "guest only", "Quyền link email"],
+        ["startOrderTime", "LocalDateTime", "Y", "server time", "Created date shown in order history and used to sort open work"],
+        ["confirmationDueAt", "LocalDateTime", "N", "+24h CUSTOM", "Automatic cancellation deadline"],
+        ["productionStartedAt", "LocalDateTime", "N", "ORDER_CREATING", "Production deadline anchor"],
+        ["shippedAt", "LocalDateTime", "N", "SHIPPING", "Expected delivery estimate anchor"],
+        ["deliveredAt", "LocalDateTime", "N", "DELIVERED", "Delivery history and reporting"],
+        ["cancelledAt", "LocalDateTime", "N", "CANCELLED", "Cancellation history/result"],
+        ["orderLookupTokenExpiresAt", "LocalDateTime", "N", "guest token policy", "Guest-link security expiry"],
     ],
     "OrderItem": [
         ["id", "Long", "Y", "PK", "Định danh dòng hàng"], ["orderId/order", "Long/Order", "Y", "FK", "Order cha"],
@@ -348,7 +368,8 @@ entity_fields = {
         ["computedCompletionAt", "LocalDateTime", "N", "at ORDER_CREATING", "Hạn item"], ["durationRuleVersion", "String", "N", "versioned", "Truy vết công thức"],
         ["exportedQuantity", "Integer", "N", "0..quantity", "Bàn giao"], ["receivedQuantity", "Integer", "N", "0..exported", "Thực nhận"],
     ],
-    "CustomRequest": [["id", "Long", "Y", "PK", "Draft"], ["version", "Long", "Y", "@Version", "Concurrency"], ["userId", "String", "Y", "owner", "Chỉ USER"], ["status", "CustomRequestStatus", "Y", "DRAFT/SUBMITTED", "Vòng đời request"], ["description", "String/LONGTEXT", "Y", "1..4.000 từ", "Mô tả sản phẩm custom"], ["quantity", "int", "Y", ">0", "Số lượng"], ["imageUrls", "List<String>/JSON", "Y", "list có thể rỗng; URL HTTP(S)", "Ảnh minh họa, không fetch server-side"], ["submittedOrderId", "Long", "N", "unique after submit", "Chống tạo nhiều Order"]],
+    "CustomRequest": [["id", "Long", "Y", "PK", "Draft"], ["version", "Long", "Y", "@Version", "Concurrency"], ["userId", "String", "Y", "owner", "Chỉ USER"], ["status", "CustomRequestStatus", "Y", "DRAFT/SUBMITTED", "Vòng đời request"], ["description", "String/LONGTEXT", "Y", "1..4.000 từ (giữ quy tắc hiện tại)", "Yêu cầu tự do của khách; không giới hạn vào khuôn trường schema"], ["quantity", "int", "Y", ">0", "Số lượng"], ["imageUrls", "List<String>/JSON", "Y", "list có thể rỗng; URL HTTP(S)", "Ảnh minh họa, không fetch server-side"], ["productTypeId", "ProductType", "Y", "loại active", "Phân khúc custom và schema áp dụng"], ["productTypeVersion/schemaSnapshot", "Long/LONGTEXT", "Y", "immutable draft schema", "Không đổi theo cấu hình manager cập nhật sau đó"], ["fieldValues", "Map<String,Object>/JSON", "Y", "validate theo schema snapshot", "Giá trị động có kiểu dữ liệu"], ["submittedOrderId", "Long", "N", "unique after submit", "Chống tạo nhiều Order"]],
+    "ProductType & ProductTag": [["ProductType.id/version", "Long", "Y", "PK/@Version", "Loại sản phẩm"], ["ProductType.code/name", "String", "Y", "unique code", "Mã và tên hiển thị"], ["ProductType.fieldSchema", "JSON/LONGTEXT", "Y", "TEXT/NUMBER/SINGLE_SELECT/MULTI_SELECT/BOOLEAN", "Các trường required, options, min/max và hint"], ["ProductType.active", "boolean", "Y", "manager-controlled", "Ẩn loại khỏi form mới; draft đã chụp schema vẫn giữ"], ["ProductTag.id/version", "Long", "Y", "PK/@Version", "Tag catalog"], ["ProductTag.code/name", "String", "Y", "unique", "Danh mục tag chuẩn hóa"], ["ProductTag.active", "boolean", "Y", "manager-controlled", "Ngừng tag sẽ loại khỏi bộ lọc"], ["Product.assignedTags", "ManyToMany", "N", "product_tag_links", "Tag thật dùng lọc catalog; cột legacy tags giữ tương thích"]],
     "OrderAssignment": [["id", "Long", "Y", "PK", "Assignment"], ["orderId", "Long", "Y", "unique active", "Order"], ["staffId", "Long", "Y", "unique active", "Staff"], ["source", "AssignmentSource", "Y", "MANAGER_ASSIGN/SELF_CLAIM", "Nguồn"], ["status", "AssignmentStatus", "Y", "ACTIVE/RELEASED", "Tình trạng"], ["activeOrderId/activeStaffId", "Long", "N", "DB unique", "Khóa nguyên tử"], ["assignedAt/releasedAt", "LocalDateTime", "Y/N", "server time", "Audit"], ["releaseReason", "AssignmentReleaseReason", "N", "QC_PASS/CANCELLED", "Lý do giải phóng"]],
     "OrderAgreement": [["id", "Long", "Y", "PK", "Agreement"], ["orderId", "Long", "Y", "FK", "Order"], ["agreementVersion", "Integer", "Y", "unique/order", "Phiên bản nghiệp vụ"], ["status", "OrderAgreementStatus", "Y", "DRAFT/SUBMITTED/CONFIRMED/REVISION", "Trạng thái"], ["itemSnapshot", "TEXT", "Y", "immutable", "Spec/quantity"], ["subtotal/discount/finalPrice", "Double", "N", "custom pre-confirm=null", "Giá đã trao đổi"], ["deadlineDays", "Integer", "N", ">0", "Số ngày chốt"], ["submittedBy/At", "String/time", "N", "owner user", "Người gửi"], ["confirmedBy/At", "String/time", "N", "assigned staff", "Người xác nhận"], ["decisionReason", "TEXT", "N", "required on revision", "Lý do"]],
     "PaymentAttempt": [["id", "Long", "Y", "PK", "Attempt"], ["version", "Long", "Y", "@Version", "Concurrency"], ["orderId", "Long", "Y", "FK", "Order"], ["provider", "String", "Y", "MOMO", "Nhà cung cấp"], ["requestReference", "String", "Y", "unique/provider", "Idempotency request"], ["providerTransactionId", "String", "N", "unique/provider", "Id giao dịch"], ["expectedAmount", "Double", "Y", "=Order.finalPrice", "Tiền kỳ vọng"], ["status", "PaymentAttemptStatus", "Y", "PENDING/PAID/FAILED/EXPIRED", "Kết quả"], ["openedAt/dueAt/paidAt", "LocalDateTime", "Y/Y/N", "due=+1h", "Mốc payment"], ["providerResult", "TEXT", "N", "protected", "Payload phục vụ audit"], ["reconciliationRequired", "boolean", "Y", "false", "Callback muộn/xung đột"]],
@@ -393,6 +414,8 @@ wf_rows = [
 ]
 
 plan_rows = [
+    ["16", "Order timestamp cleanup", "IMPLEMENTED", "Backend compile and frontend build passed; test compilation still has existing BigDecimal fixture errors", "Migration 16; remove redundant Order timestamps and keep operational/security deadlines"],
+    ["14", "ProductType, Tag và custom fields động", "IMPLEMENTED", "Chờ test API/MySQL và đồng bộ tiếp acceptance tests", "docs/implementation/14-product-type-tag-custom-fields.md; catalog filter theo tagId; draft snapshot schema/value"],
     ["01", "Baseline/gap", "VERIFIED", "Không sửa trong tài liệu này", "Báo cáo baseline"],
     ["02", "Domain + Liquibase expand", "VERIFIED", "Giữ changeset đã chạy bất biến", "Entity/enums/migration"],
     ["03", "Consistency infrastructure", "VERIFIED", "Dùng cho mọi command mới", "Transition/idempotency/outbox/token"],
@@ -419,9 +442,15 @@ decision_rows = [
     ["D08", "Bàn giao thiếu", "Có bắt buộc exportedQuantity=ordered quantity hay cho 0..quantity.", "CẦN CHỐT TRƯỚC WF07", "WF07 hiện mô tả khoảng 0..quantity"],
     ["D09", "Custom draft", "Description bắt buộc tối đa 4.000 từ; imageUrls là List<String> HTTP/HTTPS có thể rỗng; không fetch URL trong transaction.", "ĐÃ TRIỂN KHAI 09/10/2026", "Cột legacy giữ tên, nâng LONGTEXT; converter đọc JSON/raw/null"],
     ["D10", "Made-to-order và số loại item", "CATALOG và CUSTOM đều handmade, không có hàng làm sẵn. CUSTOM đúng một OrderItem nhưng quantity có thể lớn; CATALOG có thể nhiều OrderItem, mỗi item có quantity riêng.", "ĐÃ CHỐT 09/10/2026", "Bỏ hasHandmadeItems/NOT_REQUIRED khỏi logic mới; availability chỉ kiểm soát nhận Order mới"],
+    ["D11", "ProductType và Tag", "ProductType do manager định nghĩa schema trường custom (kiểu, bắt buộc/tùy chọn, lựa chọn/giới hạn). Tag là danh mục catalog độc lập để filter sản phẩm; không suy ra schema từ tag.", "ĐÃ CHỐT 24/10/2026", "ProductType/Tag là resource riêng; sản phẩm có thể gắn type và nhiều tag"],
+    ["D12", "Custom request động", "Form có trường theo ProductType nhưng description 4.000 từ hiện tại vẫn là yêu cầu tự do bổ sung. Draft lưu productTypeVersion/schema snapshot và fieldValues; submit chụp cùng vào OrderItem.", "ĐÃ CHỐT 24/10/2026", "Schema đã lưu không đổi nếu manager cập nhật type sau này"],
 ]
 
 test_rows = [
+    ["T14-01", "ProductType schema", "Required/optional, TEXT/NUMBER/SELECT/BOOLEAN, min/max/options", "Yêu cầu thiếu/sai kiểu/ngoài miền bị từ chối; dữ liệu hợp lệ được lưu"],
+    ["T14-02", "Custom schema snapshot", "Manager sửa schema sau khi user lưu draft", "Draft/order vẫn giữ schema snapshot và giá trị đã chọn"],
+    ["T14-03", "Tag filter", "Gắn nhiều tag; gọi GET /api/products?tagId=...", "Chỉ trả sản phẩm có tag active được chọn; cache không trộn kết quả"],
+    ["T14-04", "Manager taxonomy", "Manager tạo/cập nhật type và tag; role khác gọi endpoint quản lý", "Manager thao tác thành công; role không đủ quyền bị từ chối"],
     ["T04-01", "Duration", "madeDay=3; q=1/5/6/10", "5/14/16/22"],
     ["T04-02", "Calendar", "Bắt đầu thứ Bảy, duration=2, không holiday", "Hạn thứ Ba"],
     ["T04-03", "Checkout", "Chọn một phần giỏ", "Chỉ item chọn bị xóa; snapshot đầy đủ"],
@@ -508,7 +537,7 @@ def build_workbook():
     add_sheet(wb, "04_ENTITY_CATALOG", "DANH MỤC ENTITY", "Entity target và chiến lược giữ/sửa/migrate", ["Loại", "Tên file", "Package", "Phân loại", "Phần", "Workflow", "Mục đích", "Phụ thuộc chính"], entity_rows, [14, 35, 16, 22, 14, 18, 80, 30])
 
     for sheet_name, entity_name in [
-        ("E_Order", "Order"), ("E_OrderItem", "OrderItem"), ("E_CustomRequest", "CustomRequest"),
+        ("E_Order", "Order"), ("E_OrderItem", "OrderItem"), ("E_CustomRequest", "CustomRequest"), ("E_ProductType_Tag", "ProductType & ProductTag"),
         ("E_Assignment", "OrderAssignment"), ("E_Agreement", "OrderAgreement"), ("E_Payment", "PaymentAttempt"),
         ("E_Chat", "ChatThread & ChatMessage"), ("E_Production", "Production"), ("E_ChangeReceipt", "ChangeRequest & OrderReceipt"),
     ]:

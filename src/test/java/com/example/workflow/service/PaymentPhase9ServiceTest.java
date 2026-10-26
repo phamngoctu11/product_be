@@ -1,7 +1,6 @@
 package com.example.workflow.service;
 
 import com.example.workflow.dto.PaymentAttemptDTO;
-import com.example.workflow.dto.StartProductionRequest;
 import com.example.workflow.dto.StartProductionResultDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
@@ -221,7 +220,7 @@ class PaymentPhase9ServiceTest {
         when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
         when(assignmentRepository.findActiveByOrderIdForUpdate(10L)).thenReturn(Optional.of(assignment));
         when(transitionService.apply(eq(10L), eq(3L), eq(OrderStatus.ORDER_CREATING),
-                eq("staff-1"), eq("kẹt xe"), anyString(), eq(null))).thenAnswer(invocation -> {
+                eq("staff-1"), eq(null), anyString(), eq(null))).thenAnswer(invocation -> {
             order.setStatus(OrderStatus.ORDER_CREATING);
             order.setVersion(4L);
             order.setProductionStartedAt(startedAt);
@@ -230,18 +229,17 @@ class PaymentPhase9ServiceTest {
         when(orderRepository.saveAndFlush(order)).thenReturn(order);
 
         StartProductionResultDTO first = service.startWithinTransaction(
-                10L, new StartProductionRequest(3L, "  kẹt xe  "), "staff-1"
+                10L, "staff-1"
         );
         LocalDateTime originalDeadline = first.itemDeadlines().getFirst().computedCompletionAt();
 
         assertEquals(OrderStatus.ORDER_CREATING, first.status());
         assertEquals(startedAt, first.productionStartedAt());
         assertEquals(LocalDateTime.of(2026, 10, 13, 9, 30), originalDeadline);
-        assertEquals("kẹt xe", order.getLateStartReason());
         verify(eventPublisher).publishAfterCommit(eq("PRODUCTION_STARTED"), any());
 
         StartProductionResultDTO repeated = service.startWithinTransaction(
-                10L, new StartProductionRequest(3L, "ignored"), "staff-1"
+                10L, "staff-1"
         );
         assertEquals(startedAt, repeated.productionStartedAt());
         assertEquals(originalDeadline, repeated.itemDeadlines().getFirst().computedCompletionAt());
@@ -270,7 +268,7 @@ class PaymentPhase9ServiceTest {
 
         AppException error = assertThrows(
                 AppException.class,
-                () -> service.startWithinTransaction(10L, new StartProductionRequest(3L, null), "staff-1")
+                () -> service.startWithinTransaction(10L, "staff-1")
         );
 
         assertEquals(ConstantErrorCode.ORDER_NOT_READY_FOR_PRODUCTION, error.getErrorCode());
@@ -298,7 +296,7 @@ class PaymentPhase9ServiceTest {
 
         AppException error = assertThrows(
                 AppException.class,
-                () -> service.startWithinTransaction(10L, new StartProductionRequest(3L, null), "staff-1")
+                () -> service.startWithinTransaction(10L, "staff-1")
         );
 
         assertEquals(ConstantErrorCode.ORDER_NOT_READY_FOR_PRODUCTION, error.getErrorCode());

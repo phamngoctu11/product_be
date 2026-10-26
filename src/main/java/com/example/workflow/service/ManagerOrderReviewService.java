@@ -89,8 +89,6 @@ public class ManagerOrderReviewService {
         return new ManagerOrderReviewDetailDTO(
                 orderDetailsAssembler.toDto(order),
                 order.getManagerReviewDecision(),
-                order.getManagerApprovedAt(),
-                order.getManagerRejectedAt(),
                 order.getConfirmationDueAt(),
                 assignmentMapper.toDto(active, staff)
         );
@@ -175,8 +173,6 @@ public class ManagerOrderReviewService {
         order.setApprovedById(manager.getId());
         order.setApprovedByFullName(UserDisplayNameUtils.displayName(manager));
         order.setManagerReviewDecision(ManagerReviewDecision.APPROVED);
-        order.setManagerApprovedAt(approvedAt);
-        order.setManagerRejectedAt(null);
         order.setConfirmationDueAt(order.getOrderType() == OrderType.CUSTOM
                 ? approvedAt.plusHours(CUSTOM_CONFIRMATION_HOURS)
                 : null);
@@ -222,8 +218,6 @@ public class ManagerOrderReviewService {
         order.setApprovedById(manager.getId());
         order.setApprovedByFullName(UserDisplayNameUtils.displayName(manager));
         order.setManagerReviewDecision(ManagerReviewDecision.REJECTED);
-        order.setManagerRejectedAt(rejectedAt);
-        order.setManagerApprovedAt(null);
         order.setConfirmationDueAt(null);
         Order saved = orderRepository.saveAndFlush(order);
         eventPublisher.publishAfterCommit(

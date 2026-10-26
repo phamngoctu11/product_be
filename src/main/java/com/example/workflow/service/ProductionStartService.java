@@ -1,6 +1,5 @@
 package com.example.workflow.service;
 
-import com.example.workflow.dto.StartProductionRequest;
 import com.example.workflow.dto.StartProductionResultDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
@@ -52,28 +51,21 @@ public class ProductionStartService {
 
     public StartProductionResultDTO start(
             Long orderId,
-            StartProductionRequest request,
             String idempotencyKey
     ) {
-        if (request == null || request.orderVersion() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "orderVersion is required.");
-        }
         User staff = currentUserService.requireCurrentUser(
                 Role.STAFF,
                 ConstantErrorCode.CURRENT_USER_STAFF_ROLE_REQUIRED
         );
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("orderId", orderId);
-        canonical.put("orderVersion", request.orderVersion());
-        canonical.put("lateStartReason", normalizedReason(request.lateStartReason()));
         String result = durableRequests.execute(
                 "production-start:staff:" + staff.getId() + ":order:" + orderId,
                 idempotencyKey,
                 JsonUtils.write(objectMapper, canonical, "start production request"),
                 () -> JsonUtils.write(
                         objectMapper,
-                        startWithinTransaction(orderId, request, staff.getId()),
+                        startWithinTransaction(orderId, staff.getId()),
                         "start production result"
                 )
         );
@@ -83,7 +75,6 @@ public class ProductionStartService {
     @Transactional(propagation = Propagation.MANDATORY)
     StartProductionResultDTO startWithinTransaction(
             Long orderId,
-            StartProductionRequest request,
             String staffId
     ) {
         Order order = orderRepository.findByIdForUpdate(orderId)
@@ -97,9 +88,6 @@ public class ProductionStartService {
         if (order.getStatus() == OrderStatus.ORDER_CREATING && order.getProductionStartedAt() != null) {
             return result(order);
         }
-        if (!request.orderVersion().equals(order.getVersion())) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_VERSION_CONFLICT);
-        }
         if (order.getStatus() != OrderStatus.ORDER_ACCEPTED || !paymentAllowsStart(order)) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_NOT_READY_FOR_PRODUCTION);
         }
@@ -108,14 +96,13 @@ public class ProductionStartService {
         OrderStatus oldStatus = order.getStatus();
         Order started = transitionService.apply(
                 orderId,
-                request.orderVersion(),
+                order.getVersion(),
                 OrderStatus.ORDER_CREATING,
                 staffId,
-                normalizedReason(request.lateStartReason()),
-                "production-start:" + orderId + ":" + request.orderVersion(),
+                null,
+                "production-start:" + orderId + ":" + order.getVersion(),
                 null
         );
-        started.setLateStartReason(normalizedReason(request.lateStartReason()));
         started.setProductionStatus(OrderProductionStatus.IN_PRODUCTION);
         applyDeadlines(started);
         orderRepository.saveAndFlush(started);
@@ -160,7 +147,6 @@ public class ProductionStartService {
                     item.getProductionDurationDays()
             );
             item.setComputedCompletionAt(completion.atTime(startedAt.toLocalTime()));
-            item.setHandmade(true);
             item.setProductionStatus(OrderItemProductionStatus.INITIAL_IN_PROGRESS);
         }
     }
@@ -182,7 +168,4 @@ public class ProductionStartService {
         );
     }
 
-    private String normalizedReason(String reason) {
-        return StringUtils.hasText(reason) ? reason.trim() : null;
-    }
 }

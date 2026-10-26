@@ -36,6 +36,5 @@ class OrderContactSnapshotTest {
         assertThat(order.getGuestSessionId()).isNull();
         assertThat(order.getContactSnapshot()).isNull();
         assertThat(order.getOrderLookupTokenHash()).isNull();
-        assertThat(order.getOrderLookupTokenCreatedAt()).isNull();
     }
 }

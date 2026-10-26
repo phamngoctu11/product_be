@@ -83,7 +83,8 @@ class ManagerOrderReviewServiceTest {
         assertThat(result.decision()).isEqualTo(ManagerReviewDecision.APPROVED);
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.PENDING_ASSIGNMENT);
         assertThat(order.getManager()).isSameAs(manager);
-        assertThat(order.getConfirmationDueAt()).isEqualTo(order.getManagerApprovedAt().plusHours(24));
+        assertThat(order.getConfirmationDueAt()).isEqualTo(result.confirmationDueAt());
+        assertThat(order.getConfirmationDueAt()).isEqualTo(result.reviewedAt().plusHours(24));
         verify(eventPublisher).publishAfterCommit(
                 eq(com.example.workflow.event.EventTypes.ORDER_REVIEWED),
                 any(com.example.workflow.event.payload.OrderReviewedEvent.class)
@@ -121,8 +122,7 @@ class ManagerOrderReviewServiceTest {
         assertThat(result.decision()).isEqualTo(ManagerReviewDecision.REJECTED);
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(order.getManager()).isSameAs(manager);
-        assertThat(order.getManagerRejectedAt()).isNotNull();
-        assertThat(order.getManagerApprovedAt()).isNull();
+        assertThat(order.getManagerReviewDecision()).isEqualTo(ManagerReviewDecision.REJECTED);
         verify(cancellationService).cancelByManagerReject(
                 eq(20L), eq(0L), anyString(), eq("manager-2"), anyString(), eq("reject-key")
         );

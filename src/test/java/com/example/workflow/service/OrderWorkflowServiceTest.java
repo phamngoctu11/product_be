@@ -194,20 +194,15 @@ class OrderWorkflowServiceTest {
     void correlatesReadyToShipOnlyAfterProductionCompletion() {
         ExecutionQuery query = mock(ExecutionQuery.class);
         Execution execution = mock(Execution.class);
-        LocalDateTime readyAt = LocalDateTime.of(2026, 10, 13, 16, 0);
         when(execution.getId()).thenReturn("production-complete-wait");
         when(runtimeService.createExecutionQuery()).thenReturn(query);
         when(query.messageEventSubscriptionName("ORDER_READY_TO_SHIP")).thenReturn(query);
         when(query.processVariableValueEquals("orderId", 80L)).thenReturn(query);
         when(query.singleResult()).thenReturn(execution);
 
-        assertThat(service.completeProduction(80L, readyAt)).isTrue();
+        assertThat(service.completeProduction(80L)).isTrue();
 
-        verify(runtimeService).messageEventReceived(
-                "ORDER_READY_TO_SHIP",
-                "production-complete-wait",
-                Map.of("readyToShipAt", "2026-10-13T16:00")
-        );
+        verify(runtimeService).messageEventReceived("ORDER_READY_TO_SHIP", "production-complete-wait");
     }
 
     private void stubTaskQuery(Long orderId, String definitionKey, List<Task> tasks) {

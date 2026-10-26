@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -21,7 +20,6 @@ public class GuestPurchaseWorkflowStateService {
         Order order = getGuestOrderForUpdate(orderId);
         order.setGuestWorkflowStatus(GuestWorkflowStatus.STARTED);
         order.setGuestWorkflowProcessInstanceId(processInstanceId);
-        order.setGuestWorkflowStartedAt(LocalDateTime.now());
         order.setGuestWorkflowError(null);
         orderRepository.saveAndFlush(order);
     }
@@ -31,7 +29,6 @@ public class GuestPurchaseWorkflowStateService {
         Order order = getGuestOrderForUpdate(orderId);
         order.setGuestWorkflowStatus(GuestWorkflowStatus.START_FAILED);
         order.setGuestWorkflowProcessInstanceId(null);
-        order.setGuestWorkflowStartedAt(null);
         order.setGuestWorkflowError(truncate(errorMessage, 1000));
         orderRepository.saveAndFlush(order);
     }

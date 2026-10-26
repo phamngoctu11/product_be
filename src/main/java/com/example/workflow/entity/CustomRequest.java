@@ -67,6 +67,16 @@ public class CustomRequest {
     @Column(name = "quantity", nullable = false, columnDefinition = "int")
     private Integer quantity;
 
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "product_type_id")
+    private ProductType productType;
+
+    @Column(name = "product_type_schema_snapshot", columnDefinition = "longtext")
+    private String productTypeSchemaSnapshot;
+
+    @Column(name = "field_values", columnDefinition = "longtext")
+    private String fieldValuesJson;
+
     @Column(name = "linked_order_id", nullable = true, columnDefinition = "bigint")
     private Long linkedOrderId;
 

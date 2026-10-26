@@ -52,7 +52,6 @@ public class CustomOrderFactory {
         item.setSpecSnapshot(snapshot(draft));
         item.setQuantity(draft.getQuantity());
         item.setPrice(null);
-        item.setHandmade(true);
         item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
         order.getItems().add(item);
         return order;
@@ -62,6 +61,19 @@ public class CustomOrderFactory {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("description", draft.getDescription());
         snapshot.put("imageUrls", draft.getImageUrls());
+        snapshot.put("productType", draft.getProductType() == null ? null : Map.of(
+                "id", draft.getProductType().getId(),
+                "code", draft.getProductType().getCode(),
+                "name", draft.getProductType().getName()
+        ));
+        snapshot.put("productTypeFields", readJson(draft.getProductTypeSchemaSnapshot(), java.util.List.of()));
+        snapshot.put("fieldValues", readJson(draft.getFieldValuesJson(), Map.of()));
         return JsonUtils.write(objectMapper, snapshot, "custom request data");
+    }
+
+    private Object readJson(String json, Object fallback) {
+        if (json == null || json.isBlank()) return fallback;
+        try { return objectMapper.readValue(json, Object.class); }
+        catch (Exception exception) { return fallback; }
     }
 }

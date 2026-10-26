@@ -165,7 +165,7 @@ class RedisStreamEventConsumerTest {
     @Test
     void readyToShipDelegatesToLifecycleHandler() throws JsonProcessingException {
         OrderReadyToShipEvent event = new OrderReadyToShipEvent(
-                200L, 70L, "manager-1", LocalDateTime.of(2026, 10, 13, 16, 0)
+                200L, 70L, "manager-1"
         );
 
         ReflectionTestUtils.invokeMethod(

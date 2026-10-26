@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.List;
+import java.util.Map;
 
 public record UpdateCustomRequest(
         @NotNull(message = "Expected version is required")
@@ -14,6 +15,10 @@ public record UpdateCustomRequest(
         @NotNull(message = "Image URLs are required; use an empty list when there are no images")
         List<@NotBlank(message = "Image URL must not be blank") String> imageUrls,
         @NotNull(message = "Quantity is required")
-        @Positive(message = "Quantity must be positive") Integer quantity
+        @Positive(message = "Quantity must be positive") Integer quantity,
+        @NotNull(message = "Custom field values are required") Map<String, Object> fieldValues
 ) {
+    public UpdateCustomRequest(Long expectedVersion, String description, List<String> imageUrls, Integer quantity) {
+        this(expectedVersion, description, imageUrls, quantity, Map.of());
+    }
 }

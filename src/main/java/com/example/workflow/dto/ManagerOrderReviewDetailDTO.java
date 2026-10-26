@@ -7,8 +7,6 @@ import java.time.LocalDateTime;
 public record ManagerOrderReviewDetailDTO(
         OrderDTO order,
         ManagerReviewDecision decision,
-        LocalDateTime managerApprovedAt,
-        LocalDateTime managerRejectedAt,
         LocalDateTime confirmationDueAt,
         OrderAssignmentDTO activeAssignment
 ) {

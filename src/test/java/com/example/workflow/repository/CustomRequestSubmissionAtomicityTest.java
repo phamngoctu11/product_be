@@ -4,8 +4,9 @@ import com.example.workflow.dto.CustomRequestSubmissionDTO;
 import com.example.workflow.dto.SubmitCustomRequest;
 import com.example.workflow.entity.CustomRequest;
 import com.example.workflow.entity.User;
+import com.example.workflow.entity.ProductType;
 import com.example.workflow.exception.AppException;
-import com.example.workflow.mapper.CustomRequestMapperImpl;
+import com.example.workflow.mapper.CustomRequestMapper;
 import com.example.workflow.mapper.CustomRequestSubmissionMapperImpl;
 import com.example.workflow.mapper.NotificationMapperImpl;
 import com.example.workflow.nume.CustomRequestStatus;
@@ -66,7 +67,7 @@ import static org.mockito.Mockito.reset;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({
         CustomRequestService.class,
-        CustomRequestMapperImpl.class,
+        CustomRequestMapper.class,
         CustomRequestSubmissionMapperImpl.class,
         NotificationMapperImpl.class,
         CustomOrderFactory.class,
@@ -99,10 +100,12 @@ class CustomRequestSubmissionAtomicityTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired UserRepository userRepository;
     @Autowired CustomRequestRepository customRequestRepository;
+    @Autowired ProductTypeRepository productTypeRepository;
     @Autowired CustomRequestService service;
     @MockBean CurrentUserService currentUserService;
     @MockBean UserService userService;
     @SpyBean DomainEventPublisher eventPublisher;
+    ProductType productType;
 
     @BeforeEach
     void setUpSchemaAndData() throws Exception {
@@ -115,6 +118,7 @@ class CustomRequestSubmissionAtomicityTest {
         jdbc.update("DELETE FROM workflow_outbox");
         jdbc.update("DELETE FROM workflow_requests");
         jdbc.update("DELETE FROM custom_requests");
+        productTypeRepository.deleteAll();
         jdbc.update("DELETE FROM order_item");
         jdbc.update("DELETE FROM orders");
         jdbc.update("DELETE FROM users");
@@ -129,6 +133,9 @@ class CustomRequestSubmissionAtomicityTest {
         user.setAddress("HCM");
         user.setRole(Role.USER);
         userRepository.saveAndFlush(user);
+        productType = new ProductType();
+        productType.setCode("gom"); productType.setName("Đồ gốm"); productType.setFieldsJson("[]"); productType.setActive(true);
+        productType = productTypeRepository.saveAndFlush(productType);
         when(currentUserService.requireCurrentUserId()).thenReturn("user-atomic");
         when(userService.requireActiveUser("user-atomic")).thenReturn(user);
     }
@@ -233,6 +240,9 @@ class CustomRequestSubmissionAtomicityTest {
         draft.setDescription("Vòng tay bạc khắc tên");
         draft.setImageUrls(List.of("https://cdn.example.com/image-1.jpg"));
         draft.setQuantity(2);
+        draft.setProductType(productType);
+        draft.setProductTypeSchemaSnapshot(productType.getFieldsJson());
+        draft.setFieldValuesJson("{}");
         return customRequestRepository.saveAndFlush(draft);
     }
 }

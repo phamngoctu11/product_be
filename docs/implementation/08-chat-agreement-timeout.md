@@ -11,11 +11,11 @@ Trạng thái backend: `IMPLEMENTED`, toàn bộ test hiện tại xanh. Fronten
 - Order-chat tái sử dụng `ChatMessage`/collection `chat_messages`; mỗi document chỉ ghi `chatThreadId`, `senderId`, `content`, `timestamp`, `messageType`. Participant và display name nằm ở `OrderChatThread`; module chat tư vấn/hoa hồng legacy đã bị loại bỏ.
 - USER submit agreement bằng `orderVersion` và `Idempotency-Key`; một lần submit tạo một `agreementVersion` mới và chuyển `DISCUSSING -> WAITING_STAFF_CONFIRMATION`.
 - Staff đang giữ active assignment có thể `CONFIRM` hoặc `REQUEST_CHANGES` đúng phiên bản hiện hành.
-- `REQUEST_CHANGES` chuyển về `DISCUSSING`, giữ nguyên `userSubmittedAt` và không khởi động lại timer.
+- `REQUEST_CHANGES` chuyển về `DISCUSSING`, giữ nguyên thời điểm gửi trong `OrderAgreement.submittedAt` và không khởi động lại timer.
 - `CONFIRM` CUSTOM áp dụng snapshot chính thức, khóa/tiêu thụ voucher, cập nhật tổng tiền và chuyển nguyên tử sang `ORDER_ACCEPTED`.
 - USER CATALOG không được ghi đè quantity, price hoặc production duration từ client.
 - CUSTOM chưa từng submit hợp lệ bị worker hủy qua `OrderCancellationService` với nguồn `CUSTOM_CONFIRMATION_TIMEOUT` khi quá `confirmationDueAt`.
-- Submit và timeout dùng chung Order lock/version. Khi form commit trước, `userSubmittedAt` và trạng thái mới khiến timeout thành no-op; khi timeout commit trước, submit nhận conflict.
+- Submit và timeout dùng chung Order lock/version. Khi form commit trước, agreement đã có `submittedAt` khiến timeout thành no-op; khi timeout commit trước, submit nhận conflict.
 - Outbox có thêm `ORDER_AGREEMENT_SUBMITTED` và `ORDER_AGREEMENT_REVIEWED`; handler cung cấp hook correlate/complete cho process WF03 mục tiêu.
 
 ## REST/WebSocket contract thực tế
@@ -83,7 +83,7 @@ Idempotency-Key: <stable-key-for-one-logical-decision>
 
 `OrderAgreementDTO` trả `orderVersion`, `orderType`, `orderStatus`, `agreementVersion`, `agreementStatus`, JSON string `itemSnapshot`, totals, voucher, actor/timestamp, reason và `confirmationDueAt`.
 
-`OrderDTO` chi tiết được bổ sung `confirmationDueAt`, `userSubmittedAt`, `currentAgreementVersion`, `staffId/staffName`, `managerId/managerName`.
+`OrderDTO` chi tiết có `confirmationDueAt`, `currentAgreementVersion`, `staffId/staffName`, `managerId/managerName`. Thời điểm gửi form được lấy từ `OrderAgreementDTO.submittedAt`, không lưu bản sao trên Order.
 
 ## Dữ liệu và migration
 

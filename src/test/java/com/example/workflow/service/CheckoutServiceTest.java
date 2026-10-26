@@ -112,7 +112,6 @@ class CheckoutServiceTest {
             assertThat(item.getMadeDaySnapshot()).isEqualTo(3.0);
             assertThat(item.getProductionDurationDays()).isEqualTo(7);
             assertThat(item.getDurationRuleVersion()).isEqualTo(CatalogDurationCalculator.RULE_VERSION);
-            assertThat(item.isHandmade()).isTrue();
         });
         assertThat(cart.getItems()).containsExactly(unselected);
         assertThat(response.getProvider()).isNull();
@@ -180,7 +179,6 @@ class CheckoutServiceTest {
         product.setProductName("Product " + variantId);
         product.setMadeDay(madeDay);
         // P10: every new catalog item is made-to-order, regardless of this legacy catalog flag.
-        product.setHandmade(false);
         product.setAvailabilityStatus(ProductAvailabilityStatus.ACCEPTING_ORDERS);
         ProductVariant variant = new ProductVariant();
         variant.setId(variantId);

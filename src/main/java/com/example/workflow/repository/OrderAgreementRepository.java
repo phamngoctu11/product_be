@@ -14,6 +14,8 @@ public interface OrderAgreementRepository extends JpaRepository<OrderAgreement, 
 
     Optional<OrderAgreement> findByOrderIdAndAgreementVersion(Long orderId, Integer agreementVersion);
 
+    boolean existsByOrderIdAndSubmittedAtIsNotNull(Long orderId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from OrderAgreement a where a.orderId = :orderId and a.agreementVersion = :agreementVersion")
     Optional<OrderAgreement> findByOrderIdAndAgreementVersionForUpdate(

@@ -25,6 +25,7 @@ class OrderLookupTokenServiceTest {
                 Duration.ofHours(1)
         );
         String originalHash = order.getOrderLookupTokenHash();
+        assertThat(order.getOrderLookupTokenExpiresAt()).isNotNull();
 
         String signed = service.issueSignedReadToken(order, Duration.ofMinutes(5));
 
@@ -57,9 +58,25 @@ class OrderLookupTokenServiceTest {
 
         assertThat(firstToken).isNotBlank().isNotEqualTo(secondToken);
         assertThat(first.getOrderLookupTokenHash()).hasSize(64).doesNotContain(firstToken);
-        assertThat(first.getOrderLookupTokenCreatedAt()).isNotNull();
         assertThat(service.matches(first, firstToken)).isTrue();
         assertThat(service.matches(first, secondToken)).isFalse();
+    }
+
+    @Test
+    void revokeInvalidatesScopedTokenWithoutKeepingRevocationTimestamp() {
+        Order order = new Order();
+        String token = service.issueFor(
+                order,
+                java.util.Set.of(OrderLookupTokenService.Scope.READ),
+                Duration.ofHours(1)
+        );
+
+        service.revoke(order);
+
+        assertThat(order.getOrderLookupTokenHash()).isNull();
+        assertThat(order.getOrderLookupTokenScope()).isNull();
+        assertThat(order.getOrderLookupTokenExpiresAt()).isNull();
+        assertThat(service.matches(order, token)).isFalse();
     }
 
     @Test

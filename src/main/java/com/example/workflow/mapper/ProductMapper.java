@@ -18,6 +18,10 @@ public interface ProductMapper {
     // 1. Chuyển từ Entity sang DTO (Dùng cho getAllProducts, getProductById)
     @Mapping(source = "productName", target = "product_name")
     @Mapping(source = "imageUrl", target = "image_url")
+    @Mapping(source = "productType.id", target = "productTypeId")
+    @Mapping(source = "productType.code", target = "productTypeCode")
+    @Mapping(source = "productType.name", target = "productTypeName")
+    @Mapping(target = "tags", ignore = true)
     ProductDTO toDto(Product product);
 
     // ĐÃ FIX: Chỉ định MapStruct ánh xạ đúng tên biến ảnh cho Biến thể
@@ -29,6 +33,8 @@ public interface ProductMapper {
     @Mapping(source = "image_url", target = "imageUrl")
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "delete", ignore = true)
+    @Mapping(target = "productType", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     Product toEntity(ProductDTO dto);
 
     // ĐÃ FIX: Chỉ định MapStruct ánh xạ đúng tên biến ảnh cho Biến thể
@@ -42,17 +48,9 @@ public interface ProductMapper {
     @Mapping(source = "product_name", target = "productName")
     @Mapping(source = "image_url", target = "imageUrl")
     @Mapping(source = "price", target = "price")
-    @Mapping(source = "tags", target = "tags")
+    @Mapping(target = "tags", ignore = true)
     @Mapping(source = "madeDay", target = "madeDay")
-    @Mapping(source = "handmade", target = "handmade")
     void updateCatalogInfo(ProductDTO dto, @MappingTarget Product entity);
-
-    @BeanMapping(ignoreByDefault = true)
-    @Mapping(source = "product_name", target = "productName")
-    @Mapping(source = "image_url", target = "imageUrl")
-    @Mapping(source = "price", target = "price")
-    @Mapping(source = "tags", target = "tags")
-    void updateBasicInfo(ProductDTO dto, @MappingTarget Product entity);
 
     @BeanMapping(ignoreByDefault = true)
     @Mapping(source = "variantName", target = "variantName")
@@ -64,6 +62,8 @@ public interface ProductMapper {
     // Chỉ trả về các biến thể chưa bị xóa. Tồn kho không còn là một phần của catalog made-to-order.
     @AfterMapping
     default void filterDeletedVariants(Product entity, @MappingTarget ProductDTO dto) {
+        dto.setTags(entity.getTags() == null ? List.of() : java.util.Arrays.stream(entity.getTags().split(","))
+                .map(String::trim).filter(tag -> !tag.isBlank()).distinct().toList());
         if (entity.getVariants() != null && !entity.getVariants().isEmpty()) {
             var activeVariants = entity.getVariants().stream()
                     .filter(variant -> !variant.isDelete())
@@ -84,5 +84,12 @@ public interface ProductMapper {
                 variant.setProduct(product);
             }
         }
+    }
+
+    @AfterMapping
+    default void saveKeywords(ProductDTO dto, @MappingTarget Product product) {
+        product.setTags(dto.getTags() == null ? null : dto.getTags().stream()
+                .filter(tag -> tag != null && !tag.isBlank()).map(String::trim).distinct()
+                .collect(java.util.stream.Collectors.joining(", ")));
     }
 }

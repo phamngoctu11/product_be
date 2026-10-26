@@ -27,7 +27,6 @@ class ProductionMapperTest {
 
         OrderItem item = new OrderItem();
         item.setId(10L);
-        item.setHandmade(true);
         item.setProductionStatus(OrderItemProductionStatus.FINAL_IN_PROGRESS);
 
         OrderItemAssignment assignment = new OrderItemAssignment();
@@ -68,7 +67,6 @@ class ProductionMapperTest {
         var result = mapper.toProductionDto(item);
 
         assertThat(result.orderItemId()).isEqualTo(10L);
-        assertThat(result.handmade()).isTrue();
         assertThat(result.productionStatus()).isEqualTo(OrderItemProductionStatus.FINAL_IN_PROGRESS);
         assertThat(result.assignment().assignedStaffId()).isEqualTo("staff-1");
         assertThat(result.assignment().assignedStaffName()).isEqualTo("Nguyen An");

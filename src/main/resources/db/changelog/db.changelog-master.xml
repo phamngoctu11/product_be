@@ -14,4 +14,7 @@
     <include file="11-delivery-receipt.xml" relativeToChangelogFile="true"/>
     <include file="12-integration-cutover.xml" relativeToChangelogFile="true"/>
     <include file="13-money-precision.xml" relativeToChangelogFile="true"/>
+    <include file="14-product-types-and-tags.xml" relativeToChangelogFile="true"/>
+    <include file="15-product-model-cleanup.xml" relativeToChangelogFile="true"/>
+    <include file="16-order-timestamp-cleanup.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

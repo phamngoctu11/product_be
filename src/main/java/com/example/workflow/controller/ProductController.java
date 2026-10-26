@@ -3,7 +3,6 @@ package com.example.workflow.controller;
 import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
-import com.example.workflow.dto.ProductAvailabilityUpdateRequest;
 import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.service.ProductService;
 import jakarta.validation.Valid;
@@ -68,27 +67,6 @@ public class ProductController {
     ) {
         service.updateProduct(id, dto);
         return ResponseEntity.ok(ApiResponse.success("Product updated successfully"));
-    }
-
-    // STAFF can update basic product info and add variants; product create/delete stays manager/admin only.
-    @PatchMapping("/{id}/staff-info")
-    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> updateProductBasicInfo(
-            @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @Valid @RequestBody ProductDTO dto
-    ) {
-        service.updateProductBasicInfo(id, dto);
-        return ResponseEntity.ok(ApiResponse.success("Product information updated successfully"));
-    }
-
-    @PatchMapping("/{id}/availability")
-    @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> updateProductAvailability(
-            @Positive(message = "Product id must be positive") @PathVariable Long id,
-            @Valid @RequestBody ProductAvailabilityUpdateRequest request
-    ) {
-        service.updateAvailabilityStatus(id, request.availabilityStatus());
-        return ResponseEntity.ok(ApiResponse.success("Product availability updated successfully"));
     }
 
     @PostMapping("/{id}/variants")

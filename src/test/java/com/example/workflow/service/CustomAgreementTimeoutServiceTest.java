@@ -3,6 +3,7 @@ package com.example.workflow.service;
 import com.example.workflow.entity.Order;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.repository.OrderAgreementRepository;
 import com.example.workflow.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +19,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CustomAgreementTimeoutServiceTest {
     @Mock private OrderRepository orderRepository;
+    @Mock private OrderAgreementRepository agreementRepository;
     @Mock private OrderCancellationService cancellationService;
 
     @Test
@@ -28,7 +30,7 @@ class CustomAgreementTimeoutServiceTest {
         order.setStatus(OrderStatus.DISCUSSING);
         order.setConfirmationDueAt(LocalDateTime.now().minusMinutes(1));
         when(orderRepository.findById(41L)).thenReturn(Optional.of(order));
-        CustomAgreementTimeoutService service = new CustomAgreementTimeoutService(orderRepository, cancellationService);
+        CustomAgreementTimeoutService service = new CustomAgreementTimeoutService(orderRepository, agreementRepository, cancellationService);
 
         service.cancelIfStillExpired(41L);
 
@@ -45,9 +47,9 @@ class CustomAgreementTimeoutServiceTest {
         order.setVersion(8L);
         order.setStatus(OrderStatus.DISCUSSING);
         order.setConfirmationDueAt(LocalDateTime.now().minusMinutes(1));
-        order.setUserSubmittedAt(LocalDateTime.now().minusHours(1));
         when(orderRepository.findById(41L)).thenReturn(Optional.of(order));
-        CustomAgreementTimeoutService service = new CustomAgreementTimeoutService(orderRepository, cancellationService);
+        when(agreementRepository.existsByOrderIdAndSubmittedAtIsNotNull(41L)).thenReturn(true);
+        CustomAgreementTimeoutService service = new CustomAgreementTimeoutService(orderRepository, agreementRepository, cancellationService);
 
         service.cancelIfStillExpired(41L);
 

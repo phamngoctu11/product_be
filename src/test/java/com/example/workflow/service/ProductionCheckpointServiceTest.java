@@ -250,7 +250,6 @@ class ProductionCheckpointServiceTest {
         )).thenAnswer(invocation -> {
             order.setStatus(OrderStatus.READY_TO_SHIP);
             order.setVersion(4L);
-            order.setReadyToShipAt(LocalDateTime.of(2026, 10, 13, 11, 0));
             return order;
         });
 
@@ -342,7 +341,6 @@ class ProductionCheckpointServiceTest {
         item.setId(id);
         item.setProductNameSnapshot("Item " + id);
         item.setQuantity(20);
-        item.setHandmade(true);
         item.setProductionDurationDays(5);
         item.setProductionStatus(OrderItemProductionStatus.INITIAL_IN_PROGRESS);
         return item;

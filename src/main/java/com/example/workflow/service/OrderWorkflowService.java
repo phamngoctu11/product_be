@@ -257,17 +257,13 @@ public class OrderWorkflowService {
         return true;
     }
 
-    public boolean completeProduction(Long orderId, java.time.LocalDateTime readyToShipAt) {
+    public boolean completeProduction(Long orderId) {
         Execution execution = runtimeService.createExecutionQuery()
                 .messageEventSubscriptionName(ORDER_READY_TO_SHIP_MESSAGE)
                 .processVariableValueEquals("orderId", orderId)
                 .singleResult();
         if (execution == null) return false;
-        runtimeService.messageEventReceived(
-                ORDER_READY_TO_SHIP_MESSAGE,
-                execution.getId(),
-                Map.of("readyToShipAt", readyToShipAt.toString())
-        );
+        runtimeService.messageEventReceived(ORDER_READY_TO_SHIP_MESSAGE, execution.getId());
         return true;
     }
 

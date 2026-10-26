@@ -98,7 +98,6 @@ public class ProductionCheckpointService {
                     item.getQuantity(),
                     item.getProductionDurationDays(),
                     item.getComputedCompletionAt(),
-                    item.isHandmade(),
                     item.getProductionStatus(),
                     null,
                     checkpoints
@@ -288,8 +287,7 @@ public class ProductionCheckpointService {
                     new OrderReadyToShipEvent(
                             orderId,
                             assignment.getId(),
-                            manager.getId(),
-                            resultOrder.getReadyToShipAt()
+                            manager.getId()
                     )
             );
         }

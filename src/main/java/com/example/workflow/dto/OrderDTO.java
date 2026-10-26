@@ -18,13 +18,11 @@ public class OrderDTO implements Serializable {
     private com.example.workflow.nume.PaymentStatus paymentStatus;
     private com.example.workflow.nume.PaymentMethod paymentMethodType;
     private LocalDateTime productionStartedAt;
-    private LocalDateTime readyToShipAt;
     private LocalDateTime shippedAt;
     private LocalDateTime deliveredAt;
     private int expectedShippingDays;
     private Integer currentAgreementVersion;
     private LocalDateTime confirmationDueAt;
-    private LocalDateTime userSubmittedAt;
     private String user_id;
     private String lastname;
     private String customerName;
@@ -35,7 +33,6 @@ public class OrderDTO implements Serializable {
     private BigDecimal finalPrice;
     private String voucherName;
     private LocalDateTime startOrderTime;
-    private LocalDateTime endOrderTime;
     private OrderStatus status;
     private OrderProductionStatus productionStatus;
     private String cancelReason;

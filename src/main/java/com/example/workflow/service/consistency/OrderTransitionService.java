@@ -41,13 +41,11 @@ public class OrderTransitionService {
         LocalDateTime at = LocalDateTime.now();
         order.setStatus(next);
         switch (next) {
-            case ORDER_ACCEPTED -> order.setOrderAcceptedAt(at);
             case ORDER_CREATING -> order.setProductionStartedAt(at);
-            case READY_TO_SHIP -> order.setReadyToShipAt(at);
             case SHIPPING -> order.setShippedAt(at);
-            case DELIVERED -> { order.setDeliveredAt(at); order.setEndOrderTime(at); }
+            case DELIVERED -> order.setDeliveredAt(at);
             case CANCELLED -> {
-                order.setCancelledAt(at); order.setEndOrderTime(at); order.setCancelReason(reason);
+                order.setCancelledAt(at); order.setCancelReason(reason);
                 order.setCancellationSource(cancellation); order.setCancellationReference(reference);
             }
             default -> { }

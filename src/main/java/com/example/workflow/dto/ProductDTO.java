@@ -31,15 +31,17 @@ public class ProductDTO implements Serializable {
     @DecimalMin(value = "2.0", message = "Made day must be at least 2")
     private Double madeDay;
 
-    private String tags;
+    private List<String> tags;
+
+    private Long productTypeId;
+    private String productTypeCode;
+    private String productTypeName;
 
     @Valid
     private List<ProductVariantDTO> variants;
 
     @JsonProperty("image_url")
     private String image_url;
-
-    private boolean handmade = true;
 
     private ProductAvailabilityStatus availabilityStatus;
 }

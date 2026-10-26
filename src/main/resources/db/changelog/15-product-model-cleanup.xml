@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="15-drop-handmade-flags" author="codex">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="products"/>
+                <columnExists tableName="products" columnName="is_handmade"/>
+                <tableExists tableName="order_items"/>
+                <columnExists tableName="order_items" columnName="is_handmade"/>
+            </and>
+        </preConditions>
+        <dropColumn tableName="products" columnName="is_handmade"/>
+        <dropColumn tableName="order_items" columnName="is_handmade"/>
+    </changeSet>
+    <changeSet id="15-product-type-remove-audit-and-optimistic-fields" author="codex">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="product_types"/>
+        </preConditions>
+        <dropColumn tableName="product_types" columnName="version"/>
+        <dropColumn tableName="product_types" columnName="created_at"/>
+        <dropColumn tableName="product_types" columnName="updated_at"/>
+        <dropColumn tableName="custom_requests" columnName="product_type_version"/>
+    </changeSet>
+    <changeSet id="15-remove-staff-delay-planning-fields" author="codex">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="orders"/>
+                <columnExists tableName="orders" columnName="planned_start_at"/>
+                <columnExists tableName="orders" columnName="late_start_reason"/>
+            </and>
+        </preConditions>
+        <dropColumn tableName="orders" columnName="planned_start_at"/>
+        <dropColumn tableName="orders" columnName="late_start_reason"/>
+    </changeSet>
+    <changeSet id="15-remove-product-tag-entities" author="codex">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="product_tag_links"/>
+        </preConditions>
+        <dropTable tableName="product_tag_links" cascadeConstraints="true"/>
+        <dropTable tableName="product_tags" cascadeConstraints="true"/>
+    </changeSet>
+</databaseChangeLog>

@@ -106,7 +106,8 @@ public class OrderAgreementService {
         if (order.getStatus() != OrderStatus.DISCUSSING) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_TRANSITION_INVALID);
         }
-        if (order.getOrderType() == OrderType.CUSTOM && order.getUserSubmittedAt() == null
+        if (order.getOrderType() == OrderType.CUSTOM
+                && !agreementRepository.existsByOrderIdAndSubmittedAtIsNotNull(orderId)
                 && order.getConfirmationDueAt() != null && !LocalDateTime.now().isBefore(order.getConfirmationDueAt())) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_TRANSITION_INVALID);
         }
@@ -135,9 +136,6 @@ public class OrderAgreementService {
                 orderId, request.orderVersion(), OrderStatus.WAITING_STAFF_CONFIRMATION,
                 userId, "User submitted agreement", "agreement:" + orderId + ":" + agreementVersion, null
         );
-        if (transitioned.getUserSubmittedAt() == null) {
-            transitioned.setUserSubmittedAt(now);
-        }
         transitioned.setCurrentAgreementVersion(agreementVersion);
         transitioned = orderRepository.saveAndFlush(transitioned);
         historyService.record(transitioned, oldStatus, transitioned.getStatus(), userId);

@@ -5,6 +5,7 @@ import com.example.workflow.exception.AppException;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.OrderAgreementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +27,7 @@ public class CustomAgreementTimeoutService {
     );
 
     private final OrderRepository orderRepository;
+    private final OrderAgreementRepository agreementRepository;
     private final OrderCancellationService cancellationService;
 
     @Value("${workflow.custom-agreement-timeout.batch-size:100}")
@@ -43,7 +45,8 @@ public class CustomAgreementTimeoutService {
 
     public boolean cancelIfStillExpired(Long orderId) {
         Order snapshot = orderRepository.findById(orderId).orElse(null);
-        if (snapshot == null || snapshot.getUserSubmittedAt() != null || snapshot.getConfirmationDueAt() == null
+        if (snapshot == null || agreementRepository.existsByOrderIdAndSubmittedAtIsNotNull(orderId)
+                || snapshot.getConfirmationDueAt() == null
                 || !TIMEOUT_STATUSES.contains(snapshot.getStatus())
                 || LocalDateTime.now().isBefore(snapshot.getConfirmationDueAt())) {
             return false;

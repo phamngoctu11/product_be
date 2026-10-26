@@ -69,8 +69,6 @@ public class CatalogOrderFactory {
             item.setProductionDurationDays(duration);
             item.setDurationRuleVersion(CatalogDurationCalculator.RULE_VERSION);
             // Every catalog item in the target shop is made to order. The legacy
-            // Product.handmade flag must not bypass WF05 for newly created orders.
-            item.setHandmade(true);
             item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
             order.getItems().add(item);
 

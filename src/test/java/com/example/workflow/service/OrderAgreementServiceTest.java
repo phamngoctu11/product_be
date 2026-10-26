@@ -87,7 +87,6 @@ class OrderAgreementServiceTest {
 
         assertEquals(OrderStatus.WAITING_STAFF_CONFIRMATION, result.orderStatus());
         assertEquals(1, result.agreementVersion());
-        assertNotNull(order.getUserSubmittedAt());
         assertEquals(dueAt, order.getConfirmationDueAt());
         verify(agreementRepository).save(argThat(agreement ->
                 agreement.getStatus() == OrderAgreementStatus.USER_SUBMITTED
@@ -120,7 +119,6 @@ class OrderAgreementServiceTest {
         Order order = customOrder(OrderStatus.WAITING_STAFF_CONFIRMATION);
         LocalDateTime firstSubmittedAt = LocalDateTime.now().minusHours(1);
         LocalDateTime originalDueAt = LocalDateTime.now().minusMinutes(30);
-        order.setUserSubmittedAt(firstSubmittedAt);
         order.setConfirmationDueAt(originalDueAt);
         order.setCurrentAgreementVersion(2);
         OrderAgreement agreement = new OrderAgreement();
@@ -128,6 +126,7 @@ class OrderAgreementServiceTest {
         agreement.setAgreementVersion(2);
         agreement.setStatus(OrderAgreementStatus.USER_SUBMITTED);
         agreement.setItemSnapshot("{}");
+        agreement.setSubmittedAt(firstSubmittedAt);
         when(orderRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(order));
         when(assignmentRepository.findActiveByOrderId(11L)).thenReturn(Optional.of(activeAssignment()));
         when(agreementRepository.findByOrderIdAndAgreementVersionForUpdate(11L, 2)).thenReturn(Optional.of(agreement));
@@ -146,7 +145,7 @@ class OrderAgreementServiceTest {
 
         assertEquals(OrderStatus.DISCUSSING, result.orderStatus());
         assertEquals(OrderAgreementStatus.CHANGES_REQUESTED, result.agreementStatus());
-        assertEquals(firstSubmittedAt, order.getUserSubmittedAt());
+        assertEquals(firstSubmittedAt, agreement.getSubmittedAt());
         assertEquals(originalDueAt, order.getConfirmationDueAt());
         verify(voucherService, never()).useVoucherForCheckout(any(), anyString(), anyDouble());
     }

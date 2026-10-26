@@ -236,8 +236,7 @@ class OrderAssignmentAtomicityTest {
         assertThat(result.decision()).isEqualTo(ManagerReviewDecision.APPROVED);
         assertThat(stored.getStatus()).isEqualTo(OrderStatus.DISCUSSING);
         assertThat(stored.getManager().getId()).isEqualTo(fixture.manager().getId());
-        assertThat(stored.getManagerApprovedAt()).isNotNull();
-        assertThat(stored.getConfirmationDueAt()).isEqualTo(stored.getManagerApprovedAt().plusHours(24));
+        assertThat(stored.getConfirmationDueAt()).isEqualTo(result.confirmationDueAt());
         assertThat(assignmentRepository.findByOrderIdOrderByAssignedAtDesc(fixture.orderId())).hasSize(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_requests", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workflow_transition_audit", Integer.class)).isEqualTo(1);
@@ -432,7 +431,6 @@ class OrderAssignmentAtomicityTest {
         item.setProductNameSnapshot(name);
         item.setQuantity(20);
         item.setPrice(100.0);
-        item.setHandmade(true);
         item.setProductionDurationDays(5);
         item.setProductionStatus(OrderItemProductionStatus.FINAL_WAITING_QC);
         return item;

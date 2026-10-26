@@ -27,7 +27,6 @@ class GuestPurchaseWorkflowStateServiceTest {
 
         assertThat(order.getGuestWorkflowStatus()).isEqualTo(GuestWorkflowStatus.STARTED);
         assertThat(order.getGuestWorkflowProcessInstanceId()).isEqualTo("process-200");
-        assertThat(order.getGuestWorkflowStartedAt()).isNotNull();
         assertThat(order.getGuestWorkflowError()).isNull();
         verify(orderRepository).saveAndFlush(order);
     }

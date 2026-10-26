@@ -269,7 +269,6 @@ public class OrderDeliveryService {
         receipt.setItemsSnapshot(receiptSnapshot(order, received, matched, request));
         receiptRepository.saveAndFlush(receipt);
         order.setDeliveredAt(now);
-        order.setEndOrderTime(now);
         order.setStatus(OrderStatus.DELIVERED);
         orderRepository.saveAndFlush(order);
 

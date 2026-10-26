@@ -5,6 +5,7 @@ import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
+import com.example.workflow.entity.ProductType;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.ProductMapper;
@@ -13,6 +14,7 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
+import com.example.workflow.repository.ProductTypeRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
@@ -43,16 +45,14 @@ public class ProductService {
     private final CurrentUserService currentUserService;
     private final ProductVariantRepository variantRepository;
     private final ApplicationCacheService applicationCacheService;
+    private final ProductTypeRepository productTypeRepository;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable)")
     public Page<ProductDTO> getAllProducts(String keyword, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         return repository.searchByAvailabilityPriority(
-                normalizeSearchKeyword(keyword),
-                normalizePrice(minPrice),
-                normalizePrice(maxPrice),
-                ProductAvailabilityStatus.ACCEPTING_ORDERS,
-                PageableUtils.normalize(pageable, 20, 100)
+                normalizeSearchKeyword(keyword), normalizePrice(minPrice), normalizePrice(maxPrice),
+                ProductAvailabilityStatus.ACCEPTING_ORDERS, PageableUtils.normalize(pageable, 20, 100)
         ).map(mapper::toDto);
     }
 
@@ -79,6 +79,7 @@ public class ProductService {
         currentUserService.requireCurrentUserId();
         validateMadeDay(dto.getMadeDay());
         Product entity = mapper.toEntity(dto);
+        applyCustomCatalogReferences(dto, entity, true);
         prepareProductForCreate(entity);
         Product savedProduct = repository.saveAndFlush(entity);
 
@@ -92,6 +93,7 @@ public class ProductService {
         validateMadeDay(dto.getMadeDay());
         Product existingProduct = requireActiveProduct(id);
         mapper.updateCatalogInfo(dto, existingProduct);
+        applyCustomCatalogReferences(dto, existingProduct, false);
         if (dto.getAvailabilityStatus() != null) {
             existingProduct.setAvailabilityStatus(dto.getAvailabilityStatus());
         }
@@ -127,24 +129,6 @@ public class ProductService {
 
         repository.saveAndFlush(existingProduct);
         applicationCacheService.evictProductUpdated(id);
-    }
-
-    @Transactional
-    public void updateProductBasicInfo(Long id, ProductDTO dto) {
-        Product product = requireActiveProduct(id);
-
-        mapper.updateBasicInfo(dto, product);
-
-        repository.save(product);
-        applicationCacheService.evictProductBasicInfoUpdated(id);
-    }
-
-    @Transactional
-    public void updateAvailabilityStatus(Long id, ProductAvailabilityStatus availabilityStatus) {
-        Product product = requireActiveProduct(id);
-        product.setAvailabilityStatus(Objects.requireNonNull(availabilityStatus, "Availability status is required"));
-        repository.save(product);
-        applicationCacheService.evictProductBasicInfoUpdated(id);
     }
 
     @Transactional
@@ -185,6 +169,17 @@ public class ProductService {
             return;
         }
         product.getVariants().forEach(variant -> applyVariantOwnership(product, variant));
+    }
+
+    private void applyCustomCatalogReferences(ProductDTO dto, Product product, boolean creating) {
+        if (dto.getProductTypeId() != null) {
+            ProductType type = productTypeRepository.findById(dto.getProductTypeId())
+                    .filter(ProductType::isActive)
+                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCT_TYPE_NOT_FOUND));
+            product.setProductType(type);
+        } else if (creating) {
+            product.setProductType(null);
+        }
     }
 
     private void validateMadeDay(Double madeDay) {

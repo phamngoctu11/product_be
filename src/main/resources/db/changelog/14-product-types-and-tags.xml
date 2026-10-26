@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="14-product-types-and-tags" author="codex">
+        <createTable tableName="product_types">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="type_code" type="varchar(64)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_product_types_code"/></column>
+            <column name="display_name" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="description" type="varchar(500)"/>
+            <column name="field_schema" type="longtext"><constraints nullable="false"/></column>
+            <column name="is_active" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="updated_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <createTable tableName="product_tags">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="tag_code" type="varchar(80)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_product_tags_code"/></column>
+            <column name="display_name" type="varchar(120)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_product_tags_name"/></column>
+            <column name="is_active" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addColumn tableName="products"><column name="product_type_id" type="bigint"/></addColumn>
+        <addForeignKeyConstraint baseTableName="products" baseColumnNames="product_type_id" referencedTableName="product_types" referencedColumnNames="id" constraintName="fk_products_product_type"/>
+        <createTable tableName="product_tag_links">
+            <column name="product_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="tag_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="product_tag_links" columnNames="product_id,tag_id" constraintName="pk_product_tag_links"/>
+        <addForeignKeyConstraint baseTableName="product_tag_links" baseColumnNames="product_id" referencedTableName="products" referencedColumnNames="id" constraintName="fk_product_tag_links_product" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="product_tag_links" baseColumnNames="tag_id" referencedTableName="product_tags" referencedColumnNames="id" constraintName="fk_product_tag_links_tag"/>
+        <createIndex tableName="product_tag_links" indexName="idx_product_tag_links_tag"><column name="tag_id"/></createIndex>
+        <addColumn tableName="custom_requests">
+            <column name="product_type_id" type="bigint"/>
+            <column name="product_type_version" type="bigint"/>
+            <column name="product_type_schema_snapshot" type="longtext"/>
+            <column name="field_values" type="longtext"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="custom_requests" baseColumnNames="product_type_id" referencedTableName="product_types" referencedColumnNames="id" constraintName="fk_custom_requests_product_type"/>
+    </changeSet>
+</databaseChangeLog>

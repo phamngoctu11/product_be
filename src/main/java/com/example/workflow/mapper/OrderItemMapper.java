@@ -2,11 +2,13 @@ package com.example.workflow.mapper;
 
 import com.example.workflow.dto.ItemCheckRequest;
 import com.example.workflow.dto.OrderItemDTO;
+import com.example.workflow.dto.ProductTypeFieldDTO;
 import com.example.workflow.entity.OrderItem;
 import com.example.workflow.nume.OrderItemSourceType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -15,6 +17,7 @@ import org.mapstruct.MappingTarget;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Mapper(config = CentralMapperConfig.class)
@@ -30,6 +33,10 @@ public interface OrderItemMapper {
     @Mapping(target = "imageUrl", expression = "java(resolveImageUrl(orderItem))")
     @Mapping(target = "description", ignore = true)
     @Mapping(target = "imageUrls", ignore = true)
+    @Mapping(target = "productTypeCode", ignore = true)
+    @Mapping(target = "productTypeName", ignore = true)
+    @Mapping(target = "productTypeFields", ignore = true)
+    @Mapping(target = "fieldValues", ignore = true)
     // Price is read from the OrderItem snapshot, never recalculated from the current variant.
     OrderItemDTO toDto(OrderItem orderItem);
 
@@ -43,6 +50,10 @@ public interface OrderItemMapper {
         CustomContent content = parseCustomContent(orderItem.getSpecSnapshot());
         target.setDescription(content.description());
         target.setImageUrls(content.imageUrls());
+        target.setProductTypeCode(content.productTypeCode());
+        target.setProductTypeName(content.productTypeName());
+        target.setProductTypeFields(content.productTypeFields());
+        target.setFieldValues(content.fieldValues());
     }
 
     default String resolveProductName(OrderItem orderItem) {
@@ -113,19 +124,25 @@ public interface OrderItemMapper {
 
     private CustomContent parseCustomContent(String snapshot) {
         if (snapshot == null || snapshot.isBlank()) {
-            return new CustomContent(null, List.of());
+            return CustomContent.legacy(null);
         }
         try {
             JsonNode root = SnapshotJson.OBJECT_MAPPER.readTree(snapshot);
             if (!root.isObject()) {
-                return new CustomContent(snapshot, List.of());
+                return CustomContent.legacy(snapshot);
             }
             JsonNode description = root.has("description") ? root.get("description") : root.get("spec");
             JsonNode images = root.has("imageUrls") ? root.get("imageUrls") : root.get("attachments");
-            return new CustomContent(text(description), imageUrls(images));
+            JsonNode type = root.get("productType");
+            JsonNode fields = root.get("productTypeFields");
+            JsonNode values = root.get("fieldValues");
+            return new CustomContent(text(description), imageUrls(images),
+                    type == null ? null : text(type.get("code")), type == null ? null : text(type.get("name")),
+                    fields == null || !fields.isArray() ? List.of() : SnapshotJson.OBJECT_MAPPER.convertValue(fields, new TypeReference<>() {}),
+                    values == null || !values.isObject() ? Map.of() : SnapshotJson.OBJECT_MAPPER.convertValue(values, new TypeReference<>() {}));
         } catch (JsonProcessingException ignored) {
             // Some legacy custom rows stored the description directly instead of a JSON snapshot.
-            return new CustomContent(snapshot, List.of());
+            return CustomContent.legacy(snapshot);
         }
     }
 
@@ -164,7 +181,9 @@ public interface OrderItemMapper {
         return List.of();
     }
 
-    record CustomContent(String description, List<String> imageUrls) {
+    record CustomContent(String description, List<String> imageUrls, String productTypeCode, String productTypeName,
+                         List<ProductTypeFieldDTO> productTypeFields, Map<String, Object> fieldValues) {
+        static CustomContent legacy(String description) { return new CustomContent(description, List.of(), null, null, List.of(), Map.of()); }
     }
 
     final class SnapshotJson {

@@ -7,6 +7,7 @@ import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class OrderItemDTO implements Serializable {
@@ -25,11 +26,14 @@ public class OrderItemDTO implements Serializable {
     private int specVersion;
     private String description;
     private List<String> imageUrls;
+    private String productTypeCode;
+    private String productTypeName;
+    private List<ProductTypeFieldDTO> productTypeFields;
+    private Map<String, Object> fieldValues;
     private Double madeDaySnapshot;
     private Integer productionDurationDays;
     private String durationRuleVersion;
     private java.time.LocalDateTime computedCompletionAt;
-    private boolean handmade;
     private OrderItemProductionStatus productionStatus;
     private boolean reviewed;
     private Long reviewId;

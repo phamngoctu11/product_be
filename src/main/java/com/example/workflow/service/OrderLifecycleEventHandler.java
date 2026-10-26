@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.entity.Order;
+import com.example.workflow.entity.OrderAgreement;
 import com.example.workflow.entity.OrderItem;
 import com.example.workflow.event.payload.GuestOrderCreatedEvent;
 import com.example.workflow.event.payload.OrderCancelledEvent;
@@ -27,6 +28,7 @@ import com.example.workflow.nume.PaymentMethod;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.repository.OrderAgreementRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,6 +47,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderLifecycleEventHandler {
     private final OrderRepository orderRepository;
+    private final OrderAgreementRepository orderAgreementRepository;
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final ApplicationCacheService applicationCacheService;
@@ -211,9 +214,12 @@ public class OrderLifecycleEventHandler {
 
     public void handleOrderAgreementSubmitted(OrderAgreementSubmittedEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_AGREEMENT_SUBMITTED");
+        OrderAgreement agreement = orderAgreementRepository
+                .findByOrderIdAndAgreementVersion(event.orderId(), event.agreementVersion())
+                .orElse(null);
         if (order.getCurrentAgreementVersion() == null
                 || order.getCurrentAgreementVersion() < event.agreementVersion()
-                || order.getUserSubmittedAt() == null) {
+                || agreement == null || agreement.getSubmittedAt() == null) {
             return;
         }
         requireWorkflowAdvance(
@@ -438,10 +444,10 @@ public class OrderLifecycleEventHandler {
 
     public void handleOrderReadyToShip(OrderReadyToShipEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_READY_TO_SHIP");
-        if (order.getStatus() == OrderStatus.CANCELLED || order.getReadyToShipAt() == null) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
             return;
         }
-        orderWorkflowService.completeProduction(event.orderId(), event.readyToShipAt());
+        orderWorkflowService.completeProduction(event.orderId());
         if (StringUtils.hasText(order.getEmail())) {
             emailService.sendReadyToShipEmail(
                     order.getEmail(),

@@ -3,7 +3,7 @@ package com.example.workflow.mapper;
 import com.example.workflow.entity.CustomRequest;
 import com.example.workflow.nume.CustomRequestStatus;
 import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,7 +11,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CustomRequestMapperTest {
-    private final CustomRequestMapper mapper = Mappers.getMapper(CustomRequestMapper.class);
+    private final CustomRequestMapper mapper = new CustomRequestMapper(new ObjectMapper());
 
     @Test
     void mapsEditableDraftWithoutExposingOwnerId() {

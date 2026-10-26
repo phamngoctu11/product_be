@@ -223,7 +223,6 @@ class ChangeRequestAtomicityTest {
             item.setSpecVersion(1);
             item.setQuantity(1);
             item.setPrice(100.0);
-            item.setHandmade(true);
             item.setProductionDurationDays(5);
             item.setComputedCompletionAt(LocalDateTime.now().plusDays(5));
             item.setProductionStatus(OrderItemProductionStatus.INITIAL_IN_PROGRESS);

@@ -13,7 +13,6 @@ public record OrderItemProductionDTO(
         int quantity,
         Integer productionDurationDays,
         LocalDateTime computedCompletionAt,
-        boolean handmade,
         OrderItemProductionStatus productionStatus,
         OrderItemAssignmentDTO assignment,
         List<ProductionCheckpointDTO> checkpoints

@@ -138,7 +138,6 @@ class ProductionRepositoryTest {
         Product product = new Product();
         product.setProductName("Handmade product");
         product.setPrice(100.0);
-        product.setHandmade(true);
         entityManager.persist(product);
 
         ProductVariant variant = new ProductVariant();
@@ -159,7 +158,6 @@ class ProductionRepositoryTest {
         item.setProductVariant(variant);
         item.setPrice(100.0);
         item.setQuantity(1);
-        item.setHandmade(true);
         item.setProductionStatus(OrderItemProductionStatus.WAITING_ASSIGNMENT);
         entityManager.persist(item);
         entityManager.flush();

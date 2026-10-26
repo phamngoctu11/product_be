@@ -7,6 +7,7 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.OrderItemRepository;
 import com.example.workflow.repository.ProductRepository;
 import com.example.workflow.repository.ProductVariantRepository;
+import com.example.workflow.repository.ProductTypeRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import org.junit.jupiter.api.Test;
 
@@ -25,13 +26,15 @@ class ProductServiceTest {
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final ProductVariantRepository productVariantRepository = mock(ProductVariantRepository.class);
     private final ApplicationCacheService applicationCacheService = mock(ApplicationCacheService.class);
+    private final ProductTypeRepository productTypeRepository = mock(ProductTypeRepository.class);
     private final ProductService productService = new ProductService(
             productRepository,
             productMapper,
             orderItemRepository,
             currentUserService,
             productVariantRepository,
-            applicationCacheService
+            applicationCacheService,
+            productTypeRepository
     );
 
     @Test

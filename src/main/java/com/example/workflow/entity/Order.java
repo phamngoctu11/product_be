@@ -41,7 +41,6 @@ public class Order {
     @Column(name = "total_price", nullable = false, precision = 19, scale = 2)
     private BigDecimal totalPrice = BigDecimal.ZERO;
     private LocalDateTime startOrderTime;
-    private LocalDateTime endOrderTime;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, columnDefinition = "varchar(50)")
@@ -106,17 +105,11 @@ public class Order {
     @Column(name = "order_lookup_token_hash", length = 64, unique = true)
     private String orderLookupTokenHash;
 
-    @Column(name = "order_lookup_token_created_at")
-    private LocalDateTime orderLookupTokenCreatedAt;
-
     @Column(name = "order_lookup_token_scope", length = 100)
     private String orderLookupTokenScope;
 
     @Column(name = "order_lookup_token_expires_at")
     private LocalDateTime orderLookupTokenExpiresAt;
-
-    @Column(name = "order_lookup_token_revoked_at")
-    private LocalDateTime orderLookupTokenRevokedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "guest_workflow_status", length = 32)
@@ -124,9 +117,6 @@ public class Order {
 
     @Column(name = "guest_workflow_process_instance_id", length = 64)
     private String guestWorkflowProcessInstanceId;
-
-    @Column(name = "guest_workflow_started_at")
-    private LocalDateTime guestWorkflowStartedAt;
 
     @Column(name = "guest_workflow_error", length = 1000)
     private String guestWorkflowError;
@@ -149,30 +139,15 @@ public class Order {
     @JoinColumn(name = "assigned_staff_id")
     private User assignedStaff;
 
-    @Column(name = "manager_approved_at")
-    private LocalDateTime managerApprovedAt;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "manager_review_decision", length = 16, columnDefinition = "varchar(16)")
     private ManagerReviewDecision managerReviewDecision;
 
-    @Column(name = "manager_rejected_at")
-    private LocalDateTime managerRejectedAt;
-
     @Column(name = "confirmation_due_at")
     private LocalDateTime confirmationDueAt;
 
-    @Column(name = "user_submitted_at")
-    private LocalDateTime userSubmittedAt;
-
-    @Column(name = "order_accepted_at")
-    private LocalDateTime orderAcceptedAt;
-
     @Column(name = "production_started_at")
     private LocalDateTime productionStartedAt;
-
-    @Column(name = "ready_to_ship_at")
-    private LocalDateTime readyToShipAt;
 
     @Column(name = "shipped_at")
     private LocalDateTime shippedAt;
@@ -195,12 +170,6 @@ public class Order {
 
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
-
-    @Column(name = "planned_start_at")
-    private LocalDateTime plannedStartAt;
-
-    @Column(name = "late_start_reason", length = 1000)
-    private String lateStartReason;
 
     @Column(name = "current_agreement_version")
     private Integer currentAgreementVersion;

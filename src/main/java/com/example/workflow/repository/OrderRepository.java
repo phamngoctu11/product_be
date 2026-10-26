@@ -57,7 +57,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     );
 
     @Query("SELECT o.id FROM Order o WHERE o.orderType = com.example.workflow.nume.OrderType.CUSTOM " +
-            "AND o.userSubmittedAt IS NULL AND o.confirmationDueAt IS NOT NULL AND o.confirmationDueAt <= :now " +
+            "AND NOT EXISTS (SELECT a.id FROM OrderAgreement a WHERE a.orderId = o.id AND a.submittedAt IS NOT NULL) " +
+            "AND o.confirmationDueAt IS NOT NULL AND o.confirmationDueAt <= :now " +
             "AND o.status IN :statuses ORDER BY o.confirmationDueAt ASC")
     List<Long> findCustomAgreementTimeoutCandidates(
             @Param("now") LocalDateTime now,
@@ -83,7 +84,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "WHEN o.status = :cancelledStatus THEN 3 " +
             "ELSE 4 END ASC, " +
             "CASE WHEN o.status IN :oldestFirstStatuses THEN o.startOrderTime ELSE NULL END ASC, " +
-            "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
+            "CASE WHEN o.status = :deliveredStatus THEN o.deliveredAt ELSE NULL END DESC, " +
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId")
     Page<Long> findOrderIdsByUserId(
@@ -111,7 +112,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "WHEN o.status = :cancelledStatus THEN 3 " +
             "ELSE 4 END ASC, " +
             "CASE WHEN o.status IN :oldestFirstStatuses THEN o.startOrderTime ELSE NULL END ASC, " +
-            "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
+            "CASE WHEN o.status = :deliveredStatus THEN o.deliveredAt ELSE NULL END DESC, " +
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId " +
                     "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
@@ -136,7 +137,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +
             "AND (:maxPrice IS NULL OR o.finalPrice <= :maxPrice) " +
             "ORDER BY " +
-            "CASE WHEN o.status = :deliveredStatus THEN o.endOrderTime ELSE NULL END DESC, " +
+            "CASE WHEN o.status = :deliveredStatus THEN o.deliveredAt ELSE NULL END DESC, " +
             "o.startOrderTime DESC",
             countQuery = "SELECT COUNT(o) FROM Order o JOIN o.user u WHERE u.id = :userId AND o.status = :status " +
                     "AND (:minPrice IS NULL OR o.finalPrice >= :minPrice) " +

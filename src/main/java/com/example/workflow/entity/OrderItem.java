@@ -71,9 +71,6 @@ public class OrderItem {
      * Snapshot at checkout time. Product configuration may change after the
      * order was created, but its production route must remain stable.
      */
-    @Column(name = "is_handmade", nullable = false, columnDefinition = "boolean default false")
-    private boolean handmade = false;
-
     @Enumerated(EnumType.STRING)
     @Column(
             name = "production_status",

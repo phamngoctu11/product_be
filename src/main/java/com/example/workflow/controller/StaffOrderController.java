@@ -5,7 +5,6 @@ import com.example.workflow.dto.ClaimOrderRequest;
 import com.example.workflow.dto.OrderAssignmentResultDTO;
 import com.example.workflow.dto.OrderAssignmentQueueDTO;
 import com.example.workflow.dto.OrderListDTO;
-import com.example.workflow.dto.StartProductionRequest;
 import com.example.workflow.dto.StartProductionResultDTO;
 import com.example.workflow.dto.SubmitProductionCheckpointRequest;
 import com.example.workflow.dto.ProductionCheckpointDTO;
@@ -83,12 +82,11 @@ public class StaffOrderController {
     @PreAuthorize("hasAuthority('STAFF')")
     public ResponseEntity<ApiResponse<StartProductionResultDTO>> startProduction(
             @Positive @PathVariable Long orderId,
-            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
-            @Valid @RequestBody StartProductionRequest request
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Production started.",
-                productionStartService.start(orderId, request, idempotencyKey)
+                productionStartService.start(orderId, idempotencyKey)
         ));
     }
 

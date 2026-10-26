@@ -34,14 +34,15 @@ public class Product {
     @Column(name = "tags")
     private String tags;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_type_id")
+    private ProductType productType;
+
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
     private List<ProductVariant> variants = new ArrayList<>();
 
     @Column(name = "image_url")
     private String imageUrl;
-
-    @Column(name = "is_handmade", nullable = false, columnDefinition = "boolean default true")
-    private boolean handmade = true;
 
     @Enumerated(EnumType.STRING)
     @Column(

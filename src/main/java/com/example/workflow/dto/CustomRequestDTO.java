@@ -5,6 +5,7 @@ import com.example.workflow.nume.CustomRequestStatus;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public record CustomRequestDTO(
         Long id,
@@ -18,6 +19,11 @@ public record CustomRequestDTO(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDateTime submittedAt,
-        boolean editable
+        boolean editable,
+        Long productTypeId,
+        String productTypeCode,
+        String productTypeName,
+        List<ProductTypeFieldDTO> fields,
+        Map<String, Object> fieldValues
 ) implements Serializable {
 }

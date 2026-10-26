@@ -255,7 +255,7 @@ public class ChangeRequestService {
     }
 
     private void requireEligibleItem(OrderItem item) {
-        if (!item.isHandmade() || item.getProductionStatus() == null
+        if (item.getProductionStatus() == null
                 || item.getProductionStatus() == OrderItemProductionStatus.NOT_REQUIRED) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CHANGE_REQUEST_ITEM_NOT_ELIGIBLE);
         }
