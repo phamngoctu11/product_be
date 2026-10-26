@@ -52,9 +52,6 @@ class PasswordServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
-    @Mock
-    private UserService userService;
-
     @InjectMocks
     private PasswordService passwordService;
 
@@ -72,8 +69,6 @@ class PasswordServiceTest {
         when(passwordResetTokenRepository.findByUser_IdAndUsedAtIsNull("user-1")).thenReturn(List.of(previousToken));
         when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(userService.displayName(user)).thenReturn("Customer Nguyen");
-
         passwordService.requestPasswordReset(new ForgotPasswordRequest(" customer@example.com "));
 
         assertThat(previousToken.getUsedAt()).isNotNull();

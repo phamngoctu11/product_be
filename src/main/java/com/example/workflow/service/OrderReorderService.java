@@ -16,9 +16,9 @@ import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.CustomRequestRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +37,7 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class OrderReorderService {
-    private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final CustomRequestRepository customRequestRepository;
     private final CurrentUserService currentUserService;
     private final UserService userService;
@@ -62,8 +62,7 @@ public class OrderReorderService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     ReorderResponseDTO reorderWithinTransaction(Long orderId, String ownerId) {
-        Order source = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+        Order source = orderLookupService.requireForUpdate(orderId);
         if (source.getUser() == null || !Objects.equals(source.getUser().getId(), ownerId)
                 || (source.getStatus() != OrderStatus.DELIVERED && source.getStatus() != OrderStatus.CANCELLED)) {
             throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.REORDER_NOT_ALLOWED);
@@ -77,10 +76,10 @@ public class OrderReorderService {
     private ReorderResponseDTO reorderCatalog(Order source, String ownerId) {
         List<ReorderItemDTO> added = new ArrayList<>();
         List<ReorderItemDTO> skipped = new ArrayList<>();
-        for (OrderItem item : safeItems(source)) {
+        for (OrderItem item : source.itemsOrEmpty()) {
             ProductVariant variant = item == null ? null : item.getProductVariant();
             Long variantId = variant == null ? null : variant.getId();
-            String variantName = item == null ? null : firstPresent(
+            String variantName = item == null ? null : TextNormalizer.firstPresent(
                     item.getVariantNameSnapshot(), variant == null ? null : variant.getVariantName());
             int quantity = item == null ? 0 : item.getQuantity();
             try {
@@ -100,10 +99,10 @@ public class OrderReorderService {
     }
 
     private ReorderResponseDTO reorderCustom(Order source, String ownerId) {
-        OrderItem item = safeItems(source).stream()
+        OrderItem item = source.itemsOrEmpty().stream()
                 .filter(candidate -> candidate != null && candidate.getSourceType() == OrderItemSourceType.CUSTOM)
                 .findFirst()
-                .orElseGet(() -> safeItems(source).stream().findFirst()
+                .orElseGet(() -> source.itemsOrEmpty().stream().findFirst()
                         .orElseThrow(() -> invalid("Custom source order has no item snapshot.")));
         CustomSnapshot snapshot = customSnapshot(source, item);
         CustomRequest draft = new CustomRequest();
@@ -161,20 +160,12 @@ public class OrderReorderService {
 
     private OrderType resolveOrderType(Order order) {
         if (order.getOrderType() != null) return order.getOrderType();
-        return safeItems(order).stream().anyMatch(item -> item.getSourceType() == OrderItemSourceType.CUSTOM)
+        return order.itemsOrEmpty().stream().anyMatch(item -> item.getSourceType() == OrderItemSourceType.CUSTOM)
                 ? OrderType.CUSTOM : OrderType.CATALOG;
     }
 
     private String text(JsonNode node) {
         return node != null && node.isTextual() && StringUtils.hasText(node.asText()) ? node.asText().trim() : null;
-    }
-
-    private String firstPresent(String first, String second) {
-        return StringUtils.hasText(first) ? first.trim() : second;
-    }
-
-    private List<OrderItem> safeItems(Order order) {
-        return order.getItems() == null ? List.of() : order.getItems();
     }
 
     private AppException invalid(String detail) {

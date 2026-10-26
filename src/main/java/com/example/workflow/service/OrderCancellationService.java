@@ -15,7 +15,6 @@ import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.OrderAssignmentRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.GuestOrderAccessGuard;
@@ -46,7 +45,7 @@ public class OrderCancellationService {
     private static final long GUEST_CANCEL_LIMIT = 8;
     private static final String SYSTEM_ACTOR = "SYSTEM";
 
-    private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final UserRepository userRepository;
     private final OrderAssignmentRepository assignmentRepository;
     private final CurrentUserService currentUserService;
@@ -81,7 +80,7 @@ public class OrderCancellationService {
 
     @Transactional(readOnly = true)
     public GuestOrderCancellationViewDTO getGuestCancellationView(Long orderId, String rawToken) {
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         guestAccessGuard.authorize(order, rawToken, OrderLookupTokenService.Scope.READ, GUEST_VIEW_LIMIT, GUEST_ACCESS_WINDOW);
         boolean cancellable = OrderTransitionPolicy.allows(order.getStatus(), OrderStatus.CANCELLED, CancellationSource.GUEST);
         if (order.getStatus() != OrderStatus.CANCELLED && !cancellable) {
@@ -105,7 +104,7 @@ public class OrderCancellationService {
             String idempotencyKey
     ) {
         requireRequest(request);
-        Order visibleOrder = requireOrder(orderId);
+        Order visibleOrder = orderLookupService.require(orderId);
         guestAccessGuard.authorize(visibleOrder, rawToken, OrderLookupTokenService.Scope.CANCEL, GUEST_CANCEL_LIMIT, GUEST_ACCESS_WINDOW);
         CancellationCommand command = new CancellationCommand(
                 orderId,
@@ -189,8 +188,7 @@ public class OrderCancellationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     OrderCancellationResultDTO cancelWithinTransaction(CancellationCommand command) {
-        Order order = orderRepository.findByIdForUpdate(command.orderId())
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+        Order order = orderLookupService.requireForUpdate(command.orderId());
         authorizeLockedOrder(order, command);
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
@@ -295,11 +293,6 @@ public class OrderCancellationService {
                 order.getId(), order.getVersion(), order.getStatus(), order.getCancellationSource(),
                 order.getCancelReason(), 0, false, false, order.getCancelledAt()
         );
-    }
-
-    private Order requireOrder(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
     }
 
     private void requireRequest(CancelOrderRequest request) {

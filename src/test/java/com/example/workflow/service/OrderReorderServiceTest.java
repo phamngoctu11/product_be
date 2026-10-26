@@ -11,7 +11,6 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderType;
 import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.repository.CustomRequestRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +27,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderReorderServiceTest {
-    @Mock OrderRepository orderRepository;
+    @Mock OrderLookupService orderLookupService;
     @Mock CustomRequestRepository customRequestRepository;
     @Mock CurrentUserService currentUserService;
     @Mock UserService userService;
@@ -40,7 +39,7 @@ class OrderReorderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderReorderService(
-                orderRepository, customRequestRepository, currentUserService, userService, cartService,
+                orderLookupService, customRequestRepository, currentUserService, userService, cartService,
                 durableRequests, new ObjectMapper()
         );
     }
@@ -50,7 +49,7 @@ class OrderReorderServiceTest {
         OrderItem accepted = catalogItem(11L, 101L, ProductAvailabilityStatus.ACCEPTING_ORDERS);
         OrderItem paused = catalogItem(12L, 102L, ProductAvailabilityStatus.PAUSED);
         Order source = sourceOrder(OrderType.CATALOG, accepted, paused);
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(source));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(source);
 
         var response = service.reorderWithinTransaction(100L, "owner-1");
 
@@ -69,7 +68,7 @@ class OrderReorderServiceTest {
         item.setQuantity(3);
         item.setSpecSnapshot("{\"description\":\"Make it blue\",\"imageUrls\":[\"https://cdn.test/a.png\"]}");
         Order source = sourceOrder(OrderType.CUSTOM, item);
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(source));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(source);
         when(customRequestRepository.findByLinkedOrderId(100L)).thenReturn(Optional.empty());
         when(customRequestRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             CustomRequest draft = invocation.getArgument(0);

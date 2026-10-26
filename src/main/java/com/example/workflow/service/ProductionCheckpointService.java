@@ -34,6 +34,7 @@ import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OrderTransitionService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -84,7 +85,7 @@ public class ProductionCheckpointService {
     }
 
     private List<OrderItemProductionDTO> progressView(Order order, boolean ownerView) {
-        return safeItems(order).stream().map(item -> {
+        return order.itemsOrEmpty().stream().map(item -> {
             List<ProductionCheckpointDTO> checkpoints = checkpointRepository
                     .findByOrderItem_IdOrderBySubmittedAtAsc(item.getId())
                     .stream()
@@ -150,7 +151,7 @@ public class ProductionCheckpointService {
         reviewPayload.put("checkpointId", checkpointId);
         reviewPayload.put("checkpointVersion", request.checkpointVersion());
         reviewPayload.put("decision", request.decision().name());
-        reviewPayload.put("reason", normalizedOptional(request.reason()));
+        reviewPayload.put("reason", TextNormalizer.optional(request.reason()));
         String canonical = JsonUtils.write(objectMapper, reviewPayload, "production checkpoint review");
         String result = durableRequests.execute(
                 "production-review:manager:" + manager.getId() + ":checkpoint:" + checkpointId,
@@ -376,7 +377,7 @@ public class ProductionCheckpointService {
         checkpoint.setOrderItem(item);
         checkpoint.setStage(stage);
         checkpoint.setAttemptNumber(attempt);
-        checkpoint.setNote(normalizedOptional(note));
+        checkpoint.setNote(TextNormalizer.optional(note));
         checkpoint.setSubmittedBy(staff);
         checkpoint.setSubmittedAt(LocalDateTime.now());
         for (int index = 0; index < imageUrls.size(); index++) {
@@ -405,7 +406,7 @@ public class ProductionCheckpointService {
     }
 
     private OrderItem requireItem(Order order, Long orderItemId) {
-        return safeItems(order).stream()
+        return order.itemsOrEmpty().stream()
                 .filter(item -> Objects.equals(item.getId(), orderItemId))
                 .findFirst()
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_ITEM_NOT_FOUND));
@@ -474,7 +475,7 @@ public class ProductionCheckpointService {
     }
 
     private String reviewReason(ReviewProductionCheckpointRequest request) {
-        String reason = normalizedOptional(request.reason());
+        String reason = TextNormalizer.optional(request.reason());
         if (request.decision() == ProductionDecisionType.REWORK_REQUIRED && !StringUtils.hasText(reason)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PRODUCTION_REWORK_REASON_REQUIRED);
         }
@@ -515,7 +516,7 @@ public class ProductionCheckpointService {
         canonical.put("orderVersion", request.orderVersion());
         canonical.put("stage", request.stage().name());
         canonical.put("imageUrls", validatedImageUrls(request.imageUrls()));
-        canonical.put("note", normalizedOptional(request.note()));
+        canonical.put("note", TextNormalizer.optional(request.note()));
         return canonical;
     }
 
@@ -542,11 +543,4 @@ public class ProductionCheckpointService {
         return order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
     }
 
-    private List<OrderItem> safeItems(Order order) {
-        return order.getItems() == null ? List.of() : order.getItems();
-    }
-
-    private String normalizedOptional(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
-    }
 }

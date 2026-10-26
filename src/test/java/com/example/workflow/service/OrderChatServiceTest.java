@@ -10,7 +10,6 @@ import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.repository.ChatMessageRepository;
 import com.example.workflow.repository.OrderChatThreadRepository;
-import com.example.workflow.repository.OrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +27,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderChatServiceTest {
-    @Mock private OrderRepository orderRepository;
+    @Mock private OrderLookupService orderLookupService;
     @Mock private OrderChatThreadRepository threadRepository;
     @Mock private ChatMessageRepository messageRepository;
     @Mock private CurrentUserService currentUserService;
@@ -39,7 +38,7 @@ class OrderChatServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderChatService(orderRepository, threadRepository, messageRepository,
+        service = new OrderChatService(orderLookupService, threadRepository, messageRepository,
                 currentUserService, messagingTemplate);
     }
 
@@ -47,7 +46,7 @@ class OrderChatServiceTest {
     void assignmentRetryReturnsTheSameThread() {
         Order order = assignedOrder();
         OrderChatThread existing = thread();
-        when(orderRepository.findById(21L)).thenReturn(Optional.of(order));
+        when(orderLookupService.require(21L)).thenReturn(order);
         when(threadRepository.findByOrderId(21L)).thenReturn(Optional.of(existing));
 
         OrderChatThreadDTO result = service.ensureThreadForAssignedOrder(21L);
@@ -62,14 +61,14 @@ class OrderChatServiceTest {
         when(threadRepository.findByOrderId(21L)).thenReturn(Optional.of(thread()));
 
         assertThrows(AppException.class, () -> service.authorizeSubscription(21L, authentication));
-        verifyNoInteractions(orderRepository);
+        verifyNoInteractions(orderLookupService);
     }
 
     @Test
     void guestOrderNeverGetsChatThread() {
         Order order = new Order();
         order.setId(21L);
-        when(orderRepository.findById(21L)).thenReturn(Optional.of(order));
+        when(orderLookupService.require(21L)).thenReturn(order);
 
         assertNull(service.ensureThreadForAssignedOrder(21L));
         verifyNoInteractions(threadRepository);
@@ -100,7 +99,7 @@ class OrderChatServiceTest {
         ChatMessage persisted = messageCaptor.getValue();
         assertEquals(30L, persisted.getChatThreadId());
         assertEquals("staff-1", persisted.getSenderId());
-        verifyNoInteractions(orderRepository);
+        verifyNoInteractions(orderLookupService);
         verify(messagingTemplate).convertAndSend("/topic/order-chat/21", result);
     }
 

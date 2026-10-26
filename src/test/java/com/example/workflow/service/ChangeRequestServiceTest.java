@@ -17,7 +17,6 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChangeRequestRepository;
 import com.example.workflow.repository.OrderAssignmentRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -44,7 +43,7 @@ import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ChangeRequestServiceTest {
-    @Mock private OrderRepository orderRepository;
+    @Mock private OrderLookupService orderLookupService;
     @Mock private OrderAssignmentRepository assignmentRepository;
     @Mock private ChangeRequestRepository changeRequestRepository;
     @Mock private CurrentUserService currentUserService;
@@ -61,7 +60,7 @@ class ChangeRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ChangeRequestService(orderRepository, assignmentRepository, changeRequestRepository,
+        service = new ChangeRequestService(orderLookupService, assignmentRepository, changeRequestRepository,
                 currentUserService, durableRequests, notificationService, eventPublisher, cacheService,
                 new ObjectMapper());
         owner = user("owner");
@@ -206,7 +205,7 @@ class ChangeRequestServiceTest {
     }
 
     private void stubLockedOrderAndAssignment() {
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(assignmentRepository.findActiveByOrderIdForUpdate(10L)).thenReturn(Optional.of(assignment()));
     }
 

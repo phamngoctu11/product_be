@@ -13,6 +13,7 @@ import com.example.workflow.nume.PaymentStatus;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.PaymentAttemptRepository;
 import com.example.workflow.service.redis.DomainEventPublisher;
+import com.example.workflow.util.PaymentProviderNormalizer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -79,7 +80,7 @@ public class PaymentWebhookService {
 
         String transactionId = String.valueOf(payload.id());
         PaymentAttempt transactionOwner = paymentAttemptRepository
-                .findByProviderAndProviderTransactionId(normalizedProvider(), transactionId)
+                .findByProviderAndProviderTransactionId(PaymentProviderNormalizer.normalize(provider), transactionId)
                 .orElse(null);
         if (transactionOwner != null) {
             return WebhookResult.DUPLICATE;
@@ -87,7 +88,7 @@ public class PaymentWebhookService {
 
         String paymentCode = payload.code().trim().toUpperCase(Locale.ROOT);
         PaymentAttempt attempt = paymentAttemptRepository
-                .findByProviderAndRequestReferenceForUpdate(normalizedProvider(), paymentCode)
+                .findByProviderAndRequestReferenceForUpdate(PaymentProviderNormalizer.normalize(provider), paymentCode)
                 .orElse(null);
         if (attempt == null) {
             log.warn("Ignored authenticated SePay transaction {} because payment code was not found", transactionId);
@@ -236,10 +237,6 @@ public class PaymentWebhookService {
     private String safePayload(byte[] rawBody) {
         String payload = new String(rawBody == null ? new byte[0] : rawBody, StandardCharsets.UTF_8);
         return payload.length() <= 60_000 ? payload : payload.substring(0, 60_000);
-    }
-
-    private String normalizedProvider() {
-        return StringUtils.hasText(provider) ? provider.trim().toUpperCase(Locale.ROOT) : "SEPAY";
     }
 
     private AppException unauthorized() {

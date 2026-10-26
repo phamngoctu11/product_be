@@ -38,6 +38,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrderAgreementServiceTest {
     @Mock private OrderRepository orderRepository;
+    @Mock private OrderLookupService orderLookupService;
     @Mock private OrderAgreementRepository agreementRepository;
     @Mock private OrderAssignmentRepository assignmentRepository;
     @Mock private CurrentUserService currentUserService;
@@ -53,7 +54,7 @@ class OrderAgreementServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderAgreementService(
-                orderRepository, agreementRepository, assignmentRepository, currentUserService,
+                orderRepository, orderLookupService, agreementRepository, assignmentRepository, currentUserService,
                 durableRequests, transitionService, historyService, voucherService,
                 notificationService, eventPublisher, new ObjectMapper()
         );
@@ -64,7 +65,7 @@ class OrderAgreementServiceTest {
         Order order = customOrder(OrderStatus.DISCUSSING);
         LocalDateTime dueAt = LocalDateTime.now().plusHours(2);
         order.setConfirmationDueAt(dueAt);
-        when(orderRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(11L)).thenReturn(order);
         when(assignmentRepository.findActiveByOrderId(11L)).thenReturn(Optional.of(activeAssignment()));
         when(voucherService.calculateDiscountAmount(null, 500_000d)).thenReturn(0d);
         when(transitionService.apply(eq(11L), eq(3L), eq(OrderStatus.WAITING_STAFF_CONFIRMATION),
@@ -99,7 +100,7 @@ class OrderAgreementServiceTest {
     void catalogClientCannotOverrideOfficialPriceOrDuration() {
         Order order = customOrder(OrderStatus.DISCUSSING);
         order.setOrderType(OrderType.CATALOG);
-        when(orderRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(11L)).thenReturn(order);
         when(assignmentRepository.findActiveByOrderId(11L)).thenReturn(Optional.of(activeAssignment()));
 
         assertThrows(AppException.class, () -> service.submitWithinTransaction(
@@ -127,7 +128,7 @@ class OrderAgreementServiceTest {
         agreement.setStatus(OrderAgreementStatus.USER_SUBMITTED);
         agreement.setItemSnapshot("{}");
         agreement.setSubmittedAt(firstSubmittedAt);
-        when(orderRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(11L)).thenReturn(order);
         when(assignmentRepository.findActiveByOrderId(11L)).thenReturn(Optional.of(activeAssignment()));
         when(agreementRepository.findByOrderIdAndAgreementVersionForUpdate(11L, 2)).thenReturn(Optional.of(agreement));
         when(transitionService.apply(eq(11L), eq(3L), eq(OrderStatus.DISCUSSING), eq("staff-1"),

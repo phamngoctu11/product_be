@@ -11,7 +11,6 @@ import com.example.workflow.nume.AssignmentSource;
 import com.example.workflow.nume.CancellationSource;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.repository.OrderAssignmentRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.GuestOrderAccessGuard;
@@ -36,7 +35,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class OrderCancellationServiceTest {
-    private final OrderRepository orderRepository = mock(OrderRepository.class);
+    private final OrderLookupService orderLookupService = mock(OrderLookupService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final OrderAssignmentRepository assignmentRepository = mock(OrderAssignmentRepository.class);
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
@@ -49,7 +48,7 @@ class OrderCancellationServiceTest {
     private final OrderStatusHistoryService historyService = mock(OrderStatusHistoryService.class);
     private final DomainEventPublisher eventPublisher = mock(DomainEventPublisher.class);
     private final OrderCancellationService service = new OrderCancellationService(
-            orderRepository, userRepository, assignmentRepository, currentUserService, guestAccessGuard,
+            orderLookupService, userRepository, assignmentRepository, currentUserService, guestAccessGuard,
             tokenService, durableRequests, transitionService, voucherService, reputationService,
             historyService, eventPublisher, new ObjectMapper().findAndRegisterModules()
     );
@@ -71,7 +70,7 @@ class OrderCancellationServiceTest {
         Order order = cancellableOrder(owner, 2_000_000d);
         OrderAssignment assignment = new OrderAssignment();
         assignment.occupy(10L, "staff", AssignmentSource.MANAGER, "manager", LocalDateTime.now());
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(userRepository.findByIdForUpdate("owner")).thenReturn(Optional.of(owner));
         when(transitionService.apply(eq(10L), eq(0L), eq(OrderStatus.CANCELLED), eq("owner"), eq("reason"), eq("ref"), eq(CancellationSource.USER)))
                 .thenAnswer(invocation -> markCancelled(order));
@@ -93,7 +92,7 @@ class OrderCancellationServiceTest {
     void insufficientReputationLeavesEveryCancellationEffectUntouched() {
         User owner = user("owner", 4);
         Order order = cancellableOrder(owner, 10_000_001d);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(userRepository.findByIdForUpdate("owner")).thenReturn(Optional.of(owner));
 
         assertThatThrownBy(() -> service.cancelWithinTransaction(command(CancellationSource.USER, "owner")))
@@ -111,7 +110,7 @@ class OrderCancellationServiceTest {
         order.setVersion(1L);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancellationSource(CancellationSource.PAYMENT_TIMEOUT);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         OrderCancellationResultDTO result = service.cancelWithinTransaction(command(CancellationSource.PAYMENT_TIMEOUT, "SYSTEM"));
 
@@ -127,7 +126,7 @@ class OrderCancellationServiceTest {
         User owner = user("owner", 10);
         Order order = cancellableOrder(owner, 100d);
         order.setStatus(OrderStatus.ORDER_ACCEPTED);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         assertThatThrownBy(() -> service.cancelWithinTransaction(command(CancellationSource.USER, "owner")))
                 .isInstanceOf(AppException.class);
@@ -137,7 +136,7 @@ class OrderCancellationServiceTest {
     @Test
     void guestCancellationUsesScopedTokenAndNeverTouchesReputation() {
         Order order = cancellableOrder(null, 20_000_000d);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(transitionService.apply(eq(10L), eq(0L), eq(OrderStatus.CANCELLED), eq("GUEST:10"), eq("reason"), eq("ref"), eq(CancellationSource.GUEST)))
                 .thenAnswer(invocation -> markCancelled(order, CancellationSource.GUEST));
         when(assignmentRepository.findActiveByOrderIdForUpdate(10L)).thenReturn(Optional.empty());
@@ -156,7 +155,7 @@ class OrderCancellationServiceTest {
         User owner = user("owner", 10);
         Order order = cancellableOrder(owner, 100d);
         order.setVersion(2L);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         assertThatThrownBy(() -> service.cancelWithinTransaction(command(CancellationSource.USER, "owner")))
                 .isInstanceOf(AppException.class);
@@ -167,7 +166,7 @@ class OrderCancellationServiceTest {
     @Test
     void anotherUserCannotCancelOwnersOrder() {
         Order order = cancellableOrder(user("owner", 10), 100d);
-        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         assertThatThrownBy(() -> service.cancelWithinTransaction(command(CancellationSource.USER, "intruder")))
                 .isInstanceOf(AppException.class);

@@ -27,6 +27,7 @@ import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OrderTransitionService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class OrderAgreementService {
     private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final OrderAgreementRepository agreementRepository;
     private final OrderAssignmentRepository assignmentRepository;
     private final CurrentUserService currentUserService;
@@ -62,7 +64,7 @@ public class OrderAgreementService {
 
     @Transactional(readOnly = true)
     public OrderAgreementDTO getForCurrentParticipant(Long orderId) {
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         authorizeParticipant(order, currentUserService.requireCurrentUserId());
         return agreementRepository.findFirstByOrderIdOrderByAgreementVersionDesc(orderId)
                 .map(agreement -> toDto(order, agreement))
@@ -98,8 +100,7 @@ public class OrderAgreementService {
         if (request == null || request.orderVersion() == null) {
             throw badRequest("orderVersion is required.");
         }
-        Order order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+        Order order = orderLookupService.requireForUpdate(orderId);
         requireOwner(order, userId);
         requireActiveAssignment(order, null);
         requireVersion(order, request.orderVersion());
@@ -157,8 +158,7 @@ public class OrderAgreementService {
         if (request == null || request.orderVersion() == null || request.agreementVersion() == null || request.decision() == null) {
             throw badRequest("orderVersion, agreementVersion and decision are required.");
         }
-        Order order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+        Order order = orderLookupService.requireForUpdate(orderId);
         requireActiveAssignment(order, staffId);
         requireVersion(order, request.orderVersion());
         if (order.getStatus() != OrderStatus.WAITING_STAFF_CONFIRMATION
@@ -193,7 +193,7 @@ public class OrderAgreementService {
         }
 
         agreement.setStatus(OrderAgreementStatus.STAFF_CONFIRMED);
-        agreement.setDecisionReason(normalizedOptional(request.reason()));
+        agreement.setDecisionReason(TextNormalizer.optional(request.reason()));
         agreement.setConfirmedBy(staffId);
         agreement.setConfirmedAt(LocalDateTime.now());
         agreementRepository.save(agreement);
@@ -231,7 +231,7 @@ public class OrderAgreementService {
         snapshot.put("unitPrice", request.unitPrice().setScale(2, RoundingMode.HALF_UP));
         snapshot.put("productionDurationDays", request.productionDurationDays());
         snapshot.put("paymentMethod", paymentMethod.name());
-        snapshot.put("note", normalizedOptional(request.note()));
+        snapshot.put("note", TextNormalizer.optional(request.note()));
         return new SnapshotAndTotals(
                 JsonUtils.write(objectMapper, snapshot, "custom agreement snapshot"),
                 subtotal, discount, floorZero(subtotal.subtract(discount)),
@@ -245,7 +245,7 @@ public class OrderAgreementService {
             throw badRequest("Catalog item, quantity, price and duration are read-only.");
         }
         List<Map<String, Object>> items = new ArrayList<>();
-        for (OrderItem item : safeItems(order)) {
+        for (OrderItem item : order.itemsOrEmpty()) {
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("orderItemId", item.getId());
             value.put("productName", item.getProductNameSnapshot());
@@ -279,7 +279,7 @@ public class OrderAgreementService {
             return;
         }
         Map<String, Object> snapshot = JsonUtils.read(objectMapper, agreement.getItemSnapshot(), Map.class, "custom agreement snapshot");
-        List<OrderItem> items = safeItems(order);
+        List<OrderItem> items = order.itemsOrEmpty();
         if (items.isEmpty()) {
             throw badRequest("Custom order has no item.");
         }
@@ -337,11 +337,6 @@ public class OrderAgreementService {
         }
     }
 
-    private Order requireOrder(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
     private OrderAgreementDTO toDto(Order order, OrderAgreement agreement) {
         return new OrderAgreementDTO(
                 agreement.getId(), order.getId(), order.getVersion(), order.getOrderType(), order.getStatus(),
@@ -365,10 +360,6 @@ public class OrderAgreementService {
     private String assignedStaffId(Order order) {
         if (order.getAssignedStaff() != null) return order.getAssignedStaff().getId();
         return order.getWarehouseStaff() == null ? null : order.getWarehouseStaff().getId();
-    }
-
-    private List<OrderItem> safeItems(Order order) {
-        return order.getItems() == null ? List.of() : order.getItems();
     }
 
     private String normalizedDescription(String value) {
@@ -407,10 +398,6 @@ public class OrderAgreementService {
     private String normalizedReason(String value) {
         if (!StringUtils.hasText(value)) throw badRequest("A reason is required when requesting changes.");
         return value.trim();
-    }
-
-    private String normalizedOptional(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private BigDecimal nonNegative(BigDecimal value, String message) {

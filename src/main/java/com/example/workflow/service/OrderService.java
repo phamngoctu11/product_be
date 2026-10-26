@@ -53,8 +53,7 @@ public class OrderService {
     public List<OrderStatusHistoryDTO> getOrderHistory(Long orderId) {
         Order order = orderLookupService.require(orderId);
         assertCurrentUserCanViewOrder(order);
-        return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
-                .stream().map(historyMapper::toDto).collect(Collectors.toList());
+        return loadOrderHistory(orderId);
     }
 
     @Transactional(readOnly = true)
@@ -144,6 +143,10 @@ public class OrderService {
     public List<OrderStatusHistoryDTO> getGuestOrderHistory(Long orderId, String token) {
         Order order = orderLookupService.require(orderId);
         orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.READ);
+        return loadOrderHistory(orderId);
+    }
+
+    private List<OrderStatusHistoryDTO> loadOrderHistory(Long orderId) {
         return historyRepository.findByOrderIdOrderByUpdatetimeAsc(orderId)
                 .stream().map(historyMapper::toDto).collect(Collectors.toList());
     }

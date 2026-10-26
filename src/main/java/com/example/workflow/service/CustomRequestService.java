@@ -197,10 +197,14 @@ public class CustomRequestService {
     }
 
     private OrderContactSnapshot resolveContact(User owner, SubmitCustomRequest request) {
-        String fullName = firstPresent(request.fullName(), TextNormalizer.fullName(owner.getLastname(), owner.getFirstname()));
-        String email = TextNormalizer.email(firstPresent(request.email(), owner.getEmail()));
-        String phone = firstPresent(request.phone(), owner.getPhone());
-        String address = firstPresent(request.address(), owner.getAddress());
+        String fullName = TextNormalizer.firstPresent(
+                request.fullName(), TextNormalizer.fullName(owner.getLastname(), owner.getFirstname())
+        );
+        String email = TextNormalizer.email(
+                TextNormalizer.firstPresent(request.email(), owner.getEmail())
+        );
+        String phone = TextNormalizer.firstPresent(request.phone(), owner.getPhone());
+        String address = TextNormalizer.firstPresent(request.address(), owner.getAddress());
         if (!StringUtils.hasText(fullName) || !StringUtils.hasText(email)
                 || !StringUtils.hasText(phone) || !StringUtils.hasText(address)) {
             throw invalid("Full name, email, phone and shipping address are required when submitting.");
@@ -353,10 +357,6 @@ public class CustomRequestService {
             throw invalid("Quantity must be positive.");
         }
         return value;
-    }
-
-    private String firstPresent(String preferred, String fallback) {
-        return StringUtils.hasText(preferred) ? preferred.trim() : TextNormalizer.optional(fallback);
     }
 
     private AppException invalid(String detail) {

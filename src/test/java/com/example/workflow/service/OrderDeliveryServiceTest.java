@@ -38,6 +38,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrderDeliveryServiceTest {
     @Mock OrderRepository orderRepository;
+    @Mock OrderLookupService orderLookupService;
     @Mock OrderReceiptRepository receiptRepository;
     @Mock OrderAssignmentRepository assignmentRepository;
     @Mock CurrentUserService currentUserService;
@@ -54,7 +55,7 @@ class OrderDeliveryServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderDeliveryService(
-                orderRepository, receiptRepository, assignmentRepository, currentUserService, guestAccessGuard, tokenService,
+                orderRepository, orderLookupService, receiptRepository, assignmentRepository, currentUserService, guestAccessGuard, tokenService,
                 durableRequests, reputationService, historyService, eventPublisher, cacheService, new ObjectMapper()
         );
     }
@@ -65,7 +66,7 @@ class OrderDeliveryServiceTest {
         Order order = order(OrderStatus.READY_TO_SHIP, user("owner-1"), item(11L, 2), item(12L, 3));
         OrderAssignment history = new OrderAssignment();
         history.setStaffId(staff.getId());
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(order);
         when(assignmentRepository.findByOrderIdOrderByAssignedAtDesc(100L)).thenReturn(List.of(history));
         when(orderRepository.saveAndFlush(order)).thenReturn(order);
 
@@ -95,7 +96,7 @@ class OrderDeliveryServiceTest {
         Order order = order(OrderStatus.READY_TO_SHIP, user("owner-1"), item(11L, 2), item(12L, 3));
         OrderAssignment history = new OrderAssignment();
         history.setStaffId(staff.getId());
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(order);
         when(assignmentRepository.findByOrderIdOrderByAssignedAtDesc(100L)).thenReturn(List.of(history));
 
         assertThrows(AppException.class, () -> service.handoverWithinTransaction(
@@ -117,7 +118,7 @@ class OrderDeliveryServiceTest {
         item.setExportedQuantity(2);
         Order order = order(OrderStatus.SHIPPING, owner, item);
         order.setDeliveryContractVersion(1);
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(order);
 
         ReceiptConfirmResponse response = service.confirmWithinTransaction(
                 100L, receipt(7L, 11L, 1, false), owner.getId(), false, null
@@ -139,7 +140,7 @@ class OrderDeliveryServiceTest {
         item.setExportedQuantity(2);
         Order order = order(OrderStatus.SHIPPING, owner, item);
         order.setDeliveryContractVersion(1);
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(order);
         when(orderRepository.saveAndFlush(order)).thenReturn(order);
 
         ReceiptConfirmResponse response = service.confirmWithinTransaction(
@@ -164,7 +165,7 @@ class OrderDeliveryServiceTest {
         item.setExportedQuantity(2);
         Order order = order(OrderStatus.SHIPPING, null, item);
         order.setDeliveryContractVersion(1);
-        when(orderRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.requireForUpdate(100L)).thenReturn(order);
         when(orderRepository.saveAndFlush(order)).thenReturn(order);
 
         ReceiptConfirmResponse response = service.confirmWithinTransaction(
@@ -185,7 +186,7 @@ class OrderDeliveryServiceTest {
         OrderItem item = item(11L, 2);
         Order order = order(OrderStatus.SHIPPING, user("owner-1"), item);
         order.setDeliveryContractVersion(null);
-        when(orderRepository.findById(100L)).thenReturn(Optional.of(order));
+        when(orderLookupService.require(100L)).thenReturn(order);
         when(currentUserService.requireCurrentUser(eq(Role.USER), any())).thenReturn(order.getUser());
 
         var view = service.getUserReceiptView(100L);

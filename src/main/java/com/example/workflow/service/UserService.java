@@ -12,7 +12,7 @@ import com.example.workflow.nume.Role;
 import com.example.workflow.repository.UserRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.factory.UserFactory;
-import com.example.workflow.util.UserDisplayNameUtils;
+import com.example.workflow.util.TextNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -81,18 +81,14 @@ public class UserService {
     }
 
     private void normalizeRegistrationData(UserCreDTO dto) {
-        dto.setUsername(trimToNull(dto.getUsername()));
-        dto.setEmail(trimToNull(dto.getEmail()));
-        dto.setPhone(trimToNull(dto.getPhone()));
-        dto.setFirstname(trimToNull(dto.getFirstname()));
-        dto.setLastname(trimToNull(dto.getLastname()));
-        dto.setGender(trimToNull(dto.getGender()));
-        dto.setAddress(trimToNull(dto.getAddress()));
-        dto.setAvatarUrl(trimToNull(dto.getAvatarUrl()));
-    }
-
-    private String trimToNull(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
+        dto.setUsername(TextNormalizer.optional(dto.getUsername()));
+        dto.setEmail(TextNormalizer.optional(dto.getEmail()));
+        dto.setPhone(TextNormalizer.optional(dto.getPhone()));
+        dto.setFirstname(TextNormalizer.optional(dto.getFirstname()));
+        dto.setLastname(TextNormalizer.optional(dto.getLastname()));
+        dto.setGender(TextNormalizer.optional(dto.getGender()));
+        dto.setAddress(TextNormalizer.optional(dto.getAddress()));
+        dto.setAvatarUrl(TextNormalizer.optional(dto.getAvatarUrl()));
     }
 
     private Role parseRole(String role) {
@@ -174,13 +170,13 @@ public class UserService {
     }
 
     private void normalizeProfileData(UserProfileUpdateDTO request) {
-        request.setEmail(trimToNull(request.getEmail()));
-        request.setPhone(trimToNull(request.getPhone()));
-        request.setFirstname(trimToNull(request.getFirstname()));
-        request.setLastname(trimToNull(request.getLastname()));
-        request.setGender(trimToNull(request.getGender()));
-        request.setAddress(trimToNull(request.getAddress()));
-        request.setAvatarUrl(trimToNull(request.getAvatarUrl()));
+        request.setEmail(TextNormalizer.optional(request.getEmail()));
+        request.setPhone(TextNormalizer.optional(request.getPhone()));
+        request.setFirstname(TextNormalizer.optional(request.getFirstname()));
+        request.setLastname(TextNormalizer.optional(request.getLastname()));
+        request.setGender(TextNormalizer.optional(request.getGender()));
+        request.setAddress(TextNormalizer.optional(request.getAddress()));
+        request.setAvatarUrl(TextNormalizer.optional(request.getAvatarUrl()));
     }
 
     private void validateProfileUniqueness(User user, UserProfileUpdateDTO request) {
@@ -239,11 +235,4 @@ public class UserService {
         return staff;
     }
 
-    public String fullName(User user) {
-        return UserDisplayNameUtils.fullName(user);
-    }
-
-    public String displayName(User user) {
-        return UserDisplayNameUtils.displayName(user);
-    }
 }

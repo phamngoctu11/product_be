@@ -12,6 +12,19 @@ public class TextNormalizer {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
+    public String firstPresent(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = optional(value);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
     public String email(String value) {
         String normalized = optional(value);
         return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);

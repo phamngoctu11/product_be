@@ -4,6 +4,7 @@ import com.example.workflow.dto.OrderDTO;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.User;
 import com.example.workflow.nume.OrderType;
+import com.example.workflow.util.TextNormalizer;
 import com.example.workflow.util.UserDisplayNameUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -68,10 +69,10 @@ public interface OrderMapper {
         if (user != null) {
             return OrderDTO.CustomerInfo.user(
                     user.getId(),
-                    firstPresent(order.getRecipientName(), UserDisplayNameUtils.fullName(user)),
-                    firstPresent(order.getEmail(), user.getEmail()),
-                    firstPresent(order.getRecipientPhone(), user.getPhone()),
-                    firstPresent(order.getShippingAddress(), user.getAddress())
+                    TextNormalizer.firstPresent(order.getRecipientName(), UserDisplayNameUtils.fullName(user)),
+                    TextNormalizer.firstPresent(order.getEmail(), user.getEmail()),
+                    TextNormalizer.firstPresent(order.getRecipientPhone(), user.getPhone()),
+                    TextNormalizer.firstPresent(order.getShippingAddress(), user.getAddress())
             );
         }
         return OrderDTO.CustomerInfo.guest(
@@ -87,7 +88,9 @@ public interface OrderMapper {
         if (order == null) {
             return null;
         }
-        return firstPresent(order.getEmail(), order.getUser() == null ? null : order.getUser().getEmail());
+        return TextNormalizer.firstPresent(
+                order.getEmail(), order.getUser() == null ? null : order.getUser().getEmail()
+        );
     }
 
     default BigDecimal resolveTotalPrice(Order order) {
@@ -123,9 +126,5 @@ public interface OrderMapper {
             return order.getGuestVoucherTemplate().getName();
         }
         return null;
-    }
-
-    default String firstPresent(String primary, String fallback) {
-        return primary != null && !primary.isBlank() ? primary : fallback;
     }
 }

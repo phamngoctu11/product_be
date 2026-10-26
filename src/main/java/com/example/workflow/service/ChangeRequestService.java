@@ -20,7 +20,6 @@ import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChangeRequestRepository;
 import com.example.workflow.repository.OrderAssignmentRepository;
-import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
@@ -46,7 +45,7 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class ChangeRequestService {
-    private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final OrderAssignmentRepository assignmentRepository;
     private final ChangeRequestRepository changeRequestRepository;
     private final CurrentUserService currentUserService;
@@ -60,9 +59,9 @@ public class ChangeRequestService {
     public List<ChangeRequestDTO> list(Long orderId) {
         User actor = currentUserService.requireCurrentUser();
         requireActiveActor(actor);
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         authorizeParticipant(order, actor);
-        Map<Long, OrderItem> items = safeItems(order).stream()
+        Map<Long, OrderItem> items = order.itemsOrEmpty().stream()
                 .collect(java.util.stream.Collectors.toMap(OrderItem::getId, item -> item));
         return changeRequestRepository.findByOrderIdOrderByCreatedAtDescIdDesc(orderId).stream()
                 .map(request -> toDto(request, order, items.get(request.getOrderItemId())))
@@ -121,7 +120,7 @@ public class ChangeRequestService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     ChangeRequestDTO createWithinTransaction(Long orderId, CreateChangeRequestRequest input, User owner) {
-        Order order = lockOrder(orderId);
+        Order order = orderLookupService.requireForUpdate(orderId);
         requireOrderVersion(order, input.orderVersion());
         requireOwner(order, owner.getId());
         requireEligibleOrder(order);
@@ -165,7 +164,7 @@ public class ChangeRequestService {
             ChangeRequestDecisionRequest input,
         User staff
     ) {
-        Order order = lockOrder(orderId);
+        Order order = orderLookupService.requireForUpdate(orderId);
         requireOrderVersion(order, input.orderVersion());
         requireActiveAssignment(orderId, staff.getId());
         ChangeRequest request = changeRequestRepository.findByIdAndOrderIdForUpdate(changeRequestId, orderId)
@@ -248,7 +247,7 @@ public class ChangeRequestService {
     }
 
     private OrderItem requireItem(Order order, Long itemId) {
-        return safeItems(order).stream()
+        return order.itemsOrEmpty().stream()
                 .filter(candidate -> Objects.equals(candidate.getId(), itemId))
                 .findFirst()
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_ITEM_NOT_FOUND));
@@ -310,16 +309,6 @@ public class ChangeRequestService {
                 request.getAppliedSpecSnapshot(), item == null ? null : item.getSpecVersion(),
                 item == null ? null : item.getSpecSnapshot(), item == null ? null : item.getProductionStatus()
         );
-    }
-
-    private Order lockOrder(Long orderId) {
-        return orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
-    private Order requireOrder(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
     }
 
     private OrderAssignment requireActiveAssignment(Long orderId, String expectedStaffId) {
@@ -429,7 +418,4 @@ public class ChangeRequestService {
         return new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CHANGE_REQUEST_INVALID, detail);
     }
 
-    private List<OrderItem> safeItems(Order order) {
-        return order.getItems() == null ? List.of() : order.getItems();
-    }
 }

@@ -61,6 +61,7 @@ public class OrderDeliveryService {
     private static final long GUEST_CONFIRM_LIMIT = 8;
 
     private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final OrderReceiptRepository receiptRepository;
     private final OrderAssignmentRepository assignmentRepository;
     private final CurrentUserService currentUserService;
@@ -107,14 +108,14 @@ public class OrderDeliveryService {
     public ReceiptViewDTO getUserReceiptView(Long orderId) {
         User owner = currentUserService.requireCurrentUser(Role.USER, ConstantErrorCode.ORDER_CONFIRMATION_FORBIDDEN);
         requireActive(owner, ConstantErrorCode.ORDER_CONFIRMATION_FORBIDDEN);
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         requireOwner(order, owner.getId());
         return toReceiptView(order);
     }
 
     @Transactional(readOnly = true)
     public ReceiptViewDTO getGuestReceiptView(Long orderId, String rawToken) {
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         guestAccessGuard.authorize(
                 order, rawToken, OrderLookupTokenService.Scope.READ, GUEST_VIEW_LIMIT, GUEST_ACCESS_WINDOW
         );
@@ -147,7 +148,7 @@ public class OrderDeliveryService {
             String idempotencyKey
     ) {
         requireReceiptRequest(request);
-        Order visibleOrder = requireOrder(orderId);
+        Order visibleOrder = orderLookupService.require(orderId);
         guestAccessGuard.authorize(
                 visibleOrder, rawToken, OrderLookupTokenService.Scope.CONFIRM_RECEIPT,
                 GUEST_CONFIRM_LIMIT, GUEST_ACCESS_WINDOW
@@ -201,7 +202,7 @@ public class OrderDeliveryService {
             ShippingHandoverRequest request,
             User staff
     ) {
-        Order order = lockOrder(orderId);
+        Order order = orderLookupService.requireForUpdate(orderId);
         requireOrderVersion(order, request.orderVersion());
         requireHistoricalStaff(order, staff.getId());
         if (order.getStatus() != OrderStatus.READY_TO_SHIP) {
@@ -209,7 +210,7 @@ public class OrderDeliveryService {
         }
 
         Map<Long, Integer> quantities = validateCompleteHandoverItems(order, request.items());
-        safeItems(order).forEach(item -> item.setExportedQuantity(quantities.get(item.getId())));
+        order.itemsOrEmpty().forEach(item -> item.setExportedQuantity(quantities.get(item.getId())));
         LocalDateTime now = LocalDateTime.now();
         OrderStatus oldStatus = order.getStatus();
         order.setDeliveryContractVersion(DELIVERY_CONTRACT_VERSION);
@@ -234,7 +235,7 @@ public class OrderDeliveryService {
             boolean guest,
             String rawToken
     ) {
-        Order order = lockOrder(orderId);
+        Order order = orderLookupService.requireForUpdate(orderId);
         if (guest) {
             tokenService.authorize(order, rawToken, OrderLookupTokenService.Scope.CONFIRM_RECEIPT);
         } else {
@@ -255,7 +256,7 @@ public class OrderDeliveryService {
             );
         }
 
-        safeItems(order).forEach(item -> item.setReceivedQuantity(received.get(item.getId())));
+        order.itemsOrEmpty().forEach(item -> item.setReceivedQuantity(received.get(item.getId())));
         LocalDateTime now = LocalDateTime.now();
         OrderStatus oldStatus = order.getStatus();
         OrderReceipt receipt = new OrderReceipt();
@@ -340,7 +341,7 @@ public class OrderDeliveryService {
 
     private List<ReceiptMismatchDTO> buildMismatches(Order order, Map<Long, Integer> received) {
         List<ReceiptMismatchDTO> mismatches = new ArrayList<>();
-        for (OrderItem item : safeItems(order)) {
+        for (OrderItem item : order.itemsOrEmpty()) {
             int exported = effectiveExportedQuantity(order, item);
             int actual = received.get(item.getId());
             if (actual != exported) {
@@ -364,7 +365,7 @@ public class OrderDeliveryService {
         snapshot.put("matched", matched);
         snapshot.put("mismatchAccepted", !matched);
         snapshot.put("note", normalizeOptionalNote(request.getNote()));
-        snapshot.put("items", safeItems(order).stream().map(item -> {
+        snapshot.put("items", order.itemsOrEmpty().stream().map(item -> {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("orderItemId", item.getId());
             values.put("orderedQuantity", item.getQuantity());
@@ -383,10 +384,10 @@ public class OrderDeliveryService {
 
     private ReceiptViewDTO toReceiptView(Order order) {
         boolean legacyFallback = order.getDeliveryContractVersion() == null
-                && safeItems(order).stream().anyMatch(item -> item.getExportedQuantity() == null);
-        boolean handoverComplete = safeItems(order).stream().allMatch(item ->
+                && order.itemsOrEmpty().stream().anyMatch(item -> item.getExportedQuantity() == null);
+        boolean handoverComplete = order.itemsOrEmpty().stream().allMatch(item ->
                 item.getExportedQuantity() != null || order.getDeliveryContractVersion() == null);
-        List<ReceiptItemDTO> items = safeItems(order).stream().map(item -> {
+        List<ReceiptItemDTO> items = order.itemsOrEmpty().stream().map(item -> {
             ProductVariant variant = item.getProductVariant();
             Integer exported = item.getExportedQuantity();
             if (exported == null && order.getDeliveryContractVersion() == null) exported = item.getQuantity();
@@ -408,7 +409,7 @@ public class OrderDeliveryService {
         return new ShippingHandoverResponse(
                 order.getId(), order.getVersion(), order.getStatus(), order.getShippedAt(),
                 order.getExpectedShippingDays(), expectedDeliveryAt(order),
-                safeItems(order).stream()
+                order.itemsOrEmpty().stream()
                         .map(item -> new ShippingHandoverItemDTO(
                                 item.getId(), item.getQuantity(), item.getExportedQuantity()))
                         .toList()
@@ -420,8 +421,8 @@ public class OrderDeliveryService {
     }
 
     private Map<Long, OrderItem> itemMap(Order order) {
-        if (safeItems(order).isEmpty()) throw invalidReceipt("Order has no items.");
-        return safeItems(order).stream().collect(Collectors.toMap(
+        if (order.itemsOrEmpty().isEmpty()) throw invalidReceipt("Order has no items.");
+        return order.itemsOrEmpty().stream().collect(Collectors.toMap(
                 OrderItem::getId, Function.identity(),
                 (left, right) -> { throw invalidReceipt("Duplicate persisted order item id."); },
                 LinkedHashMap::new
@@ -476,20 +477,6 @@ public class OrderDeliveryService {
         if (!Objects.equals(order.getVersion(), expectedVersion)) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_VERSION_CONFLICT);
         }
-    }
-
-    private Order lockOrder(Long orderId) {
-        return orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
-    private Order requireOrder(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
-    private List<OrderItem> safeItems(Order order) {
-        return order.getItems() == null ? List.of() : order.getItems();
     }
 
     private AppException invalidHandover(String detail) {

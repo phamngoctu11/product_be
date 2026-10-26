@@ -9,6 +9,8 @@ import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.repository.PasswordResetTokenRepository;
 import com.example.workflow.repository.UserRepository;
+import com.example.workflow.util.TextNormalizer;
+import com.example.workflow.util.UserDisplayNameUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -35,7 +37,6 @@ public class PasswordService {
     private final KeycloakIdentityService keycloakIdentityService;
     private final EmailService emailService;
     private final CurrentUserService currentUserService;
-    private final UserService userService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${app.frontend-base-url:http://localhost:4200}")
@@ -43,7 +44,7 @@ public class PasswordService {
 
     @Transactional
     public void requestPasswordReset(ForgotPasswordRequest request) {
-        String identifier = normalizeIdentifier(request.identifier());
+        String identifier = TextNormalizer.optional(request.identifier());
         if (!StringUtils.hasText(identifier)) {
             return;
         }
@@ -71,7 +72,7 @@ public class PasswordService {
 
         emailService.sendPasswordResetEmail(
                 user.getEmail(),
-                userService.displayName(user),
+                UserDisplayNameUtils.displayName(user),
                 buildResetLink(rawToken),
                 RESET_TOKEN_TTL_MINUTES
         );
@@ -144,10 +145,6 @@ public class PasswordService {
                 .queryParam("token", token)
                 .build()
                 .toUriString();
-    }
-
-    private String normalizeIdentifier(String identifier) {
-        return StringUtils.hasText(identifier) ? identifier.trim() : null;
     }
 
 }

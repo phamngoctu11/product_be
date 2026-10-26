@@ -20,6 +20,8 @@ import com.example.workflow.repository.PaymentAttemptRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
+import com.example.workflow.util.PaymentProviderNormalizer;
+import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -78,7 +80,7 @@ public class PaymentService {
         );
         String canonical = JsonUtils.write(
                 objectMapper,
-                Map.of("orderId", orderId, "provider", normalizedProvider()),
+                Map.of("orderId", orderId, "provider", PaymentProviderNormalizer.normalize(provider)),
                 "open payment request"
         );
         String result = durableRequests.execute(
@@ -141,7 +143,7 @@ public class PaymentService {
         BigDecimal amount = officialAmount(order);
         PaymentAttempt attempt = new PaymentAttempt();
         attempt.setOrderId(orderId);
-        attempt.setProvider(normalizedProvider());
+        attempt.setProvider(PaymentProviderNormalizer.normalize(provider));
         attempt.setRequestReference(newPaymentCode());
         attempt.setExpectedAmount(amount);
         attempt.setStatus(PaymentAttemptStatus.PENDING);
@@ -172,9 +174,9 @@ public class PaymentService {
                 attempt.getOpenedAt(),
                 attempt.getDueAt(),
                 attempt.getPaidAt(),
-                blankToNull(bankCode),
-                blankToNull(accountNumber),
-                blankToNull(accountName),
+                TextNormalizer.optional(bankCode),
+                TextNormalizer.optional(accountNumber),
+                TextNormalizer.optional(accountName),
                 transferContent(attempt),
                 qrUrl
         );
@@ -246,11 +248,4 @@ public class PaymentService {
                 : attempt.getRequestReference();
     }
 
-    private String normalizedProvider() {
-        return StringUtils.hasText(provider) ? provider.trim().toUpperCase(Locale.ROOT) : "SEPAY";
-    }
-
-    private String blankToNull(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
-    }
 }

@@ -12,7 +12,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChatMessageRepository;
 import com.example.workflow.repository.OrderChatThreadRepository;
-import com.example.workflow.repository.OrderRepository;
+import com.example.workflow.util.UserDisplayNameUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -32,7 +32,7 @@ import java.util.Objects;
 public class OrderChatService {
     private static final long SLOW_SEND_THRESHOLD_MS = 100;
 
-    private final OrderRepository orderRepository;
+    private final OrderLookupService orderLookupService;
     private final OrderChatThreadRepository threadRepository;
     private final ChatMessageRepository messageRepository;
     private final CurrentUserService currentUserService;
@@ -41,7 +41,7 @@ public class OrderChatService {
     /** Called by the assignment event and safe to retry. Guest orders intentionally have no thread. */
     @Transactional
     public OrderChatThreadDTO ensureThreadForAssignedOrder(Long orderId) {
-        Order order = requireOrder(orderId);
+        Order order = orderLookupService.require(orderId);
         if (order.getUser() == null) {
             return null;
         }
@@ -54,8 +54,8 @@ public class OrderChatService {
             created.setOrderId(orderId);
             created.setOwnerUserId(order.getUser().getId());
             created.setAssignedStaffId(staffId);
-            created.setOwnerDisplayName(displayName(order.getUser()));
-            created.setAssignedStaffDisplayName(displayName(assignedStaff(order)));
+            created.setOwnerDisplayName(UserDisplayNameUtils.displayName(order.getUser()));
+            created.setAssignedStaffDisplayName(UserDisplayNameUtils.displayName(assignedStaff(order)));
             created.setCreatedAt(LocalDateTime.now());
             return threadRepository.save(created);
         });
@@ -125,11 +125,6 @@ public class OrderChatService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Order chat is not available."));
     }
 
-    private Order requireOrder(Long orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
-    }
-
     private String assignedStaffId(Order order) {
         User staff = assignedStaff(order);
         return staff == null ? null : staff.getId();
@@ -139,21 +134,14 @@ public class OrderChatService {
         return order.getAssignedStaff() != null ? order.getAssignedStaff() : order.getWarehouseStaff();
     }
 
-    private String displayName(User user) {
-        if (user == null) return null;
-        String value = ((user.getLastname() == null ? "" : user.getLastname()) + " "
-                + (user.getFirstname() == null ? "" : user.getFirstname())).trim();
-        return value.isEmpty() ? user.getUsername() : value;
-    }
-
     private void backfillParticipantNames(OrderChatThread thread, Order order) {
         boolean changed = false;
         if (!StringUtils.hasText(thread.getOwnerDisplayName())) {
-            thread.setOwnerDisplayName(displayName(order.getUser()));
+            thread.setOwnerDisplayName(UserDisplayNameUtils.displayName(order.getUser()));
             changed = true;
         }
         if (!StringUtils.hasText(thread.getAssignedStaffDisplayName())) {
-            thread.setAssignedStaffDisplayName(displayName(assignedStaff(order)));
+            thread.setAssignedStaffDisplayName(UserDisplayNameUtils.displayName(assignedStaff(order)));
             changed = true;
         }
         if (changed) {
