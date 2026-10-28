@@ -2,7 +2,7 @@
 
 Ngày cập nhật: 15/10/2026.
 
-Trạng thái backend và frontend: `IMPLEMENTED`. Frontend nằm tại `D:\me\product_fe`; contract ban đầu được lưu ở [P10_FRONTEND_ANTIGRAVITY.md](../prompts/P10_FRONTEND_ANTIGRAVITY.md).
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026 cho backend và frontend. Các kết quả kiểm thử đã ghi trong tài liệu giữ nguyên theo lần chạy thực tế.
 
 ## Kết quả nghiệp vụ
 

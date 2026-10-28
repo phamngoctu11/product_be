@@ -1,5 +1,7 @@
 # Order timestamp cleanup
 
+Trạng thái: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026.
+
 Date: 2026-10-24
 
 This implementation removes redundant order-level timestamps while retaining the dates that still drive a user-facing or operational rule.

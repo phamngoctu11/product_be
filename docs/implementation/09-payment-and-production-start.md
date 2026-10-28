@@ -2,7 +2,7 @@
 
 Ngày cập nhật: 12/10/2026.
 
-Trạng thái backend: `IMPLEMENTED`, frontend không được sửa trong lần bàn giao này. Lệnh giao việc cho Antigravity nằm tại [P9_FRONTEND_ANTIGRAVITY.md](../prompts/P9_FRONTEND_ANTIGRAVITY.md).
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Chủ dự án xác nhận đã test thành công một đơn thanh toán online; các kết quả test tự động khác được giữ theo lịch sử chạy.
 
 ## Kết quả backend
 

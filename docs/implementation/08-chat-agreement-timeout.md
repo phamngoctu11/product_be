@@ -2,7 +2,7 @@
 
 Ngày cập nhật: 12/10/2026.
 
-Trạng thái backend: `IMPLEMENTED`, toàn bộ test hiện tại xanh. Frontend không được sửa trong lần bàn giao này; hướng dẫn riêng cho Antigravity nằm tại [P8_FRONTEND_ANTIGRAVITY.md](../prompts/P8_FRONTEND_ANTIGRAVITY.md).
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Các kết quả test backend được giữ theo lịch sử chạy; frontend được review trong phạm vi nghiệm thu tổng thể.
 
 ## Kết quả backend
 

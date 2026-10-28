@@ -2,6 +2,8 @@
 
 Ngày cập nhật: 12/10/2026.
 
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Kết quả kiểm thử được giữ theo đúng các lượt chạy ghi trong tài liệu.
+
 ## Backend đã thay đổi
 
 - Không tạo entity/repository Mongo riêng cho order-chat. Backend tái sử dụng `ChatMessage` và `ChatMessageRepository` hiện có.

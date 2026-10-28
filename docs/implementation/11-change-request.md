@@ -2,6 +2,8 @@
 
 Ngày hoàn thiện: 16/10/2026.
 
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026.
+
 ## Phạm vi đã triển khai
 
 - USER sở hữu Order tạo ChangeRequest theo từng `OrderItem` khi Order ở `ORDER_ACCEPTED` hoặc `ORDER_CREATING` và item chưa đi tới bước KCS cuối.

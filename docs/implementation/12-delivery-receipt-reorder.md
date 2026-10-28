@@ -1,6 +1,6 @@
 # Bàn giao PHẦN 12 — Shipping, receipt và reorder (WF07/WF08/F17)
 
-Trạng thái backend: `IMPLEMENTED`.
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026 cho backend và frontend.
 
 ## Phạm vi đã triển khai
 

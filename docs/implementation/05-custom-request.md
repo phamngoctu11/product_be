@@ -1,6 +1,6 @@
 # PHẦN 05 — Custom request, WF01
 
-Ngày cập nhật: 09/10/2026. Trạng thái: `IMPLEMENTED` — code, migration tương thích, API, snapshot, email và test H2 đã đồng bộ quyết định mới; còn kiểm tra migration trên MySQL có Docker và nối BPMN mục tiêu ở PHẦN 13.
+Ngày cập nhật trạng thái: 28/10/2026. Trạng thái: `VERIFIED` theo review và chấp nhận của chủ dự án; các chi tiết test dưới đây giữ nguyên kết quả tại thời điểm chạy. Lưu ý MySQL/cutover trong bản bàn giao ban đầu không được tính là deploy live.
 
 Nguồn nghiệp vụ: `target.txt`, tài liệu `docs/use-cases/WF01-custom-request` và báo cáo thiết kế code/endpoint.
 
@@ -107,7 +107,7 @@ Các tình huống mới đã được kiểm tra:
 - Kiểm thử transaction thật `CustomRequestSubmissionAtomicityTest`: retry cùng key chỉ có 1 Order, 1 OrderItem, 1 durable request và 1 outbox event cha `ORDER_CREATED`; hai submit đồng thời bằng key khác vẫn chỉ tạo một Order; lỗi ghi event rollback Order, draft và durable request.
 - Changelog chạy lặp an toàn trên H2 MySQL mode.
 
-MySQL Testcontainers chưa chạy được trong checkpoint trước do Docker daemon trên máy không khả dụng. Vì vậy trạng thái là `IMPLEMENTED`, chưa nâng thành `VERIFIED` trên MySQL thực tế.
+Ghi nhận tại checkpoint ban đầu: MySQL Testcontainers chưa chạy được do Docker daemon không khả dụng. Ngày 28/10, chủ dự án xác nhận review và chấp nhận phần này; ghi chú lịch sử không khẳng định đã chạy thêm MySQL test.
 
 ## Ranh giới bàn giao
 

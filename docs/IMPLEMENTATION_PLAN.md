@@ -8,13 +8,13 @@ File này là **điểm tiếp tục công việc giữa các phiên làm việc
 
 ```text
 Tài liệu nghiệp vụ:       ĐÃ CHỐT CATALOG/CUSTOM ĐỀU HANDMADE MADE-TO-ORDER; CUSTOM 1 ITEM NHIỀU QUANTITY; CATALOG NHIỀU ITEM
-Tái triển khai code:      BACKEND PHẦN 05–13 VÀ FRONTEND PHẦN 09–11 ĐÃ IMPLEMENTED
-Phần đang thực hiện:      REVIEW PHẦN 13; FRONTEND P12–P13 BÀN GIAO QUA PROMPT
-Phần hoàn thành gần nhất: PHẦN 13 — BPMN lifecycle, event cutover, operations và rollout (backend)
-Ngày cập nhật gần nhất:   17/10/2026
+Tái triển khai code:      BACKEND VÀ FRONTEND PHẦN 01–13 ĐÃ VERIFIED THEO REVIEW CỦA CHỦ DỰ ÁN
+Phần đang thực hiện:      KHÔNG CÒN PHẦN CHỨC NĂNG; DEPLOY LIVE NẰM NGOÀI PHẠM VI
+Phần hoàn thành gần nhất: REVIEW XUYÊN LUỒNG; ĐƠN THANH TOÁN ONLINE ĐÃ ĐƯỢC TEST THÀNH CÔNG
+Ngày cập nhật gần nhất:   28/10/2026
 ```
 
-Không suy trạng thái hoàn thành chỉ từ đoạn code tồn tại. Trạng thái trong file này phải được cập nhật sau khi đã kiểm tra code, migration và test thực tế.
+Ngày 28/10/2026, chủ dự án xác nhận đã review và chấp nhận các phần còn lại; đồng thời xác nhận đã test hoàn tất một đơn thanh toán online. Trạng thái `VERIFIED` dưới đây ghi nhận xác nhận đó. Các kết quả test cũ vẫn được giữ đúng như đã ghi; lần cập nhật này không khẳng định có thêm lượt chạy full suite, E2E, MySQL rehearsal hoặc deploy live. Các ghi chú bàn giao bên dưới là ảnh chụp tại thời điểm triển khai từng phần, không phủ định trạng thái review mới nhất.
 
 ## 2. Thứ tự nguồn quyết định
 
@@ -36,9 +36,9 @@ Nếu phát hiện target và use case lệch nhau, dừng phần bị ảnh hư
 | `IN_PROGRESS` | Đang triển khai, chưa đủ điều kiện bàn giao |
 | `BLOCKED` | Không thể tiếp tục vì thiếu quyết định hoặc phụ thuộc cụ thể |
 | `IMPLEMENTED` | Đã viết code/migration nhưng chưa vượt toàn bộ kiểm tra |
-| `VERIFIED` | Đã đạt Definition of Done và kiểm tra liên quan |
+| `VERIFIED` | Chủ dự án đã review và chấp nhận phạm vi; bằng chứng test ghi riêng theo đúng các lượt đã chạy |
 
-Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu ra bắt buộc của phần đã hoàn thành.
+Không ghi nhận test hoặc migration rehearsal chưa chạy như đã hoàn tất. Trạng thái tổng thể ngày 28/10 dựa trên xác nhận review của chủ dự án; các bước deploy live không thuộc phạm vi xác nhận này.
 
 ## 4. Bản đồ 13 phần triển khai
 
@@ -48,15 +48,15 @@ Chỉ đánh dấu `VERIFIED` khi có bằng chứng test và tất cả đầu 
 | 02 | Domain contract và migration expand | State, entity, tiền, thời gian, dữ liệu mới | 01 | `VERIFIED` |
 | 03 | Hạ tầng nhất quán dùng chung | Transition, lock/version, idempotency, outbox, token, audit | 02 | `VERIFIED` |
 | 04 | Catalog, cart và checkout | Catalog, cart USER/Guest, đầu vào WF02 | 02–03 | `VERIFIED` |
-| 05 | Custom request | WF01 | 02–04 | `IMPLEMENTED` |
-| 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `IMPLEMENTED` |
-| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `IMPLEMENTED` |
-| 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `IMPLEMENTED` |
-| 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `IMPLEMENTED` |
-| 10 | Production, checkpoint và KCS | WF05 | 07–09 | `IMPLEMENTED` |
-| 11 | ChangeRequest | WF06 | 08–10 | `IMPLEMENTED` |
-| 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `IMPLEMENTED` |
-| 13 | Tích hợp xuyên luồng và rollout | BPMN, event, email, cache, FE, E2E, migration rollout | 01–12 | `IMPLEMENTED` |
+| 05 | Custom request | WF01 | 02–04 | `VERIFIED` |
+| 06 | Nghiệp vụ hủy dùng chung | WF09 kernel và API khách hủy | 02–03 | `VERIFIED` |
+| 07 | Manager review và assignment | WF02, manager reject gọi WF09 | 04–06 | `VERIFIED` |
+| 08 | Chat, agreement và timer custom | WF03, PT24H | 05–07 | `VERIFIED` |
+| 09 | Payment và staff bắt đầu | WF04, PT1H, webhook, ORDER_CREATING | 03, 06–08 | `VERIFIED` |
+| 10 | Production, checkpoint và KCS | WF05 | 07–09 | `VERIFIED` |
+| 11 | ChangeRequest | WF06 | 08–10 | `VERIFIED` |
+| 12 | Bàn giao, nhận hàng và reorder | WF07, WF08, F17 | 06, 10–11 | `VERIFIED` |
+| 13 | Tích hợp xuyên luồng và rollout | BPMN, event, email, cache, FE, E2E, migration rollout | 01–12 | `VERIFIED` |
 
 Thứ tự trên là thứ tự dependency, không phải thứ tự số workflow. WF09 được xây sớm vì manager reject, timer custom và payment timeout đều cần gọi cùng nghiệp vụ hủy.
 
@@ -92,7 +92,7 @@ Việc cần làm:
 
 ### PHẦN 02 — Domain contract và migration
 
-Trạng thái: `VERIFIED` trong phạm vi domain contract và migration expand. Chưa cutover workflow/state/assignment legacy hoặc triển khai lên database vận hành; các bước đó thuộc tích hợp/rollout.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10. Các ghi chú cutover workflow/state/assignment legacy bên dưới là lưu ý rollout, không còn là blocker của phạm vi chức năng được chấp nhận.
 
 Bàn giao: [02-domain-migration.md](implementation/02-domain-migration.md), [preflight SQL](implementation/sql/02-preflight.sql).
 
@@ -128,7 +128,7 @@ Phạm vi chính:
 
 ### PHẦN 03 — Hạ tầng nhất quán dùng chung
 
-Trạng thái: `VERIFIED` trong phạm vi hạ tầng dùng chung. Các workflow legacy sẽ được nối vào transition/idempotency/token guard khi triển khai từng phần tiếp theo.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10; tích hợp xuyên luồng được chấp nhận ở PHẦN 13.
 
 Bàn giao: [03-consistency.md](implementation/03-consistency.md).
 
@@ -199,7 +199,7 @@ Phạm vi chính:
 
 ### PHẦN 05 — Custom request, WF01
 
-Trạng thái: `IMPLEMENTED` — contract description tối đa 4.000 từ và `imageUrls: string[]`, migration tương thích, API, snapshot, email và test atomicity đã hoàn thành. Còn nghiệm thu MySQL thực tế và nối process Camunda mới ở PHẦN 13.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10. Code, API, migration, snapshot, email và tích hợp xuyên luồng đã được chấp nhận; ghi chú kiểm tra MySQL phía dưới phản ánh giới hạn ở thời điểm bàn giao ban đầu.
 
 Phạm vi chính:
 
@@ -224,7 +224,7 @@ Phạm vi chính:
 
 ### PHẦN 06 — Nghiệp vụ hủy dùng chung, WF09
 
-Trạng thái: `IMPLEMENTED` — kernel transaction, API USER/Guest, token/rate/version/idempotency, penalty/voucher/assignment và outbox `ORDER_CANCELLED` đã hoàn thành; còn review contract, MySQL opt-in và BPMN message catch/cutover ở PHẦN 13.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10; các nhánh USER/Guest và tích hợp xuyên luồng đã được chấp nhận.
 
 Bàn giao: [06-order-cancellation.md](implementation/06-order-cancellation.md).
 
@@ -247,7 +247,7 @@ Phạm vi chính:
 
 ### PHẦN 07 — Manager review và assignment, WF02
 
-Trạng thái: `IMPLEMENTED` — API review/list/detail, manager assign, staff claim, JWT actor, version/idempotency, active assignment locking, decision metadata/migration và `ORDER_ACCEPTED` event đã hoàn thành. Guest BPMN không còn biến/gateway legacy `hasHandmadeItems`; mọi Guest CATALOG sau khi được duyệt đều bắt buộc chờ assignment.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10; API, assignment, quyền truy cập và tích hợp guest đã được chấp nhận.
 
 Bàn giao: [07-manager-review-assignment.md](implementation/07-manager-review-assignment.md).
 
@@ -268,7 +268,7 @@ Phạm vi chính:
 
 ### PHẦN 08 — Chat, agreement và timer custom, WF03
 
-Trạng thái: `IMPLEMENTED` (backend; FE được bàn giao qua `docs/prompts/P8_FRONTEND_ANTIGRAVITY.md`).
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10 (backend và frontend).
 
 Phạm vi chính:
 
@@ -287,7 +287,7 @@ Phạm vi chính:
 
 ### PHẦN 09 — Payment, webhook và staff bắt đầu, WF04
 
-Trạng thái: `IMPLEMENTED` — chờ frontend Antigravity và E2E/cutover BPMN ở PHẦN 13.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10. Chủ dự án đã xác nhận test hoàn tất một đơn thanh toán online; các test tự động trước đó được liệt kê trong bàn giao PHẦN 09.
 
 Phạm vi chính:
 
@@ -306,7 +306,7 @@ Phạm vi chính:
 
 ### PHẦN 10 — Production, checkpoint và KCS, WF05
 
-Trạng thái: `IMPLEMENTED` — backend và frontend đã hoàn tất; chờ E2E/cutover BPMN tổng ở PHẦN 13.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10 (backend, frontend và tích hợp xuyên luồng).
 
 Phạm vi chính:
 
@@ -323,7 +323,7 @@ Phạm vi chính:
 
 ### PHẦN 11 — ChangeRequest, WF06
 
-Trạng thái: `IMPLEMENTED`.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10.
 
 Phạm vi chính:
 
@@ -339,7 +339,7 @@ Phạm vi chính:
 
 ### PHẦN 12 — Bàn giao, nhận hàng và reorder
 
-Trạng thái: `IMPLEMENTED` (backend; FE được bàn giao qua `docs/prompts/P12_FRONTEND_ANTIGRAVITY.md`).
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10 (backend và frontend).
 
 Phạm vi WF07:
 
@@ -367,7 +367,7 @@ Phạm vi reorder F17:
 
 ### PHẦN 13 — Tích hợp xuyên luồng và rollout
 
-Trạng thái: `IMPLEMENTED` ở backend/H2; còn FE, migration rehearsal trên bản sao MySQL và E2E môi trường thật trước khi `VERIFIED`.
+Trạng thái: `VERIFIED` theo review chủ dự án ngày 28/10. Không bao gồm triển khai live; rehearsal database và rollout vẫn là checklist vận hành khi bắt đầu deploy.
 
 Bàn giao: [13-integration-cutover-rollout.md](implementation/13-integration-cutover-rollout.md), [preflight SQL](implementation/sql/13-preflight.sql), [prompt frontend P13](prompts/P13_FRONTEND_ANTIGRAVITY.md).
 
@@ -470,6 +470,7 @@ Một phần chỉ được đánh dấu `VERIFIED` khi các mục liên quan đ
 | 16/10/2026 | 11 / BE hardening | `VERIFIED` | Chặn actor inactive/soft-delete, invalidation cache USER/assigned STAFF sau commit, thêm migration coverage cho status legacy và kiểm thử replay/race hai quyết định trái ngược | `.\mvnw.cmd test`: 329 test, 0 failure/error, 10 MySQL opt-in skipped; P11 service/cache targeted 12/12; `git diff --check` đạt | Dùng prompt P11 để Antigravity audit FE; sau đó review/commit và bắt đầu P12 |
 | 16/10/2026 | 12 / BE | `IMPLEMENTED` | WF07 shipping handover theo OrderItem và staff lịch sử; WF08 receipt USER/Guest, mismatch/acceptMismatch, DELIVERED/reputation/review invitation; F17 catalog-to-cart/custom-to-draft; gỡ complaint legacy | `.\mvnw.cmd test`: 341 test, 0 failure/error, 11 opt-in skipped; targeted P12 11/11; `git diff --check` không có lỗi | Dùng prompt P12 triển khai FE; review/commit P12, sau đó bắt đầu P13 integration/cutover |
 | 17/10/2026 | 13 / BE | `IMPLEMENTED` | Hợp nhất WF02–WF05 thành `OrderLifecycle` cho USER/Guest, nối event WF06–WF09, timer tuyệt đối, multi-instance theo OrderItem, Redis retry/DLQ + outbox operations; gỡ BPMN/checkout/MoMo/inventory workflow cũ và thêm migration 12/runbook/prompt FE | Full suite 317 test, 0 failure/error, 11 opt-in skipped; targeted P13 40/40; migration 12 lặp an toàn trên H2 MySQL mode; [bàn giao](implementation/13-integration-cutover-rollout.md) | Antigravity triển khai P13 FE, rehearsal backup/migration/restore trên bản sao MySQL rồi E2E AC01–AC47 |
+| 28/10/2026 | Toàn dự án 01–13 | `VERIFIED` | Chủ dự án xác nhận review và chấp nhận toàn bộ phần còn lại; xác nhận đơn thanh toán online đã test thành công. Không tính deploy live | Bằng chứng test lịch sử giữ nguyên ở từng phần; lần cập nhật này không chạy thêm test | Không còn việc chức năng; deploy live thực hiện riêng khi chủ dự án sẵn sàng |
 
 Khi thêm nhật ký, không xóa lịch sử cũ. Nếu một kết luận cũ không còn đúng, thêm dòng mới giải thích thay đổi.
 
@@ -493,7 +494,7 @@ HÀNH ĐỘNG TIẾP THEO CHÍNH XÁC:
 
 ## 10. Quyết định/chặn cần xử lý
 
-Không còn blocker của PHẦN 01. Audit đã xác nhận các lựa chọn cần khóa khi bắt đầu PHẦN 02:
+Theo xác nhận review ngày 28/10 của chủ dự án, không còn blocker trong phạm vi chức năng được nghiệm thu. Các mục dưới đây được giữ làm lưu ý migration/rollout để đối chiếu khi deploy live:
 
 - Công cụ migration database: **đã chốt Liquibase**. Hibernate dùng `validate` để không tự tạo cột trước changelog. Migration expand chỉ bật bằng profile `migration`, yêu cầu schema legacy có sẵn; bootstrap database trống chưa được hỗ trợ bởi changelog này.
 - Chiến lược tương thích/migrate process instance Camunda đang chạy.
@@ -504,7 +505,9 @@ Không còn blocker của PHẦN 01. Audit đã xác nhận các lựa chọn c�
 
 Các mục trên không được giải quyết bằng cách giữ nguyên hành vi code cũ nếu trái target.
 
-## 11. Hiện trạng cần đặc biệt lưu ý trước khi bắt đầu
+## 11. Hiện trạng và lưu ý rollout
+
+Các trạng thái và luồng nghiệp vụ dưới đây đã được chủ dự án review. Những lưu ý process/data legacy chỉ cần xử lý khi triển khai hoặc migrate hệ thống vận hành.
 
 - `OrderStatus` đã có state mục tiêu nhưng vẫn giữ state kho/payment legacy trong giai đoạn expand; code mới không được tạo state legacy.
 - `Order.totalPrice` còn là primitive `double`; các cờ stock đã bị loại trong PHẦN 13. Giá chính thức CUSTOM chưa chốt được biểu diễn bằng `finalPrice=null`; API không được diễn giải `totalPrice=0.0` tương thích schema thành giá thỏa thuận.
@@ -517,8 +520,4 @@ Các mục trên không được giải quyết bằng cách giữ nguyên hành
 
 ## 12. Hành động tiếp theo chính xác
 
-Bàn giao/review **PHẦN 13 — tích hợp xuyên luồng và rollout**, sau đó:
-
-1. Dùng `docs/prompts/P12_FRONTEND_ANTIGRAVITY.md` nếu frontend P12 chưa hoàn tất, rồi dùng `docs/prompts/P13_FRONTEND_ANTIGRAVITY.md` để audit/cutover toàn FE.
-2. Chạy `docs/implementation/sql/13-preflight.sql`, backup và diễn tập restore trên bản sao MySQL/Aiven trước migration 12.
-3. Chạy E2E AC01–AC47 và smoke test rollout; chỉ sau đó mới đổi PHẦN 13 sang `VERIFIED` và commit/release.
+Không còn hạng mục chức năng đang mở theo xác nhận review của chủ dự án ngày 28/10. Các bước preflight, backup, migration rehearsal, rollout và theo dõi production thuộc phạm vi deploy live và chưa được tính trong trạng thái `VERIFIED` này.

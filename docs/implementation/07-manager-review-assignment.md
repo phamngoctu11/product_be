@@ -2,7 +2,7 @@
 
 Ngày cập nhật: 12/10/2026.
 
-Trạng thái: `IMPLEMENTED`. Guest BPMN không còn biến/gateway legacy `hasHandmadeItems` hoặc nhánh hàng làm sẵn. Mọi Guest CATALOG sau manager approval đều phải chờ một assignment sản xuất trước khi kết thúc chặng WF02.
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Guest CATALOG sau manager approval chờ assignment sản xuất theo luồng đã review.
 
 ## Kết quả
 

@@ -1,6 +1,6 @@
 # Bàn giao PHẦN 13 — tích hợp xuyên luồng và rollout
 
-Trạng thái backend: `IMPLEMENTED`; chưa đánh dấu `VERIFIED` cho production vì chưa chạy migration trên bản sao MySQL/Aiven và chưa nghiệm thu frontend/E2E ngoài repository này.
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Xác nhận này không bao gồm deploy live; migration rehearsal/backup/restore vẫn là checklist vận hành khi triển khai production.
 
 ## Kết quả triển khai
 

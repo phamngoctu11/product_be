@@ -1,6 +1,8 @@
 # Loại sản phẩm, từ khóa và trường custom động
 
-Ngày cập nhật: 24/10/2026
+Ngày cập nhật: 28/10/2026
+
+Trạng thái: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026.
 
 ## Quy tắc đã chốt
 

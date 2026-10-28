@@ -2,6 +2,8 @@
 
 Ngày cập nhật: 08/10/2026.
 
+Trạng thái hiện tại: `VERIFIED` theo review và chấp nhận của chủ dự án ngày 28/10/2026. Ghi chú rollout bên dưới không nằm trong phạm vi deploy live.
+
 ## Kết quả
 
 PHẦN 06 đã triển khai một ranh giới transaction duy nhất tại `OrderCancellationService` cho bốn nhóm caller:
