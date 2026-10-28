@@ -33,12 +33,20 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentWebhookService {
+    private static final Pattern PAYMENT_REFERENCE_CANDIDATE =
+            Pattern.compile("(?i)(?<![A-Z0-9])[A-Z0-9]{2,128}(?![A-Z0-9])");
+    private static final int MAX_PAYMENT_REFERENCE_CANDIDATES = 64;
+
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final OrderRepository orderRepository;
     private final OrderCancellationService cancellationService;
@@ -86,10 +94,8 @@ public class PaymentWebhookService {
             return WebhookResult.DUPLICATE;
         }
 
-        String paymentCode = payload.code().trim().toUpperCase(Locale.ROOT);
-        PaymentAttempt attempt = paymentAttemptRepository
-                .findByProviderAndRequestReferenceForUpdate(PaymentProviderNormalizer.normalize(provider), paymentCode)
-                .orElse(null);
+        String normalizedProvider = PaymentProviderNormalizer.normalize(provider);
+        PaymentAttempt attempt = findAttempt(payload, normalizedProvider);
         if (attempt == null) {
             log.warn("Ignored authenticated SePay transaction {} because payment code was not found", transactionId);
             return WebhookResult.IGNORED;
@@ -195,11 +201,53 @@ public class PaymentWebhookService {
         if (payload == null
                 || payload.id() == null
                 || payload.id() < 0
-                || !StringUtils.hasText(payload.code())
+                || (!StringUtils.hasText(payload.code()) && !StringUtils.hasText(payload.content()))
                 || payload.transferAmount() == null
                 || payload.transferAmount().signum() <= 0) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.PAYMENT_WEBHOOK_INVALID);
         }
+    }
+
+    private PaymentAttempt findAttempt(SePayPayload payload, String normalizedProvider) {
+        if (StringUtils.hasText(payload.code())) {
+            String paymentCode = payload.code().trim().toUpperCase(Locale.ROOT);
+            return paymentAttemptRepository
+                    .findByProviderAndRequestReferenceForUpdate(normalizedProvider, paymentCode)
+                    .orElse(null);
+        }
+
+        // SePay can leave `code` null when it cannot extract a configured prefix from the
+        // transfer content. Match a whole alphanumeric token to the exact reference we issued.
+        // This keeps content-only fallback bound to an existing payment attempt.
+        String content = payload.content();
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+
+        Matcher matcher = PAYMENT_REFERENCE_CANDIDATE.matcher(content);
+        Set<String> checkedCandidates = new HashSet<>();
+        PaymentAttempt matched = null;
+        int candidateCount = 0;
+        while (matcher.find() && candidateCount < MAX_PAYMENT_REFERENCE_CANDIDATES) {
+            String candidate = matcher.group().toUpperCase(Locale.ROOT);
+            if (!checkedCandidates.add(candidate)) {
+                continue;
+            }
+            candidateCount++;
+            PaymentAttempt candidateAttempt = paymentAttemptRepository
+                    .findByProviderAndRequestReferenceForUpdate(normalizedProvider, candidate)
+                    .orElse(null);
+            if (candidateAttempt == null) {
+                continue;
+            }
+            if (matched != null && !matched.getId().equals(candidateAttempt.getId())) {
+                log.warn("Ignored authenticated SePay transaction {} because transfer content matched multiple payment references",
+                        payload.id());
+                return null;
+            }
+            matched = candidateAttempt;
+        }
+        return matched;
     }
 
     private String validationFailure(SePayPayload payload, PaymentAttempt attempt) {

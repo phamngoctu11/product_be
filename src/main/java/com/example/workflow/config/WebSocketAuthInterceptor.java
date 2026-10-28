@@ -56,7 +56,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
-            authorizeSubscription(accessor);
+            if (!authorizeSubscription(accessor)) {
+                return null;
+            }
         }
 
         return message;
@@ -77,10 +79,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
     }
 
-    private void authorizeSubscription(StompHeaderAccessor accessor) {
+    private boolean authorizeSubscription(StompHeaderAccessor accessor) {
         String destination = accessor.getDestination();
         if (!StringUtils.hasText(destination)) {
-            return;
+            return true;
         }
 
         Authentication authentication = (Authentication) accessor.getUser();
@@ -90,22 +92,22 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
         if (destination.startsWith(USER_NOTIFICATION_PREFIX)) {
             authorizePersonalTopic(destination, USER_NOTIFICATION_PREFIX, authentication);
-            return;
+            return true;
         }
 
         if (destination.startsWith(ORDER_CHAT_PREFIX)) {
             String rawOrderId = destination.substring(ORDER_CHAT_PREFIX.length());
             try {
-                orderChatService.authorizeSubscription(Long.valueOf(rawOrderId), authentication);
+                return orderChatService.authorizeSubscription(Long.valueOf(rawOrderId), authentication);
             } catch (NumberFormatException exception) {
                 throw new AccessDeniedException("Invalid order chat topic.");
             }
-            return;
         }
 
         if (ADMIN_NOTIFICATION_TOPIC.equals(destination) && !hasAdminFeedAccess(authentication)) {
             throw new AccessDeniedException("Admin notification topic requires admin or manager role.");
         }
+        return true;
     }
 
     private void authorizePersonalTopic(
@@ -115,7 +117,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     ) {
         String targetUserId = destination.substring(prefix.length());
         if (!targetUserId.equals(currentUserService.requireUserId(authentication))) {
-            throw new AccessDeniedException("Cannot subscribe to another user's topic.");
+            throw new AccessDeniedException("Bạn không thể đăng ký nhận thông báo của người dùng khác.");
         }
     }
 

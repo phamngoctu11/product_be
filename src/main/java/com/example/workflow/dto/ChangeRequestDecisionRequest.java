@@ -14,10 +14,10 @@ import java.util.Map;
 @Getter
 @Setter
 public class ChangeRequestDecisionRequest {
-    @NotNull(message = "orderVersion is required") private Long orderVersion;
-    @NotNull(message = "changeRequestVersion is required") private Long changeRequestVersion;
-    @NotNull(message = "decision is required") private ChangeRequestDecision decision;
-    @Size(max = 2000, message = "reason must be at most 2000 characters") private String reason;
+    @NotNull(message = "Phiên bản đơn hàng là bắt buộc.") private Long orderVersion;
+    @NotNull(message = "Phiên bản yêu cầu chỉnh sửa là bắt buộc.") private Long changeRequestVersion;
+    @NotNull(message = "Quyết định là bắt buộc.") private ChangeRequestDecision decision;
+    @Size(max = 2000, message = "Lý do không được vượt quá 2000 ký tự.") private String reason;
 
     @JsonIgnore
     private final Map<String, Object> unknownFields = new LinkedHashMap<>();

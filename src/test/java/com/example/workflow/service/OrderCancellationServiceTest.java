@@ -22,6 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,8 +56,8 @@ class OrderCancellationServiceTest {
 
     @ParameterizedTest
     @CsvSource({"0,1", "999999,1", "1000000,2", "5000000,2", "5000000.01,3", "10000000,3", "10000000.01,5"})
-    void appliesEveryCancellationPenaltyBoundary(double finalPrice, int expected) {
-        assertThat(OrderCancellationService.cancellationPenalty(finalPrice)).isEqualTo(expected);
+    void appliesEveryCancellationPenaltyBoundary(String finalPrice, int expected) {
+        assertThat(OrderCancellationService.cancellationPenalty(new BigDecimal(finalPrice))).isEqualTo(expected);
     }
 
     @Test
@@ -67,7 +68,7 @@ class OrderCancellationServiceTest {
     @Test
     void cancellationCommitsPenaltyVoucherAssignmentHistoryAndOutboxOnce() {
         User owner = user("owner", 10);
-        Order order = cancellableOrder(owner, 2_000_000d);
+        Order order = cancellableOrder(owner, new BigDecimal("2000000"));
         OrderAssignment assignment = new OrderAssignment();
         assignment.occupy(10L, "staff", AssignmentSource.MANAGER, "manager", LocalDateTime.now());
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
@@ -91,7 +92,7 @@ class OrderCancellationServiceTest {
     @Test
     void insufficientReputationLeavesEveryCancellationEffectUntouched() {
         User owner = user("owner", 4);
-        Order order = cancellableOrder(owner, 10_000_001d);
+        Order order = cancellableOrder(owner, new BigDecimal("10000001"));
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(userRepository.findByIdForUpdate("owner")).thenReturn(Optional.of(owner));
 
@@ -124,7 +125,7 @@ class OrderCancellationServiceTest {
     @Test
     void userCannotCancelAcceptedOrder() {
         User owner = user("owner", 10);
-        Order order = cancellableOrder(owner, 100d);
+        Order order = cancellableOrder(owner, new BigDecimal("100"));
         order.setStatus(OrderStatus.ORDER_ACCEPTED);
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
@@ -135,7 +136,7 @@ class OrderCancellationServiceTest {
 
     @Test
     void guestCancellationUsesScopedTokenAndNeverTouchesReputation() {
-        Order order = cancellableOrder(null, 20_000_000d);
+        Order order = cancellableOrder(null, new BigDecimal("20000000"));
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
         when(transitionService.apply(eq(10L), eq(0L), eq(OrderStatus.CANCELLED), eq("GUEST:10"), eq("reason"), eq("ref"), eq(CancellationSource.GUEST)))
                 .thenAnswer(invocation -> markCancelled(order, CancellationSource.GUEST));
@@ -153,7 +154,7 @@ class OrderCancellationServiceTest {
     @Test
     void staleVersionFailsBeforeAnyFinancialEffect() {
         User owner = user("owner", 10);
-        Order order = cancellableOrder(owner, 100d);
+        Order order = cancellableOrder(owner, new BigDecimal("100"));
         order.setVersion(2L);
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
@@ -165,7 +166,7 @@ class OrderCancellationServiceTest {
 
     @Test
     void anotherUserCannotCancelOwnersOrder() {
-        Order order = cancellableOrder(user("owner", 10), 100d);
+        Order order = cancellableOrder(user("owner", 10), new BigDecimal("100"));
         when(orderLookupService.requireForUpdate(10L)).thenReturn(order);
 
         assertThatThrownBy(() -> service.cancelWithinTransaction(command(CancellationSource.USER, "intruder")))
@@ -177,7 +178,7 @@ class OrderCancellationServiceTest {
         return new OrderCancellationService.CancellationCommand(10L, 0L, "reason", actor, source, "ref", null);
     }
 
-    private Order cancellableOrder(User owner, Double finalPrice) {
+    private Order cancellableOrder(User owner, BigDecimal finalPrice) {
         Order order = new Order();
         order.setId(10L);
         order.setVersion(0L);

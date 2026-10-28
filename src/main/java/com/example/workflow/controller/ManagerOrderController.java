@@ -109,7 +109,7 @@ public class ManagerOrderController {
             @Valid @RequestBody ReviewProductionCheckpointRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Production checkpoint reviewed.",
+                "Đã ghi nhận quyết định kiểm tra sản xuất.",
                 productionCheckpointService.review(orderId, checkpointId, request, idempotencyKey)
         ));
     }

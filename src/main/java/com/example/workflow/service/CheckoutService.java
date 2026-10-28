@@ -94,7 +94,7 @@ public class CheckoutService {
 
     private CheckoutResponseDTO checkoutUser(String userId, CheckoutRequest request, String idempotencyKey) {
         if (request == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Checkout request is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Thông tin thanh toán là bắt buộc.");
         }
         List<Long> variantIds = normalizeVariantIds(request.getVariantIds());
         PaymentMethod paymentMethod = parsePaymentMethod(request.getPaymentMethod());
@@ -195,7 +195,7 @@ public class CheckoutService {
 
     private ProductVariant validateCheckoutItem(CartItem cartItem) {
         if (cartItem == null || cartItem.getQuantity() < 1 || cartItem.getProductVariant() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cart item is invalid.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Sản phẩm trong giỏ hàng không hợp lệ.");
         }
         ProductVariant variant = cartItem.getProductVariant();
         Product product = variant.getProduct();
@@ -206,11 +206,11 @@ public class CheckoutService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Product " + product.getId() + " is not accepting orders."
+                    "Sản phẩm " + product.getId() + " hiện không nhận đơn hàng."
             );
         }
         if (variant.getPrice() == null || variant.getPrice().signum() < 0) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Catalog price is invalid.");
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Giá sản phẩm trong danh mục không hợp lệ.");
         }
         return variant;
     }
@@ -240,7 +240,7 @@ public class CheckoutService {
 
     private void applyTotals(Order order, BigDecimal totalPrice, BigDecimal discountAmount) {
         if (discountAmount == null || discountAmount.signum() < 0) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher discount is invalid.");
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Mức giảm giá của phiếu không hợp lệ.");
         }
         order.setTotalPrice(totalPrice);
         order.setDiscountAmount(discountAmount);
@@ -268,7 +268,7 @@ public class CheckoutService {
         Set<Long> normalized = new TreeSet<>();
         for (Long id : variantIds) {
             if (id == null || id <= 0) {
-                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Variant id must be positive.");
+                throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Mã biến thể phải là số dương..");
             }
             normalized.add(id);
         }
@@ -277,12 +277,12 @@ public class CheckoutService {
 
     private PaymentMethod parsePaymentMethod(String value) {
         if (!StringUtils.hasText(value)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Payment method is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Phương thức thanh toán là bắt buộc..");
         }
         try {
             return PaymentMethod.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Payment method must be COD or ONLINE.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Phương thức thanh toán phải là COD hoặc ONLINE..");
         }
     }
 

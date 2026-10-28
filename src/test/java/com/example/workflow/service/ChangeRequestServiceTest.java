@@ -27,8 +27,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,16 +78,18 @@ class ChangeRequestServiceTest {
     }
 
     @Test
-    void ownerCreatesPendingRequestWithoutMutatingOfficialSpec() {
+    void ownerCreatesPendingRequestWithoutMutatingOfficialSpec() throws Exception {
         stubLockedOrderAndAssignment();
         String original = item.getSpecSnapshot();
 
         var result = service.createWithinTransaction(10L,
                 new CreateChangeRequestRequest(3L, 20L, 1, "New engraving",
-                        List.of("https://cdn.example/new.jpg"), "Gift date changed"), owner);
+                        Map.of("height", 20), "Gift date changed"), owner);
 
         assertEquals(ChangeRequestStatus.PENDING_REVIEW, result.status());
         assertEquals(original, item.getSpecSnapshot());
+        assertEquals(20, new ObjectMapper().readTree(result.proposedSpecSnapshot())
+                .path("fieldValues").path("height").asInt());
         assertEquals(1, item.getSpecVersion());
         assertEquals("staff", result.assignedStaffId());
         verify(eventPublisher).publishAfterCommit(eq("CHANGE_REQUEST_SUBMITTED"), any());
@@ -93,11 +97,11 @@ class ChangeRequestServiceTest {
     }
 
     @Test
-    void assignedStaffAcceptsByCreatingNextSpecVersionOnly() {
+    void assignedStaffAcceptsByCreatingNextSpecVersionOnly() throws Exception {
         ChangeRequest request = pendingRequest();
         stubLockedOrderAndAssignment();
         when(changeRequestRepository.findByIdAndOrderIdForUpdate(100L, 10L)).thenReturn(Optional.of(request));
-        double price = item.getPrice();
+        BigDecimal price = item.getPrice();
         int duration = item.getProductionDurationDays();
         LocalDateTime deadline = item.getComputedCompletionAt();
 
@@ -107,6 +111,9 @@ class ChangeRequestServiceTest {
         assertEquals(ChangeRequestStatus.APPLIED, result.status());
         assertEquals(2, item.getSpecVersion());
         assertEquals("New engraving", read(item.getSpecSnapshot(), "description"));
+        assertEquals(20, new ObjectMapper().readTree(item.getSpecSnapshot()).path("fieldValues").path("height").asInt());
+        assertEquals("ceramic", new ObjectMapper().readTree(item.getSpecSnapshot()).path("productType").path("code").asText());
+        assertEquals("height", new ObjectMapper().readTree(item.getSpecSnapshot()).path("productTypeFields").get(0).path("code").asText());
         assertEquals(price, item.getPrice());
         assertEquals(duration, item.getProductionDurationDays());
         assertEquals(deadline, item.getComputedCompletionAt());
@@ -166,9 +173,20 @@ class ChangeRequestServiceTest {
         stubLockedOrderAndAssignment();
 
         AppException error = assertThrows(AppException.class, () -> service.createWithinTransaction(10L,
-                new CreateChangeRequestRequest(3L, 20L, 1, "Late change", List.of(), "Too late"), owner));
+                new CreateChangeRequestRequest(3L, 20L, 1, "Late change", Map.of(), "Too late"), owner));
 
         assertEquals(ConstantErrorCode.CHANGE_REQUEST_ITEM_ALREADY_IMPLEMENTED, error.getErrorCode());
+        verify(changeRequestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void fieldValuesAreValidatedAgainstTheFrozenProductTypeSchema() {
+        stubLockedOrderAndAssignment();
+
+        AppException error = assertThrows(AppException.class, () -> service.createWithinTransaction(10L,
+                new CreateChangeRequestRequest(3L, 20L, 1, "New engraving", Map.of("height", 51), "Changed"), owner));
+
+        assertEquals(ConstantErrorCode.CHANGE_REQUEST_INVALID, error.getErrorCode());
         verify(changeRequestRepository, never()).saveAndFlush(any());
     }
 
@@ -197,7 +215,7 @@ class ChangeRequestServiceTest {
                 .thenReturn(owner);
 
         AppException error = assertThrows(AppException.class, () -> service.create(10L,
-                new CreateChangeRequestRequest(3L, 20L, 1, "New engraving", List.of(), "Changed"),
+                new CreateChangeRequestRequest(3L, 20L, 1, "New engraving", Map.of(), "Changed"),
                 "inactive-owner-key"));
 
         assertEquals(ConstantErrorCode.CHANGE_REQUEST_FORBIDDEN, error.getErrorCode());
@@ -220,7 +238,7 @@ class ChangeRequestServiceTest {
         request.setBaseAgreementVersion(1);
         request.setBaseSpecVersion(1);
         request.setBaseSpecSnapshot(item.getSpecSnapshot());
-        request.setProposedSpecSnapshot("{\"description\":\"New engraving\",\"imageUrls\":[]}");
+        request.setProposedSpecSnapshot("{\"description\":\"New engraving\",\"fieldValues\":{\"height\":20}}");
         request.setRequestReason("Gift date changed");
         request.setStatus(ChangeRequestStatus.PENDING_REVIEW);
         request.setCreatedAt(LocalDateTime.of(2026, 10, 15, 9, 0));
@@ -244,8 +262,11 @@ class ChangeRequestServiceTest {
         value.setId(20L);
         value.setProductionStatus(OrderItemProductionStatus.INITIAL_IN_PROGRESS);
         value.setSpecVersion(1);
-        value.setSpecSnapshot("{\"description\":\"Original\",\"quantity\":2,\"unitPrice\":100}");
-        value.setPrice(100.0);
+        value.setSpecSnapshot("{\"description\":\"Original\",\"quantity\":2,\"unitPrice\":100,"
+                + "\"productType\":{\"id\":5,\"code\":\"ceramic\",\"name\":\"Đồ gốm\"},"
+                + "\"productTypeFields\":[{\"code\":\"height\",\"label\":\"Chiều cao\",\"kind\":\"NUMBER\",\"minimum\":1,\"maximum\":50}],"
+                + "\"fieldValues\":{\"height\":18}}");
+        value.setPrice(new BigDecimal("100.00"));
         value.setQuantity(2);
         value.setProductionDurationDays(5);
         value.setComputedCompletionAt(LocalDateTime.of(2026, 10, 20, 9, 0));

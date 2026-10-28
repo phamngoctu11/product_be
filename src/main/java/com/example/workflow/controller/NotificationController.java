@@ -47,13 +47,13 @@ public class NotificationController {
     @PutMapping("/read-all/me")
     public ResponseEntity<ApiResponse<Void>> markCurrentUserNotificationsAsRead() {
         notificationService.markCurrentUserNotificationsAsRead();
-        return ResponseEntity.ok(ApiResponse.success("Da danh dau doc toan bo thong bao."));
+        return ResponseEntity.ok(ApiResponse.success("Đã đánh dấu tất cả thông báo là đã đọc."));
     }
 
     @PutMapping("/read-all/admin")
     @PreAuthorize("hasAnyAuthority('ADMIN','MANAGER')")
     public ResponseEntity<ApiResponse<Void>> markAdminNotificationsAsRead() {
         notificationService.markAdminNotificationsAsRead();
-        return ResponseEntity.ok(ApiResponse.success("Da danh dau doc toan bo thong bao quan tri."));
+        return ResponseEntity.ok(ApiResponse.success("Đã đánh dấu tất cả thông báo quản trị là đã đọc."));
     }
 }

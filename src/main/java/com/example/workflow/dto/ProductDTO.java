@@ -20,15 +20,15 @@ import java.util.List;
 public class ProductDTO implements Serializable {
     private Long id;
 
-    @NotBlank(message = "Product name is required")
+    @NotBlank(message = "Tên sản phẩm là bắt buộc.")
     private String product_name;
 
-    @NotNull(message = "Price is required")
-    @PositiveOrZero(message = "Price must be zero or positive")
-    @Digits(integer = 17, fraction = 2, message = "Price must have at most 2 decimal places")
+    @NotNull(message = "Giá là bắt buộc.")
+    @PositiveOrZero(message = "Giá phải là số không âm.")
+    @Digits(integer = 17, fraction = 2, message = "Giá không được có quá 2 chữ số thập phân.")
     private BigDecimal price;
 
-    @DecimalMin(value = "2.0", message = "Made day must be at least 2")
+    @DecimalMin(value = "2.0", message = "Thời gian sản xuất tối thiểu là 2 ngày.")
     private Double madeDay;
 
     private List<String> tags;

@@ -35,7 +35,7 @@ public class ReputationService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Reputation balance is not enough for this action."
+                    "Điểm uy tín hiện có không đủ để thực hiện thao tác này."
             );
         }
 

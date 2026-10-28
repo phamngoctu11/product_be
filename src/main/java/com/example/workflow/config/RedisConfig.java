@@ -83,6 +83,7 @@ public class RedisConfig implements CachingConfigurer {
                 .withCacheConfiguration(CacheNames.DASHBOARD_STATS, ttl(Duration.ofMinutes(20)))
                 .withCacheConfiguration(CacheNames.PRODUCTS, ttl(Duration.ofSeconds(120)))
                 .withCacheConfiguration(CacheNames.PRODUCT, ttl(Duration.ofSeconds(120)))
+                .withCacheConfiguration(CacheNames.PRODUCT_TYPES, ttl(Duration.ofMinutes(10)))
                 .withCacheConfiguration(CacheNames.BEST_SELLING_PRODUCTS, ttl(Duration.ofMinutes(20)))
                 .withCacheConfiguration(CacheNames.GUEST_VOUCHER_TEMPLATES, ttl(Duration.ofSeconds(30)))
                 .withCacheConfiguration(CacheNames.VOUCHER_TEMPLATES, ttl(Duration.ofSeconds(60)))

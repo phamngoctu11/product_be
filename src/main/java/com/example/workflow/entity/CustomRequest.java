@@ -35,6 +35,10 @@ import java.util.Objects;
                 @Index(
                         name = "idx_custom_request_owner_status_updated",
                         columnList = "owner_id,status,updated_at,id"
+                ),
+                @Index(
+                        name = "idx_custom_request_owner_delete_status_updated",
+                        columnList = "owner_id,is_delete,status,updated_at,id"
                 )
         },
         uniqueConstraints = {
@@ -92,8 +96,11 @@ public class CustomRequest {
     @Column(name = "submitted_at", columnDefinition = "datetime")
     private LocalDateTime submittedAt;
 
+    @Column(name = "is_delete", nullable = false)
+    private boolean isDelete = false;
+
     public boolean isEditable() {
-        return status == CustomRequestStatus.DRAFT && linkedOrderId == null;
+        return !isDelete && status == CustomRequestStatus.DRAFT && linkedOrderId == null;
     }
 
     public void markSubmitted(Long orderId, LocalDateTime submissionTime) {

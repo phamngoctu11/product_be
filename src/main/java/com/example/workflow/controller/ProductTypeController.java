@@ -51,4 +51,10 @@ public class ProductTypeController {
     ) {
         return ResponseEntity.ok(ApiResponse.success(service.update(id, request)));
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ProductTypeDTO>> deactivate(@Positive @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(service.deactivate(id)));
+    }
 }

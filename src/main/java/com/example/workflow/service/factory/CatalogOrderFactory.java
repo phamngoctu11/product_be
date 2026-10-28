@@ -78,7 +78,7 @@ public class CatalogOrderFactory {
                 throw new AppException(
                         HttpStatus.BAD_REQUEST,
                         ConstantErrorCode.BAD_REQUEST_DETAIL,
-                        "Checkout total is outside the supported range."
+                        "Tổng tiền thanh toán nằm ngoài phạm vi cho phép."
                 );
             }
             subtotal = updatedSubtotal;

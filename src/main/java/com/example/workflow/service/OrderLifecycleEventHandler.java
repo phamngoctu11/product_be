@@ -102,10 +102,10 @@ public class OrderLifecycleEventHandler {
 
         String userId = order.getUser().getId();
         String title = order.getOrderType() == OrderType.CUSTOM
-                ? "Yêu cầu custom đã được tạo"
+                ? "Yêu cầu tùy chỉnh đã được tạo"
                 : "Đặt hàng thành công";
         String content = order.getOrderType() == OrderType.CUSTOM
-                ? "Yêu cầu custom cho đơn #" + order.getId() + " đã được tạo và đang chờ quản lý duyệt."
+                ? "Yêu cầu tùy chỉnh cho đơn #" + order.getId() + " đã được tạo và đang chờ quản lý duyệt."
                 : "Đơn hàng #" + order.getId() + " đã được tạo và đang chờ quản lý duyệt.";
         notificationService.sendNotification(
                 title,
@@ -251,6 +251,7 @@ public class OrderLifecycleEventHandler {
     public void handleOrderDelivered(OrderDeliveredEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_DELIVERED");
         requireWorkflowAdvance(order.getId(), orderWorkflowService.correlateDelivered(order.getId()), "ORDER_DELIVERED");
+        orderChatService.expireThreadAfterOrderFinalized(order.getId(), order.getDeliveredAt());
         if (order.getUser() == null) {
             return;
         }
@@ -281,6 +282,11 @@ public class OrderLifecycleEventHandler {
     public void handleOrderCancelled(OrderCancelledEvent event) {
         Order order = requireOrder(event.orderId(), "ORDER_CANCELLED");
         orderWorkflowService.correlateOrderCancelled(order.getId());
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            orderChatService.expireThreadAfterOrderFinalized(
+                    order.getId(), event.occurredAt() == null ? order.getCancelledAt() : event.occurredAt()
+            );
+        }
         applicationCacheService.evictOrderCancelled(order, event.oldStatus());
 
         if (StringUtils.hasText(order.getEmail())) {
@@ -403,7 +409,7 @@ public class OrderLifecycleEventHandler {
                 String userId = order.getUser().getId();
                 notificationService.sendNotification(
                         "Cập nhật tiến độ sản xuất",
-                        "Đã có hình ảnh đầu tiên của item #" + event.orderItemId(),
+                        "Đã có hình ảnh đầu tiên của sản phẩm #" + event.orderItemId(),
                         order.getId(),
                         userId,
                         "/topic/user-notifications/" + userId
@@ -411,9 +417,21 @@ public class OrderLifecycleEventHandler {
             }
             return;
         }
+        if (StringUtils.hasText(order.getEmail())) {
+            emailService.sendFinalProductCheckpointEmail(
+                    order.getEmail(),
+                    order.getRecipientName(),
+                    order.getId(),
+                    event.orderItemId(),
+                    event.attemptNumber(),
+                    event.imageUrls(),
+                    event.note(),
+                    order.getUser() == null ? signedGuestOrderUrl(order) : authenticatedOrderUrl(order.getId())
+            );
+        }
         notificationService.sendNotification(
                 "Sản phẩm chờ KCS",
-                "Item #" + event.orderItemId() + " của đơn #" + order.getId()
+                "Sản phẩm #" + event.orderItemId() + " của đơn #" + order.getId()
                         + " có sản phẩm hoàn thiện lần " + event.attemptNumber() + " đang chờ KCS.",
                 order.getId(),
                 null,
@@ -433,7 +451,7 @@ public class OrderLifecycleEventHandler {
                 && StringUtils.hasText(event.assignedStaffId())) {
             notificationService.sendNotification(
                     "KCS yêu cầu làm lại",
-                    "Item #" + event.orderItemId() + " của đơn #" + order.getId()
+                    "Sản phẩm #" + event.orderItemId() + " của đơn #" + order.getId()
                             + " cần làm lại. Lý do: " + event.reason(),
                     order.getId(),
                     event.assignedStaffId(),

@@ -61,9 +61,9 @@ public class OrderController {
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyOrders(
-            @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
+            @DecimalMin(value = "0.0", message = "Giá thấp nhất không được là số âm.")
             @RequestParam(required = false) BigDecimal minPrice,
-            @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
+            @DecimalMin(value = "0.0", message = "Giá cao nhất không được là số âm.")
             @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
@@ -76,9 +76,9 @@ public class OrderController {
     @GetMapping("/me/cancelled")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<Page<OrderListDTO>>> getMyCancelledOrders(
-            @DecimalMin(value = "0.0", message = "Minimum price must not be negative")
+            @DecimalMin(value = "0.0", message = "Giá thấp nhất không được là số âm.")
             @RequestParam(required = false) BigDecimal minPrice,
-            @DecimalMin(value = "0.0", message = "Maximum price must not be negative")
+            @DecimalMin(value = "0.0", message = "Giá cao nhất không được là số âm.")
             @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20) Pageable pageable
     ) {
@@ -138,7 +138,7 @@ public class OrderController {
             @Valid @RequestBody CancelOrderRequest request
     ) {
         OrderCancellationResultDTO result = orderCancellationService.cancelByCurrentUser(orderId, request, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.success("Ban da huy don hang thanh cong.", result));
+        return ResponseEntity.ok(ApiResponse.success("Bạn đã hủy đơn hàng thành công.", result));
     }
 
     @PostMapping("/{order_id}/reorder")
@@ -148,7 +148,7 @@ public class OrderController {
             @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey
     ) {
         ReorderResponseDTO response = orderReorderService.reorder(orderId, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.success("Reorder processed", response));
+        return ResponseEntity.ok(ApiResponse.success("Đã xử lý yêu cầu đặt lại.", response));
     }
 
     @GetMapping("/{orderId}/receipt")
@@ -175,7 +175,7 @@ public class OrderController {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Minimum price must not be greater than maximum price."
+                    "Giá thấp nhất không được lớn hơn giá cao nhất."
             );
         }
     }

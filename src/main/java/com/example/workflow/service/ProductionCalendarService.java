@@ -26,8 +26,8 @@ public class ProductionCalendarService {
 
     /** The start date is not counted. Sundays and configured holidays are skipped. */
     public LocalDate calculateCompletionDate(LocalDate startDate, int productionDays) {
-        if (startDate == null) throw new IllegalArgumentException("Start date is required");
-        if (productionDays < 1) throw new IllegalArgumentException("Production days must be positive");
+        if (startDate == null) throw new IllegalArgumentException("Ngày bắt đầu là bắt buộc.");
+        if (productionDays < 1) throw new IllegalArgumentException("Số ngày sản xuất phải là số dương.");
 
         LocalDate cursor = startDate;
         int countedDays = 0;

@@ -12,7 +12,7 @@ public interface CustomRequestSubmissionMapper {
     @Mapping(source = "order.version", target = "version")
     @Mapping(target = "orderType", expression = "java(enumName(order.getOrderType()))")
     @Mapping(target = "status", expression = "java(enumName(order.getStatus()))")
-    @Mapping(target = "message", constant = "Custom order created and awaiting manager approval.")
+    @Mapping(target = "message", constant = "Đơn hàng tùy chỉnh đã được tạo và đang chờ quản lý duyệt.")
     CustomRequestSubmissionDTO toDto(Long draftId, Order order);
 
     default String enumName(Enum<?> value) {

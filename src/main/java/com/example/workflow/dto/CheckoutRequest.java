@@ -11,16 +11,16 @@ import java.util.List;
 
 @Data
 public class CheckoutRequest {
-    @NotEmpty(message = "Select at least one variant to checkout")
-    private List<@Positive(message = "Variant id must be positive") Long> variantIds;
+    @NotEmpty(message = "Vui lòng chọn ít nhất một biến thể để thanh toán.")
+    private List<@Positive(message = "Mã biến thể phải là số dương.") Long> variantIds;
 
-    @Positive(message = "User voucher id must be positive")
+    @Positive(message = "Mã phiếu giảm giá của người dùng phải là số dương.")
     private Long userVoucherId;
 
-    @NotBlank(message = "Payment method is required")
-    @Pattern(regexp = "(?i)COD|ONLINE", message = "Payment method must be COD or ONLINE")
+    @NotBlank(message = "Phương thức thanh toán là bắt buộc.")
+    @Pattern(regexp = "(?i)COD|ONLINE", message = "Phương thức thanh toán phải là COD hoặc ONLINE.")
     private String paymentMethod;
 
-    @Size(max = 1000, message = "Note must be at most 1000 characters")
+    @Size(max = 1000, message = "Ghi chú không được vượt quá 1000 ký tự.")
     private String note;
 }

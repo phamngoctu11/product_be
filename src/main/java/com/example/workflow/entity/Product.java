@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,17 +28,19 @@ public class Product {
     @Column(name = "price", precision = 19, scale = 2)
     private BigDecimal price = BigDecimal.ZERO;
 
-    @DecimalMin(value = "2.0", message = "Made day must be at least 2")
+    @DecimalMin(value = "2.0", message = "Thời gian sản xuất tối thiểu là 2 ngày.")
     @Column(name = "made_day")
     private Double madeDay;
 
     @Column(name = "tags")
     private String tags;
 
+    @BatchSize(size = 50)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_type_id")
     private ProductType productType;
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
     private List<ProductVariant> variants = new ArrayList<>();
 

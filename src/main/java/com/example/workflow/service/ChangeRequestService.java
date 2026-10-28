@@ -3,6 +3,7 @@ package com.example.workflow.service;
 import com.example.workflow.dto.ChangeRequestDTO;
 import com.example.workflow.dto.ChangeRequestDecisionRequest;
 import com.example.workflow.dto.CreateChangeRequestRequest;
+import com.example.workflow.dto.ProductTypeFieldDTO;
 import com.example.workflow.entity.ChangeRequest;
 import com.example.workflow.entity.Order;
 import com.example.workflow.entity.OrderAssignment;
@@ -26,7 +27,6 @@ import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -35,12 +35,12 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 @Service
 @RequiredArgsConstructor
@@ -78,7 +78,7 @@ public class ChangeRequestService {
         canonical.put("orderItemId", request.orderItemId());
         canonical.put("baseSpecVersion", request.baseSpecVersion());
         canonical.put("proposedDescription", normalizedDescription(request.proposedDescription()));
-        canonical.put("proposedImageUrls", validatedImageUrls(request.proposedImageUrls()));
+        canonical.put("fieldValues", request.fieldValues() == null ? Map.of() : new TreeMap<>(request.fieldValues()));
         canonical.put("reason", normalizedRequiredReason(request.reason()));
         String payload = JsonUtils.write(objectMapper, canonical, "change request submission");
         String result = durableRequests.execute(
@@ -128,7 +128,7 @@ public class ChangeRequestService {
         OrderItem item = requireEligibleItem(order, input.orderItemId());
         requireSpecVersion(item, input.baseSpecVersion());
 
-        String proposedSnapshot = proposedSnapshot(input);
+        String proposedSnapshot = proposedSnapshot(item, input);
         ChangeRequest request = new ChangeRequest();
         request.setOrderId(orderId);
         request.setOwnerId(owner.getId());
@@ -265,11 +265,44 @@ public class ChangeRequestService {
         }
     }
 
-    private String proposedSnapshot(CreateChangeRequestRequest input) {
+    private String proposedSnapshot(OrderItem item, CreateChangeRequestRequest input) {
         ObjectNode node = objectMapper.createObjectNode();
+        if (StringUtils.hasText(item.getSpecSnapshot())) {
+            try {
+                JsonNode current = objectMapper.readTree(item.getSpecSnapshot());
+                if (current != null && current.isObject()) {
+                    node.setAll((ObjectNode) current);
+                } else {
+                    node.put("baseSpec", item.getSpecSnapshot());
+                }
+            } catch (Exception ignored) {
+                node.put("baseSpec", item.getSpecSnapshot());
+            }
+        }
         node.put("description", normalizedDescription(input.proposedDescription()));
-        ArrayNode images = node.putArray("imageUrls");
-        validatedImageUrls(input.proposedImageUrls()).forEach(images::add);
+        if (input.fieldValues() != null && !input.fieldValues().isEmpty()) {
+            JsonNode schema = node.get("productTypeFields");
+            if (schema == null || !schema.isArray()) {
+                throw invalid("Không thể thay đổi thuộc tính vì đơn hàng không có cấu hình loại sản phẩm.");
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            JsonNode currentValues = node.get("fieldValues");
+            if (currentValues != null && currentValues.isObject()) {
+                values.putAll(objectMapper.convertValue(
+                        currentValues, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+                ));
+            }
+            values.putAll(input.fieldValues());
+            List<ProductTypeFieldDTO> fields = objectMapper.convertValue(
+                    schema, new com.fasterxml.jackson.core.type.TypeReference<List<ProductTypeFieldDTO>>() {}
+            );
+            try {
+                CustomRequestService.validateFieldValues(fields, values);
+            } catch (AppException invalidValues) {
+                throw invalid("Thuộc tính đề xuất không hợp lệ: " + invalidValues.getMessage());
+            }
+            node.set("fieldValues", objectMapper.valueToTree(values));
+        }
         return JsonUtils.write(objectMapper, node, "proposed specification");
     }
 
@@ -290,10 +323,12 @@ public class ChangeRequestService {
         try {
             JsonNode proposal = objectMapper.readTree(proposedSnapshot);
             result.set("description", proposal.path("description"));
-            result.set("imageUrls", proposal.path("imageUrls"));
+            if (proposal.has("fieldValues")) {
+                result.set("fieldValues", proposal.get("fieldValues"));
+            }
         } catch (Exception invalid) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CHANGE_REQUEST_INVALID,
-                    "Stored proposed specification is invalid.");
+                    "Thông số đề xuất đã lưu không hợp lệ.");
         }
         return JsonUtils.write(objectMapper, result, "applied specification");
     }
@@ -347,40 +382,39 @@ public class ChangeRequestService {
     private void requireCreateRequest(CreateChangeRequestRequest request) {
         if (request == null || request.orderVersion() == null || request.orderItemId() == null
                 || request.baseSpecVersion() == null) {
-            throw invalid("orderVersion, orderItemId and baseSpecVersion are required.");
+            throw invalid("Vui lòng cung cấp phiên bản đơn hàng, mã sản phẩm và phiên bản thông số gốc.");
         }
         if (request.hasUnknownFields()) {
-            throw invalid("Unsupported fields: " + String.join(", ", request.getUnknownFields().keySet()) + ".");
+            throw invalid("Các trường không được hỗ trợ: " + String.join(", ", request.getUnknownFields().keySet()) + ".");
         }
         normalizedDescription(request.proposedDescription());
-        validatedImageUrls(request.proposedImageUrls());
         normalizedRequiredReason(request.reason());
     }
 
     private void requireDecisionRequest(ChangeRequestDecisionRequest request) {
         if (request == null || request.orderVersion() == null || request.changeRequestVersion() == null
                 || request.decision() == null) {
-            throw invalid("orderVersion, changeRequestVersion and decision are required.");
+            throw invalid("Vui lòng cung cấp phiên bản đơn hàng, phiên bản yêu cầu chỉnh sửa và quyết định.");
         }
         if (request.hasUnknownFields()) {
-            throw invalid("Unsupported fields: " + String.join(", ", request.getUnknownFields().keySet()) + ".");
+            throw invalid("Các trường không được hỗ trợ: " + String.join(", ", request.getUnknownFields().keySet()) + ".");
         }
         normalizedDecisionReason(request.reason(), request.decision());
     }
 
     private String normalizedDescription(String value) {
-        if (!StringUtils.hasText(value)) throw invalid("proposedDescription is required.");
+        if (!StringUtils.hasText(value)) throw invalid("Mô tả đề xuất là bắt buộc..");
         String normalized = value.trim();
-        if (normalized.length() > 4000) throw invalid("proposedDescription must be at most 4000 characters.");
+        if (normalized.length() > 4000) throw invalid("Mô tả đề xuất không được vượt quá 4000 ký tự..");
         return normalized;
     }
 
     private String normalizedRequiredReason(String value) {
         if (!StringUtils.hasText(value)) {
-            throw invalid("reason is required.");
+            throw invalid("Vui lòng nhập lý do..");
         }
         String normalized = value.trim();
-        if (normalized.length() > 2000) throw invalid("reason must be at most 2000 characters.");
+        if (normalized.length() > 2000) throw invalid("Lý do không được vượt quá 2000 ký tự..");
         return normalized;
     }
 
@@ -392,26 +426,8 @@ public class ChangeRequestService {
             return null;
         }
         String normalized = value.trim();
-        if (normalized.length() > 2000) throw invalid("reason must be at most 2000 characters.");
+        if (normalized.length() > 2000) throw invalid("Lý do không được vượt quá 2000 ký tự..");
         return normalized;
-    }
-
-    private List<String> validatedImageUrls(List<String> values) {
-        if (values == null) return List.of();
-        if (values.size() > 10) throw invalid("At most 10 images are allowed.");
-        return values.stream().map(value -> {
-            try {
-                String text = value == null ? "" : value.trim();
-                URI uri = URI.create(text);
-                if (text.length() > 2048 || uri.getHost() == null
-                        || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))) {
-                    throw new IllegalArgumentException();
-                }
-                return uri.toString();
-            } catch (IllegalArgumentException invalid) {
-                throw invalid("Image URLs must use http or https.");
-            }
-        }).toList();
     }
 
     private AppException invalid(String detail) {

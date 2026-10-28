@@ -20,6 +20,10 @@ public class CustomRequestMapper {
     }
 
     public CustomRequestDTO toDto(CustomRequest request) {
+        return toDto(request, request.isEditable());
+    }
+
+    public CustomRequestDTO toDto(CustomRequest request, boolean deletable) {
         var type = request.getProductType();
         List<ProductTypeFieldDTO> fields;
         try {
@@ -36,7 +40,7 @@ public class CustomRequestMapper {
         }
         return new CustomRequestDTO(request.getId(), request.getVersion(), request.getStatus(), request.getDescription(),
                 request.getImageUrls(), request.getQuantity(), request.getLinkedOrderId(), request.getSourceOrderId(),
-                request.getCreatedAt(), request.getUpdatedAt(), request.getSubmittedAt(), request.isEditable(),
+                request.getCreatedAt(), request.getUpdatedAt(), request.getSubmittedAt(), request.isEditable(), deletable,
                 type == null ? null : type.getId(), type == null ? null : type.getCode(), type == null ? null : type.getName(),
                 fields, values);
     }

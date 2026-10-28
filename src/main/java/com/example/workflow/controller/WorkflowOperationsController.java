@@ -50,7 +50,7 @@ public class WorkflowOperationsController {
     ) {
         boolean requeued = recoveryService.requeue(eventId);
         return ResponseEntity.ok(ApiResponse.success(
-                requeued ? "Outbox event queued for retry." : "Outbox event not found.",
+                requeued ? "Sự kiện đã được đưa vào hàng đợi để thử lại." : "Không tìm thấy sự kiện trong hàng đợi.",
                 requeued
         ));
     }
@@ -73,7 +73,7 @@ public class WorkflowOperationsController {
     ) {
         boolean replayed = redisOperations.replay(recordId);
         return ResponseEntity.ok(ApiResponse.success(
-                replayed ? "DLQ event replayed." : "DLQ event not found.", replayed
+                replayed ? "Đã phát lại sự kiện trong hàng đợi lỗi." : "Không tìm thấy sự kiện trong hàng đợi lỗi.", replayed
         ));
     }
 }

@@ -9,14 +9,14 @@ import java.util.List;
 import java.util.Map;
 
 public record UpdateCustomRequest(
-        @NotNull(message = "Expected version is required")
-        @PositiveOrZero(message = "Expected version must not be negative") Long expectedVersion,
-        @NotBlank(message = "Custom description is required") String description,
-        @NotNull(message = "Image URLs are required; use an empty list when there are no images")
-        List<@NotBlank(message = "Image URL must not be blank") String> imageUrls,
-        @NotNull(message = "Quantity is required")
-        @Positive(message = "Quantity must be positive") Integer quantity,
-        @NotNull(message = "Custom field values are required") Map<String, Object> fieldValues
+        @NotNull(message = "Phiên bản dự kiến là bắt buộc.")
+        @PositiveOrZero(message = "Phiên bản dự kiến không được âm.") Long expectedVersion,
+        @NotBlank(message = "Mô tả yêu cầu tùy chỉnh là bắt buộc.") String description,
+        @NotNull(message = "Danh sách đường dẫn hình ảnh là bắt buộc; nếu không có hình, hãy gửi danh sách rỗng.")
+        List<@NotBlank(message = "Đường dẫn hình ảnh không được để trống.") String> imageUrls,
+        @NotNull(message = "Số lượng là bắt buộc.")
+        @Positive(message = "Số lượng phải là số dương.") Integer quantity,
+        @NotNull(message = "Giá trị các trường tùy chỉnh là bắt buộc.") Map<String, Object> fieldValues
 ) {
     public UpdateCustomRequest(Long expectedVersion, String description, List<String> imageUrls, Integer quantity) {
         this(expectedVersion, description, imageUrls, quantity, Map.of());

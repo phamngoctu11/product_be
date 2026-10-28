@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record ForgotPasswordRequest(
-        @NotBlank(message = "Username or email is required")
-        @Size(max = 255, message = "Username or email must be at most 255 characters")
+        @NotBlank(message = "Tên đăng nhập hoặc email là bắt buộc.")
+        @Size(max = 255, message = "Tên đăng nhập hoặc email không được vượt quá 255 ký tự.")
         String identifier
 ) {
 }

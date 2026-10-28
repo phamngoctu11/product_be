@@ -106,7 +106,7 @@ public class CartService {
 
     private void addVariantToCart(Cart cart, Long variantId, int quantity) {
         if (quantity < 1) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Quantity must be at least 1");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Số lượng phải từ 1 trở lên.");
         }
 
         ProductVariant variant = getActiveVariantOrThrow(variantId);
@@ -190,7 +190,7 @@ public class CartService {
 
     private CartOwner requireCartOwner(CartOwner owner) {
         if (owner == null || owner.type() == null || !StringUtils.hasText(owner.id())) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cart owner is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Chủ sở hữu giỏ hàng là bắt buộc.");
         }
         if (owner.type() == CartOwnerType.GUEST) {
             return CartOwner.guest(GuestSessionUtils.normalize(owner.id()));

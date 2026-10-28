@@ -15,7 +15,7 @@ public class ApiResponse<T> {
     private T data;
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(true, HttpStatus.OK.value(), "Success", data);
+        return new ApiResponse<>(true, HttpStatus.OK.value(), "Thành công", data);
     }
 
     public static <T> ApiResponse<T> success(String message, T data) {

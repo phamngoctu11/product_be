@@ -85,7 +85,7 @@ public class StaffOrderController {
             @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Production started.",
+                "Đã bắt đầu sản xuất.",
                 productionStartService.start(orderId, idempotencyKey)
         ));
     }
@@ -99,7 +99,7 @@ public class StaffOrderController {
             @Valid @RequestBody SubmitProductionCheckpointRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Production checkpoint submitted.",
+                "Đã gửi điểm kiểm tra sản xuất.",
                 productionCheckpointService.submit(orderId, orderItemId, request, idempotencyKey)
         ));
     }
@@ -126,7 +126,7 @@ public class StaffOrderController {
             @Valid @RequestBody ShippingHandoverRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Shipping handover recorded.",
+                "Đã ghi nhận bàn giao vận chuyển.",
                 orderDeliveryService.handover(orderId, request, idempotencyKey)
         ));
     }

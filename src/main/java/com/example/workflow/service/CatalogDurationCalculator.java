@@ -15,14 +15,14 @@ public class CatalogDurationCalculator {
             throw new AppException(
                     HttpStatus.CONFLICT,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Catalog item has no valid madeDay configuration."
+                    "Sản phẩm trong danh mục chưa được cấu hình thời gian sản xuất hợp lệ."
             );
         }
         if (quantity < 1) {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Quantity must be at least 1."
+                    "Số lượng phải từ 1 trở lên.."
             );
         }
 

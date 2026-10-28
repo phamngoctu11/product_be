@@ -122,6 +122,7 @@ public class ApplicationCacheService {
     public void evictCatalogTaxonomyChanged() {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCT);
+        optionalCacheService.clearAfterCommit(CacheNames.PRODUCT_TYPES);
     }
 
     public void evictProductUpdated(Long productId) {

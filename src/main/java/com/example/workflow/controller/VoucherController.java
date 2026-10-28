@@ -66,15 +66,19 @@ public class VoucherController {
     @PostMapping("/me/redeem")
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<ApiResponse<UserVoucherDTO>> redeemMyVoucher(
-            @Positive(message = "Template id must be positive") @RequestParam("templateId") Long templateId
+            @Positive(message = "Mã mẫu phiếu phải là số dương.") @RequestParam("templateId") Long templateId
     ) {
         try {
             UserVoucherDTO voucher = voucherService.redeemVoucher(templateId);
-            return ResponseEntity.ok(ApiResponse.success("Doi ma giam gia thanh cong! Da them vao vi cua ban.", voucher));
+            return ResponseEntity.ok(ApiResponse.success("Đổi mã giảm giá thành công! Đã thêm vào ví của bạn.", voucher));
         } catch (IllegalStateException e) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, e.getMessage());
         } catch (Exception e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.SYSTEM_ERROR, e.getMessage());
+            throw new AppException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    ConstantErrorCode.SYSTEM_ERROR,
+                    "Vui lòng thử lại sau."
+            );
         }
     }
 

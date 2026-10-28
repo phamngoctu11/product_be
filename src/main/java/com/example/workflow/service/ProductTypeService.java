@@ -1,5 +1,6 @@
 package com.example.workflow.service;
 
+import com.example.workflow.cache.CacheNames;
 import com.example.workflow.dto.ProductTypeDTO;
 import com.example.workflow.dto.ProductTypeFieldDTO;
 import com.example.workflow.dto.SaveProductTypeRequest;
@@ -12,6 +13,7 @@ import com.example.workflow.service.cache.ApplicationCacheService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,16 +34,19 @@ public class ProductTypeService {
     private final ApplicationCacheService applicationCacheService;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheNames.PRODUCT_TYPES, key = "'active'")
     public List<ProductTypeDTO> listActive() {
         return repository.findAllByActiveTrueOrderByNameAsc().stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheNames.PRODUCT_TYPES, key = "'all'")
     public List<ProductTypeDTO> listAll() {
         return repository.findAllByOrderByNameAsc().stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheNames.PRODUCT_TYPES, key = "'id-' + #id")
     public ProductTypeDTO getActive(Long id) {
         ProductType type = repository.findById(id).filter(ProductType::isActive)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_TYPE_NOT_FOUND));
@@ -71,6 +76,17 @@ public class ProductTypeService {
         repository.findByCodeIgnoreCase(request.code().trim()).filter(existing -> !existing.getId().equals(id))
                 .ifPresent(existing -> { throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.PRODUCT_TYPE_INVALID, "Mã loại đã được sử dụng."); });
         apply(type, request);
+        ProductType saved = repository.saveAndFlush(type);
+        applicationCacheService.evictCatalogTaxonomyChanged();
+        return toDto(saved);
+    }
+
+    @Transactional
+    public ProductTypeDTO deactivate(Long id) {
+        currentUserService.requireCurrentUserId();
+        ProductType type = repository.findById(id)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.PRODUCT_TYPE_NOT_FOUND));
+        type.setActive(false);
         ProductType saved = repository.saveAndFlush(type);
         applicationCacheService.evictCatalogTaxonomyChanged();
         return toDto(saved);

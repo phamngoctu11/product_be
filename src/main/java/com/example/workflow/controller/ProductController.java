@@ -4,6 +4,7 @@ import com.example.workflow.dto.ApiResponse;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
+import com.example.workflow.dto.ProductSearchSuggestionsDTO;
 import com.example.workflow.service.ProductService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -17,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/products")
@@ -40,9 +42,18 @@ public class ProductController {
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "minPrice", required = false) BigDecimal minPrice,
             @RequestParam(value = "maxPrice", required = false) BigDecimal maxPrice,
+            @RequestParam(value = "productTypeIds", required = false) List<Long> productTypeIds,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(ApiResponse.success(service.getAllProducts(keyword, minPrice, maxPrice, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(service.getAllProducts(keyword, minPrice, maxPrice, pageable, productTypeIds)));
+    }
+
+    @GetMapping("/search/suggestions")
+    public ResponseEntity<ApiResponse<ProductSearchSuggestionsDTO>> getSearchSuggestions(
+            @RequestParam("keyword") String keyword,
+            @RequestParam(value = "limit", defaultValue = "3") int limit
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(service.getSearchSuggestions(keyword, limit)));
     }
 
     @GetMapping("/best-selling")
@@ -54,7 +65,7 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ProductDTO>> getProductById(@Positive(message = "Product id must be positive") @PathVariable Long id) {
+    public ResponseEntity<ApiResponse<ProductDTO>> getProductById(@Positive(message = "Mã sản phẩm phải là số dương.") @PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(service.getProductById(id)));
     }
 
@@ -62,29 +73,29 @@ public class ProductController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> updateProduct(
-            @Positive(message = "Product id must be positive") @PathVariable Long id,
+            @Positive(message = "Mã sản phẩm phải là số dương.") @PathVariable Long id,
             @Valid @RequestBody ProductDTO dto
     ) {
         service.updateProduct(id, dto);
-        return ResponseEntity.ok(ApiResponse.success("Product updated successfully"));
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật sản phẩm thành công."));
     }
 
     @PostMapping("/{id}/variants")
     @PreAuthorize("hasAnyAuthority('STAFF', 'MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ProductDTO>> addVariant(
-            @Positive(message = "Product id must be positive") @PathVariable Long id,
+            @Positive(message = "Mã sản phẩm phải là số dương.") @PathVariable Long id,
             @Valid @RequestBody ProductVariantDTO dto
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Variant created successfully", service.addVariant(id, dto)));
+        return ResponseEntity.ok(ApiResponse.success("Tạo biến thể sản phẩm thành công.", service.addVariant(id, dto)));
     }
 
     // Only MANAGER or ADMIN can delete products.
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('MANAGER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteProduct(
-            @Positive(message = "Product id must be positive") @PathVariable Long id
+            @Positive(message = "Mã sản phẩm phải là số dương.") @PathVariable Long id
     ) {
         service.deleteProduct(id);
-        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully"));
+        return ResponseEntity.ok(ApiResponse.success("Xóa sản phẩm thành công."));
     }
 }

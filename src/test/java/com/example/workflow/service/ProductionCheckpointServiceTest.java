@@ -293,7 +293,7 @@ class ProductionCheckpointServiceTest {
     }
 
     @Test
-    void guestProgressUsesSignedTokenAndHidesFinalProductAttempts() {
+    void guestProgressUsesSignedTokenAndReturnsBothCheckpointStages() {
         OrderItem orderItem = item(501L);
         Order order = producingOrder(orderItem);
         User staff = user("staff-1");
@@ -312,9 +312,11 @@ class ProductionCheckpointServiceTest {
         var result = service.getGuestProgress(10L, "signed-token");
 
         assertEquals(1, result.size());
-        assertEquals(1, result.getFirst().checkpoints().size());
+        assertEquals(2, result.getFirst().checkpoints().size());
         assertEquals(ProductionCheckpointStage.INITIAL_SHAPE,
                 result.getFirst().checkpoints().getFirst().stage());
+        assertEquals(ProductionCheckpointStage.FINAL_PRODUCT,
+                result.getFirst().checkpoints().getLast().stage());
         verify(orderLookupTokenService).authorize(order, "signed-token", OrderLookupTokenService.Scope.READ);
     }
 

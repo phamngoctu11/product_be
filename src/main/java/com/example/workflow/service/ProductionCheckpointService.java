@@ -73,7 +73,7 @@ public class ProductionCheckpointService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
         authorizeProgressRead(order, actor);
-        return progressView(order, actor.getRole() == Role.USER);
+        return progressView(order);
     }
 
     @Transactional(readOnly = true)
@@ -81,15 +81,14 @@ public class ProductionCheckpointService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
         orderLookupTokenService.authorize(order, token, OrderLookupTokenService.Scope.READ);
-        return progressView(order, true);
+        return progressView(order);
     }
 
-    private List<OrderItemProductionDTO> progressView(Order order, boolean ownerView) {
+    private List<OrderItemProductionDTO> progressView(Order order) {
         return order.itemsOrEmpty().stream().map(item -> {
             List<ProductionCheckpointDTO> checkpoints = checkpointRepository
                     .findByOrderItem_IdOrderBySubmittedAtAsc(item.getId())
                     .stream()
-                    .filter(checkpoint -> !ownerView || checkpoint.getStage() == ProductionCheckpointStage.INITIAL_SHAPE)
                     .map(productionMapper::toDto)
                     .toList();
             return new OrderItemProductionDTO(
@@ -450,11 +449,11 @@ public class ProductionCheckpointService {
     private void requireSubmitRequest(SubmitProductionCheckpointRequest request) {
         if (request == null || request.orderVersion() == null || request.stage() == null) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "orderVersion and stage are required.");
+                    "Vui lòng cung cấp phiên bản đơn hàng và công đoạn.");
         }
         if (request.note() != null && request.note().length() > 2000) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "note must be at most 2000 characters.");
+                    "Ghi chú không được vượt quá 2000 ký tự.");
         }
         validatedImageUrls(request.imageUrls());
     }
@@ -462,7 +461,7 @@ public class ProductionCheckpointService {
     private void requireReviewRequest(ReviewProductionCheckpointRequest request) {
         if (request == null || request.checkpointVersion() == null || request.decision() == null) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "checkpointVersion and decision are required.");
+                    "Vui lòng cung cấp phiên bản điểm kiểm tra và quyết định.");
         }
         if (request.decision() != ProductionDecisionType.PASS
                 && request.decision() != ProductionDecisionType.REWORK_REQUIRED) {
@@ -470,7 +469,7 @@ public class ProductionCheckpointService {
         }
         if (request.reason() != null && request.reason().length() > 1000) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "reason must be at most 1000 characters.");
+                    "Lý do không được vượt quá 1000 ký tự.");
         }
     }
 

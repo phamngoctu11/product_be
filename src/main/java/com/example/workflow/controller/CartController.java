@@ -23,30 +23,30 @@ public class CartController {
     @PostMapping("/items")
     public ResponseEntity<ApiResponse<Void>> addToCart(
             @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
-            @Positive(message = "Variant id must be positive") @RequestParam("variantId") Long variantId,
-            @Min(value = 1, message = "Quantity must be at least 1") @RequestParam("quantity") int quantity
+            @Positive(message = "Mã biến thể phải là số dương.") @RequestParam("variantId") Long variantId,
+            @Min(value = 1, message = "Số lượng phải từ 1 trở lên.") @RequestParam("quantity") int quantity
     ) {
         cartService.addToCart(cartService.resolveOwner(guestSessionId), variantId, quantity);
-        return ResponseEntity.ok(ApiResponse.success("Added to cart"));
+        return ResponseEntity.ok(ApiResponse.success("Đã thêm vào giỏ hàng."));
     }
 
     @PutMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> update(
             @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
-            @Positive(message = "Variant id must be positive") @PathVariable Long variantId,
-            @Min(value = 0, message = "Quantity must be zero or positive") @RequestParam int quantity
+            @Positive(message = "Mã biến thể phải là số dương.") @PathVariable Long variantId,
+            @Min(value = 0, message = "Số lượng phải là số không âm.") @RequestParam int quantity
     ) {
         cartService.updateQuantity(cartService.resolveOwner(guestSessionId), variantId, quantity);
-        return ResponseEntity.ok(ApiResponse.success("Updated quantity"));
+        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật số lượng."));
     }
 
     @DeleteMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> remove(
             @RequestHeader(value = GUEST_SESSION_HEADER, required = false) String guestSessionId,
-            @Positive(message = "Variant id must be positive") @PathVariable Long variantId
+            @Positive(message = "Mã biến thể phải là số dương.") @PathVariable Long variantId
     ) {
         cartService.removeFromCart(cartService.resolveOwner(guestSessionId), variantId);
-        return ResponseEntity.ok(ApiResponse.success("Removed from cart"));
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa khỏi giỏ hàng."));
     }
 
     @GetMapping

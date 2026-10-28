@@ -11,26 +11,26 @@ import java.time.LocalDate;
 @Data
 public class UserCreDTO implements Serializable {
     private String id;
-    @NotBlank(message = "Firstname is required")
+    @NotBlank(message = "Tên là bắt buộc.")
     private String firstname;
-    @NotBlank(message = "Lastname is required")
+    @NotBlank(message = "Họ là bắt buộc.")
     private String lastname;
-    @NotBlank(message = "Username is required")
-    @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
+    @NotBlank(message = "Tên đăng nhập là bắt buộc.")
+    @Size(min = 3, max = 50, message = "Tên đăng nhập phải có từ 3 đến 50 ký tự.")
     private String username;
-    @Size(min = 6, max = 100, message = "Password must be between 6 and 100 characters")
+    @Size(min = 6, max = 100, message = "Mật khẩu phải có từ 6 đến 100 ký tự.")
     private String password;
-    @NotBlank(message = "Gender is required")
+    @NotBlank(message = "Giới tính là bắt buộc.")
     private String gender;
     private String address;
-    @NotBlank(message = "Phone is required")
-    @Size(max = 20, message = "Phone must be at most 20 characters")
+    @NotBlank(message = "Số điện thoại là bắt buộc.")
+    @Size(max = 20, message = "Số điện thoại không được vượt quá 20 ký tự.")
     private String phone;
     private LocalDate birth;
     private String role;
     @JsonProperty("avatar_url")
     private String avatarUrl;
-    @Email(message = "Email is invalid")
+    @Email(message = "Địa chỉ email không hợp lệ.")
     private String email;
 
 }

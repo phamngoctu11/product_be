@@ -47,7 +47,7 @@ public class CustomOrderFactory {
         item.setOrder(order);
         item.setProductVariant(null);
         item.setSourceType(OrderItemSourceType.CUSTOM);
-        item.setProductNameSnapshot("Sản phẩm custom #" + draft.getId());
+        item.setProductNameSnapshot("Sản phẩm tùy chỉnh #" + draft.getId());
         item.setVariantNameSnapshot(null);
         item.setSpecSnapshot(snapshot(draft));
         item.setQuantity(draft.getQuantity());

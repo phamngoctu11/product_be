@@ -129,7 +129,7 @@ public class OrderAssignmentService {
             String idempotencyKey
     ) {
         if (request == null || request.orderVersion() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Order version is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Phiên bản đơn hàng là bắt buộc..");
         }
         User staff = currentUserService.requireCurrentUser(
                 Role.STAFF,
@@ -213,7 +213,7 @@ public class OrderAssignmentService {
                 expectedVersion,
                 nextStatus,
                 actorId,
-                source == AssignmentSource.SELF_CLAIM ? "Staff claimed order" : "Manager assigned staff",
+                source == AssignmentSource.SELF_CLAIM ? "Nhân viên đã nhận đơn hàng" : "Quản lý đã phân công nhân viên",
                 "assignment:" + source + ":" + orderId + ":" + staffId,
                 null
         );
@@ -276,7 +276,7 @@ public class OrderAssignmentService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Order version and staffId are required."
+                    "Phiên bản đơn hàng và mã nhân viên là bắt buộc."
             );
         }
     }

@@ -27,7 +27,7 @@ public class GuestSessionUtils {
         return new AppException(
                 HttpStatus.BAD_REQUEST,
                 ConstantErrorCode.BAD_REQUEST_DETAIL,
-                "Guest session id is invalid."
+                "Mã phiên khách vãng lai không hợp lệ."
         );
     }
 }

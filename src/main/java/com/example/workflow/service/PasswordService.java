@@ -135,7 +135,11 @@ public class PasswordService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         } catch (RuntimeException | java.security.NoSuchAlgorithmException e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.SYSTEM_ERROR, e.getMessage());
+            throw new AppException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    ConstantErrorCode.SYSTEM_ERROR,
+                    "Vui lòng thử lại sau."
+            );
         }
     }
 

@@ -20,10 +20,12 @@ import com.example.workflow.service.consistency.DurableRequestExecutor;
 import com.example.workflow.service.consistency.OrderTransitionService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -61,13 +63,13 @@ class OrderAgreementServiceTest {
     }
 
     @Test
-    void validCustomSubmissionStopsTimeoutAndCreatesNewVersion() {
+    void validCustomSubmissionStopsTimeoutAndCreatesNewVersion() throws Exception {
         Order order = customOrder(OrderStatus.DISCUSSING);
         LocalDateTime dueAt = LocalDateTime.now().plusHours(2);
         order.setConfirmationDueAt(dueAt);
         when(orderLookupService.requireForUpdate(11L)).thenReturn(order);
         when(assignmentRepository.findActiveByOrderId(11L)).thenReturn(Optional.of(activeAssignment()));
-        when(voucherService.calculateDiscountAmount(null, 500_000d)).thenReturn(0d);
+        when(voucherService.calculateDiscountAmount(null, new BigDecimal("500000.00"))).thenReturn(BigDecimal.ZERO);
         when(transitionService.apply(eq(11L), eq(3L), eq(OrderStatus.WAITING_STAFF_CONFIRMATION),
                 eq("user-1"), anyString(), anyString(), isNull())).thenAnswer(invocation -> {
             order.setStatus(OrderStatus.WAITING_STAFF_CONFIRMATION);
@@ -89,10 +91,31 @@ class OrderAgreementServiceTest {
         assertEquals(OrderStatus.WAITING_STAFF_CONFIRMATION, result.orderStatus());
         assertEquals(1, result.agreementVersion());
         assertEquals(dueAt, order.getConfirmationDueAt());
-        verify(agreementRepository).save(argThat(agreement ->
-                agreement.getStatus() == OrderAgreementStatus.USER_SUBMITTED
-                        && agreement.getItemSnapshot().contains("Túi đan theo mẫu")
-                        && agreement.getFinalPrice().equals(500_000d)));
+        ArgumentCaptor<OrderAgreement> agreementCaptor = ArgumentCaptor.forClass(OrderAgreement.class);
+        verify(agreementRepository).save(agreementCaptor.capture());
+        OrderAgreement agreement = agreementCaptor.getValue();
+        JsonNode agreementSnapshot = new ObjectMapper().readTree(agreement.getItemSnapshot());
+        assertEquals(OrderAgreementStatus.USER_SUBMITTED, agreement.getStatus());
+        assertEquals("Túi đan theo mẫu", agreementSnapshot.path("description").asText());
+        assertEquals("ceramic", agreementSnapshot.path("productType").path("code").asText());
+        assertEquals("height", agreementSnapshot.path("productTypeFields").get(0).path("code").asText());
+        assertEquals(18, agreementSnapshot.path("fieldValues").path("height").asInt());
+        assertEquals(new BigDecimal("500000.00"), agreement.getFinalPrice());
+
+        when(agreementRepository.findByOrderIdAndAgreementVersionForUpdate(11L, 1)).thenReturn(Optional.of(agreement));
+        when(transitionService.apply(eq(11L), eq(4L), eq(OrderStatus.ORDER_ACCEPTED), eq("staff-1"),
+                eq("Staff confirmed agreement"), anyString(), isNull())).thenAnswer(invocation -> {
+            order.setStatus(OrderStatus.ORDER_ACCEPTED);
+            order.setVersion(5L);
+            return order;
+        });
+        when(orderRepository.saveAndFlush(order)).thenReturn(order);
+        service.decideWithinTransaction(11L,
+                new OrderAgreementDecisionRequest(4L, 1, OrderAgreementDecision.CONFIRM, null), "staff-1");
+        JsonNode orderSnapshot = new ObjectMapper().readTree(order.getItems().getFirst().getSpecSnapshot());
+        assertEquals("ceramic", orderSnapshot.path("productType").path("code").asText());
+        assertEquals("height", orderSnapshot.path("productTypeFields").get(0).path("code").asText());
+        assertEquals(18, orderSnapshot.path("fieldValues").path("height").asInt());
         verify(eventPublisher).publishAfterCommit(eq("ORDER_AGREEMENT_SUBMITTED"), any());
     }
 
@@ -148,7 +171,7 @@ class OrderAgreementServiceTest {
         assertEquals(OrderAgreementStatus.CHANGES_REQUESTED, result.agreementStatus());
         assertEquals(firstSubmittedAt, agreement.getSubmittedAt());
         assertEquals(originalDueAt, order.getConfirmationDueAt());
-        verify(voucherService, never()).useVoucherForCheckout(any(), anyString(), anyDouble());
+        verify(voucherService, never()).useVoucherForCheckout(any(), anyString(), any(BigDecimal.class));
     }
 
     private Order customOrder(OrderStatus status) {
@@ -166,6 +189,10 @@ class OrderAgreementServiceTest {
         order.setStatus(status);
         order.setItems(List.of(item));
         item.setOrder(order);
+        item.setSpecSnapshot("{\"description\":\"Túi đan theo mẫu\",\"imageUrls\":[],"
+                + "\"productType\":{\"id\":5,\"code\":\"ceramic\",\"name\":\"Đồ gốm\"},"
+                + "\"productTypeFields\":[{\"code\":\"height\",\"label\":\"Chiều cao\",\"kind\":\"NUMBER\",\"minimum\":1,\"maximum\":50}],"
+                + "\"fieldValues\":{\"height\":18}}");
         return order;
     }
 

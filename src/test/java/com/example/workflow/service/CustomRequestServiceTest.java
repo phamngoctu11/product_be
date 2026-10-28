@@ -205,7 +205,7 @@ class CustomRequestServiceTest {
     }
 
     @Test
-    void deleteLocksOwnedDraftAndUsesExpectedVersion() {
+    void deleteSoftDeletesOwnedDraftAndUsesExpectedVersion() {
         stubDurableExecution();
         CustomRequest draft = draft();
         when(currentUserService.requireCurrentUserId()).thenReturn("user-1");
@@ -213,8 +213,8 @@ class CustomRequestServiceTest {
 
         service.delete(41L, 2L, "delete-41");
 
-        verify(customRequestRepository).delete(draft);
-        verify(customRequestRepository).flush();
+        verify(customRequestRepository).saveAndFlush(draft);
+        assertThat(draft.isDelete()).isTrue();
     }
 
     @Test

@@ -45,7 +45,7 @@ public class CustomRequestController {
     ) {
         CustomRequestDTO response = customRequestService.create(request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse<>(true, HttpStatus.CREATED.value(), "Custom draft created", response));
+                .body(new ApiResponse<>(true, HttpStatus.CREATED.value(), "Đã tạo bản nháp yêu cầu tùy chỉnh.", response));
     }
 
     @GetMapping
@@ -66,7 +66,7 @@ public class CustomRequestController {
             @Positive @PathVariable Long id,
             @Valid @RequestBody UpdateCustomRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Custom draft updated", customRequestService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật bản nháp yêu cầu tùy chỉnh.", customRequestService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")

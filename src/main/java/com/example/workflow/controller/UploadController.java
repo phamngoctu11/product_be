@@ -39,7 +39,11 @@ public class UploadController {
             String imageUrl = uploadResult.get("url").toString();
             return ResponseEntity.ok(ApiResponse.success(Map.of("url", imageUrl)));
         } catch (IOException e) {
-            throw new AppException(HttpStatus.INTERNAL_SERVER_ERROR, ConstantErrorCode.IMAGE_UPLOAD_FAILED, e.getMessage());
+            throw new AppException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    ConstantErrorCode.IMAGE_UPLOAD_FAILED,
+                    "Vui lòng thử lại sau."
+            );
         }
     }
 }

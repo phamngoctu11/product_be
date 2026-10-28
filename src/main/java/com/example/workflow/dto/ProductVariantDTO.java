@@ -16,12 +16,12 @@ import java.math.BigDecimal;
 public class ProductVariantDTO implements Serializable {
     private Long id;
 
-    @NotBlank(message = "Variant name is required")
+    @NotBlank(message = "Tên biến thể là bắt buộc.")
     private String variantName;
 
-    @NotNull(message = "Variant price is required")
-    @PositiveOrZero(message = "Variant price must be zero or positive")
-    @Digits(integer = 17, fraction = 2, message = "Variant price must have at most 2 decimal places")
+    @NotNull(message = "Giá biến thể là bắt buộc.")
+    @PositiveOrZero(message = "Giá biến thể phải là số không âm.")
+    @Digits(integer = 17, fraction = 2, message = "Giá biến thể không được có quá 2 chữ số thập phân.")
     private BigDecimal price;
 
     private String attributes;

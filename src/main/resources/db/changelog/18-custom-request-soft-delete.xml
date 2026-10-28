@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="18-custom-request-soft-delete" author="workflow">
+        <addColumn tableName="custom_requests">
+            <column name="deleted_at" type="datetime"/>
+        </addColumn>
+        <createIndex tableName="custom_requests" indexName="idx_custom_request_owner_deleted_status_updated">
+            <column name="owner_id"/>
+            <column name="deleted_at"/>
+            <column name="status"/>
+            <column name="updated_at"/>
+            <column name="id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

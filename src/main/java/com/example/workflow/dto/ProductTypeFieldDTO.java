@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -20,5 +21,5 @@ public record ProductTypeFieldDTO(
         BigDecimal minimum,
         BigDecimal maximum,
         List<@NotBlank @Size(max = 120) String> options
-) {
+) implements Serializable {
 }

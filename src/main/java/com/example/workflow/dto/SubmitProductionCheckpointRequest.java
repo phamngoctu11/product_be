@@ -8,10 +8,10 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record SubmitProductionCheckpointRequest(
-        @NotNull(message = "orderVersion is required") Long orderVersion,
-        @NotNull(message = "stage is required") ProductionCheckpointStage stage,
-        @NotEmpty(message = "At least one image is required")
-        @Size(max = 10, message = "At most 10 images are allowed") List<String> imageUrls,
-        @Size(max = 2000, message = "note must be at most 2000 characters") String note
+        @NotNull(message = "Phiên bản đơn hàng là bắt buộc.") Long orderVersion,
+        @NotNull(message = "Công đoạn là bắt buộc.") ProductionCheckpointStage stage,
+        @NotEmpty(message = "Cần có ít nhất một hình ảnh.")
+        @Size(max = 10, message = "Cho phép tối đa 10 hình ảnh.") List<String> imageUrls,
+        @Size(max = 2000, message = "Ghi chú không được vượt quá 2000 ký tự.") String note
 ) {
 }

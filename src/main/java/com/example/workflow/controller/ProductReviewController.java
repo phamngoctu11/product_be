@@ -38,7 +38,7 @@ public class ProductReviewController {
             @Valid @RequestBody ProductReviewRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Danh gia san pham thanh cong.",
+                "Đánh giá sản phẩm thành công.",
                 productReviewService.createForOrderItem(orderItemId, request)
         ));
     }
@@ -50,7 +50,7 @@ public class ProductReviewController {
             @Valid @RequestBody ProductReviewRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Cap nhat danh gia thanh cong.",
+                "Cập nhật đánh giá thành công.",
                 productReviewService.updateMyReview(reviewId, request)
         ));
     }
@@ -101,7 +101,7 @@ public class ProductReviewController {
             @Size(max = 500) @RequestParam(required = false) String reason
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Da an danh gia.",
+                "Đã ẩn đánh giá.",
                 productReviewService.hideReview(reviewId, reason)
         ));
     }
@@ -112,7 +112,7 @@ public class ProductReviewController {
             @Positive @PathVariable Long reviewId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Da khoi phuc danh gia.",
+                "Đã khôi phục đánh giá.",
                 productReviewService.restoreReview(reviewId)
         ));
     }

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="17-add-order-chat-expiration" author="workflow">
+        <addColumn tableName="order_chat_threads">
+            <column name="expires_at" type="datetime"/>
+        </addColumn>
+        <createIndex tableName="order_chat_threads" indexName="idx_order_chat_threads_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+        <sql>
+            UPDATE order_chat_threads oct
+            JOIN orders o ON o.id = oct.order_id
+            SET oct.expires_at = DATE_ADD(o.delivered_at, INTERVAL 24 HOUR)
+            WHERE o.status = 'DELIVERED'
+              AND o.delivered_at IS NOT NULL
+        </sql>
+    </changeSet>
+    <changeSet id="18-backfill-cancelled-order-chat-expiration" author="workflow">
+        <sql>
+            UPDATE order_chat_threads oct
+            JOIN orders o ON o.id = oct.order_id
+            SET oct.expires_at = DATE_ADD(o.cancelled_at, INTERVAL 24 HOUR)
+            WHERE o.status = 'CANCELLED'
+              AND o.cancelled_at IS NOT NULL
+              AND oct.expires_at IS NULL
+        </sql>
+    </changeSet>
+</databaseChangeLog>

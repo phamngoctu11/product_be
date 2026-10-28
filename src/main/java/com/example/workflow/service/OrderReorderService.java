@@ -92,7 +92,7 @@ public class OrderReorderService {
             } catch (RuntimeException exception) {
                 skipped.add(new ReorderItemDTO(
                         item == null ? null : item.getId(), variantId, variantName, quantity,
-                        StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "Cannot add this item to cart."));
+                        StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "Không thể thêm sản phẩm này vào giỏ hàng."));
             }
         }
         return new ReorderResponseDTO(OrderType.CATALOG, null, added.size(), skipped.size(), added, skipped);

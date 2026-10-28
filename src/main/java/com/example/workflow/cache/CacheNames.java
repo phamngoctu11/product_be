@@ -16,6 +16,7 @@ public final class CacheNames {
 
     public static final String PRODUCTS = "products";
     public static final String PRODUCT = "product";
+    public static final String PRODUCT_TYPES = "productTypes";
     public static final String BEST_SELLING_PRODUCTS = "bestSellingProducts";
 
     public static final String VOUCHER_TEMPLATES = "voucherTemplates";

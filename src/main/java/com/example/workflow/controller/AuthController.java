@@ -44,12 +44,12 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         passwordService.requestPasswordReset(request);
-        return ResponseEntity.ok(ApiResponse.success("Neu tai khoan ton tai, lien ket dat lai mat khau se duoc gui qua email."));
+        return ResponseEntity.ok(ApiResponse.success("Nếu tài khoản tồn tại, liên kết đặt lại mật khẩu sẽ được gửi qua email."));
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         passwordService.resetPassword(request);
-        return ResponseEntity.ok(ApiResponse.success("Dat lai mat khau thanh cong."));
+        return ResponseEntity.ok(ApiResponse.success("Đặt lại mật khẩu thành công."));
     }
 }

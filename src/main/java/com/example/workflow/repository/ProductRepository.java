@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -25,13 +26,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     @Query(value = "SELECT p FROM Product p " +
             "WHERE p.isDelete = false " +
-            "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%')) " +
+            "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.productType.name) LIKE CONCAT('%', :keyword, '%')) " +
             "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
             "AND (:maxPrice IS NULL OR p.price <= :maxPrice) " +
             "ORDER BY CASE WHEN p.availabilityStatus = :acceptingStatus THEN 0 ELSE 1 END, p.id DESC",
             countQuery = "SELECT COUNT(p) FROM Product p " +
                     "WHERE p.isDelete = false " +
-                    "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%')) " +
+                    "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.productType.name) LIKE CONCAT('%', :keyword, '%')) " +
                     "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
                     "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
     Page<Product> searchByAvailabilityPriority(
@@ -39,6 +40,28 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
             @Param("acceptingStatus") ProductAvailabilityStatus acceptingStatus,
+            Pageable pageable
+    );
+
+    @Query(value = "SELECT p FROM Product p " +
+            "WHERE p.isDelete = false " +
+            "AND p.productType.id IN :productTypeIds " +
+            "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.productType.name) LIKE CONCAT('%', :keyword, '%')) " +
+            "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
+            "AND (:maxPrice IS NULL OR p.price <= :maxPrice) " +
+            "ORDER BY CASE WHEN p.availabilityStatus = :acceptingStatus THEN 0 ELSE 1 END, p.id DESC",
+            countQuery = "SELECT COUNT(p) FROM Product p " +
+                    "WHERE p.isDelete = false " +
+                    "AND p.productType.id IN :productTypeIds " +
+                    "AND (:keyword IS NULL OR LOWER(p.productName) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.tags) LIKE CONCAT('%', :keyword, '%') OR LOWER(p.productType.name) LIKE CONCAT('%', :keyword, '%')) " +
+                    "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
+                    "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
+    Page<Product> searchByAvailabilityPriorityAndProductTypes(
+            @Param("keyword") String keyword,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            @Param("acceptingStatus") ProductAvailabilityStatus acceptingStatus,
+            @Param("productTypeIds") List<Long> productTypeIds,
             Pageable pageable
     );
 

@@ -36,7 +36,7 @@ public class PaymentController {
             @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Payment attempt opened.",
+                "Đã khởi tạo lần thanh toán.",
                 paymentService.openPayment(orderId, idempotencyKey)
         ));
     }

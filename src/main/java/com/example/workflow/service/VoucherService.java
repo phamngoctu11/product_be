@@ -160,7 +160,7 @@ public class VoucherService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Voucher is out of stock or expired."
+                    "Phiếu giảm giá đã hết lượt sử dụng hoặc hết hạn."
             );
         }
 
@@ -233,7 +233,7 @@ public class VoucherService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Voucher is out of stock or expired."
+                    "Phiếu giảm giá đã hết lượt sử dụng hoặc hết hạn."
             );
         }
         return new AppliedGuestVoucher(template, discountAmount, guestSessionId, emailHash, phoneHash);
@@ -315,7 +315,7 @@ public class VoucherService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
         }
         if (!template.isActive() || template.getQuantity() <= 0) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher is not available.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Phiếu giảm giá hiện không khả dụng.");
         }
         if (template.getExpiryDate().isBefore(now)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
@@ -327,7 +327,7 @@ public class VoucherService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Not enough available reputation points."
+                    "Không đủ điểm uy tín hiện có."
             );
         }
     }
@@ -337,7 +337,7 @@ public class VoucherService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "You already have this voucher in your wallet."
+                    "Bạn đã có phiếu giảm giá này trong ví."
             );
         }
     }
@@ -425,7 +425,7 @@ public class VoucherService {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_INVALID);
         }
         if (!template.isActive() || template.getQuantity() <= 0) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Voucher is not available.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Phiếu giảm giá hiện không khả dụng.");
         }
         if (template.getExpiryDate().isBefore(now)) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.VOUCHER_EXPIRED);
@@ -454,7 +454,7 @@ public class VoucherService {
         return new AppException(
                 HttpStatus.CONFLICT,
                 ConstantErrorCode.BAD_REQUEST_DETAIL,
-                "This public voucher has already been used by this guest."
+                "Khách hàng này đã sử dụng phiếu giảm giá công khai này."
         );
     }
 
@@ -475,7 +475,7 @@ public class VoucherService {
 
     private String requireGuestIdentity(String value, String fieldName) {
         if (!org.springframework.util.StringUtils.hasText(value)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, fieldName + " is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, fieldName + " là bắt buộc.");
         }
         return value.trim();
     }

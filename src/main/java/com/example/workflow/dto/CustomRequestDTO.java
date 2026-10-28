@@ -20,6 +20,7 @@ public record CustomRequestDTO(
         LocalDateTime updatedAt,
         LocalDateTime submittedAt,
         boolean editable,
+        boolean deletable,
         Long productTypeId,
         String productTypeCode,
         String productTypeName,

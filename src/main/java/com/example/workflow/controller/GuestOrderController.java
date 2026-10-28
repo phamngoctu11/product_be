@@ -58,7 +58,7 @@ public class GuestOrderController {
             @Valid @RequestBody CancelOrderRequest request
     ) {
         OrderCancellationResultDTO result = cancellationService.cancelByGuest(orderId, token, request, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.success("Don hang da duoc huy.", result));
+        return ResponseEntity.ok(ApiResponse.success("Đơn hàng đã được hủy.", result));
     }
 
     @GetMapping("/{orderId}")

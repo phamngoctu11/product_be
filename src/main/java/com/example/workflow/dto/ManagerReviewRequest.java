@@ -12,7 +12,7 @@ public record ManagerReviewRequest(
         @Size(max = 500) String reason,
         @Size(max = 36) String staffId
 ) {
-    @AssertTrue(message = "Rejection reason is required and staffId is only allowed for approval")
+    @AssertTrue(message = "Cần nhập lý do khi từ chối; chỉ được cung cấp mã nhân viên khi duyệt.")
     public boolean isDecisionValid() {
         if (approved == null) {
             return false;

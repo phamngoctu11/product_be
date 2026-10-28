@@ -155,7 +155,7 @@ public class OrderCancellationService {
         if (source != CancellationSource.CUSTOM_CONFIRMATION_TIMEOUT
                 && source != CancellationSource.PAYMENT_TIMEOUT
                 && source != CancellationSource.PAYMENT_FAILED) {
-            throw new IllegalArgumentException("Unsupported system cancellation source: " + source);
+            throw new IllegalArgumentException("Nguồn hủy đơn hàng hệ thống không được hỗ trợ: " + source);
         }
         CancellationCommand command = new CancellationCommand(
                 orderId,
@@ -243,7 +243,7 @@ public class OrderCancellationService {
     static int cancellationPenalty(BigDecimal finalPrice) {
         if (finalPrice == null) return 0;
         if (finalPrice.signum() < 0) {
-            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Official final price is invalid.");
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.BAD_REQUEST_DETAIL, "Giá cuối cùng đã duyệt không hợp lệ.");
         }
         if (finalPrice.compareTo(BigDecimal.valueOf(1_000_000)) < 0) return 1;
         if (finalPrice.compareTo(BigDecimal.valueOf(5_000_000)) <= 0) return 2;
@@ -259,7 +259,7 @@ public class OrderCancellationService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Reputation balance is not enough for this cancellation."
+                    "Điểm uy tín hiện có không đủ để hủy đơn hàng này."
             );
         }
         return owner;
@@ -297,28 +297,28 @@ public class OrderCancellationService {
 
     private void requireRequest(CancelOrderRequest request) {
         if (request == null || request.orderVersion() == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cancellation request and orderVersion are required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Yêu cầu hủy đơn hàng và phiên bản đơn hàng là bắt buộc.");
         }
     }
 
     private String normalizedReason(String reason) {
         if (!StringUtils.hasText(reason)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cancellation reason is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Lý do hủy đơn hàng là bắt buộc.");
         }
         String normalized = reason.trim();
         if (normalized.length() > 500) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cancellation reason must be at most 500 characters.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Lý do hủy đơn hàng không được vượt quá 500 ký tự.");
         }
         return normalized;
     }
 
     private String requireReference(String reference) {
         if (!StringUtils.hasText(reference)) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cancellation reference is required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Mã tham chiếu hủy đơn hàng là bắt buộc.");
         }
         String normalized = reference.trim();
         if (normalized.length() > 100) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Cancellation reference must be at most 100 characters.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Mã tham chiếu hủy đơn hàng không được vượt quá 100 ký tự.");
         }
         return normalized;
     }

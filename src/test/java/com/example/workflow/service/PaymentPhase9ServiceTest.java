@@ -119,6 +119,30 @@ class PaymentPhase9ServiceTest {
     }
 
     @Test
+    void nullParsedCodeMatchesExactPaymentReferenceInTransferContent() throws Exception {
+        PaymentAttempt attempt = pendingAttempt(LocalDateTime.now().plusMinutes(30));
+        Order order = acceptedOnlineOrder(PaymentStatus.PENDING);
+        byte[] body = webhookBodyWithNullCode(1003L, "SEVQR DHABC123 chuyen tien", "120000");
+
+        when(paymentAttemptRepository.findByProviderAndProviderTransactionId("SEPAY", "1003"))
+                .thenReturn(Optional.empty());
+        when(paymentAttemptRepository.findByProviderAndRequestReferenceForUpdate("SEPAY", "DHABC123"))
+                .thenReturn(Optional.of(attempt));
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+
+        PaymentWebhookService.WebhookResult result = webhookService.process(
+                body,
+                signedHeaders(body, Instant.now().getEpochSecond())
+        );
+
+        assertEquals(PaymentWebhookService.WebhookResult.APPLIED, result);
+        assertEquals(PaymentAttemptStatus.PAID, attempt.getStatus());
+        assertEquals("1003", attempt.getProviderTransactionId());
+        assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
+        verify(eventPublisher).publishAfterCommit(eq("PAYMENT_CONFIRMED"), any());
+    }
+
+    @Test
     void duplicateWebhookIsAcknowledgedWithoutPublishingAgain() throws Exception {
         PaymentAttempt alreadyProcessed = pendingAttempt(LocalDateTime.now().plusMinutes(30));
         alreadyProcessed.setStatus(PaymentAttemptStatus.PAID);
@@ -434,6 +458,19 @@ class PaymentPhase9ServiceTest {
                 + ",\"accountNumber\":\"104888199452\""
                 + ",\"code\":\"" + code + "\""
                 + ",\"content\":\"SEVQR " + code + "\""
+                + ",\"transferType\":\"in\""
+                + ",\"transferAmount\":" + amount
+                + ",\"referenceCode\":\"REF" + transactionId + "\"}";
+        return body.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] webhookBodyWithNullCode(long transactionId, String content, String amount) {
+        String body = "{\"id\":" + transactionId
+                + ",\"gateway\":\"VietinBank\""
+                + ",\"transactionDate\":\"2026-10-12 10:00:00\""
+                + ",\"accountNumber\":\"104888199452\""
+                + ",\"code\":null"
+                + ",\"content\":\"" + content + "\""
                 + ",\"transferType\":\"in\""
                 + ",\"transferAmount\":" + amount
                 + ",\"referenceCode\":\"REF" + transactionId + "\"}";

@@ -8,9 +8,9 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record ShippingHandoverRequest(
-        @NotNull(message = "Order version is required") Long orderVersion,
-        @NotEmpty(message = "Handover item list is required")
+        @NotNull(message = "Phiên bản đơn hàng là bắt buộc.") Long orderVersion,
+        @NotEmpty(message = "Danh sách sản phẩm bàn giao là bắt buộc.")
         List<@Valid ShippingHandoverItemRequest> items,
-        @Size(max = 2000, message = "Handover note must be at most 2000 characters") String handoverNote
+        @Size(max = 2000, message = "Ghi chú bàn giao không được vượt quá 2000 ký tự.") String handoverNote
 ) {
 }

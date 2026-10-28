@@ -1,5 +1,6 @@
 package com.example.workflow.dto;
 
+import java.io.Serializable;
 import java.util.List;
 
 public record ProductTypeDTO(
@@ -9,5 +10,5 @@ public record ProductTypeDTO(
         String description,
         List<ProductTypeFieldDTO> fields,
         boolean active
-) {
+) implements Serializable {
 }

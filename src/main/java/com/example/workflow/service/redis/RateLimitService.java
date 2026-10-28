@@ -69,7 +69,7 @@ public class RateLimitService {
                 log.warn("Rate limiter failed closed for group '{}' identity '{}': {}", rule.group(), identityKey, e.getMessage());
                 return RateLimitDecision.denied(
                         HttpStatus.SERVICE_UNAVAILABLE,
-                        "Rate limiter is temporarily unavailable. Please retry shortly.",
+                        "Bộ giới hạn yêu cầu tạm thời không khả dụng. Vui lòng thử lại sau.",
                         rule.limit(),
                         Duration.ofSeconds(30)
                 );
@@ -96,7 +96,7 @@ public class RateLimitService {
         if (count > rule.limit()) {
             return RateLimitDecision.denied(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many requests. Please retry later.",
+                    "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.",
                     rule.limit(),
                     Duration.ofMillis(Math.max(bucketEndMs - now, 0))
             );
@@ -129,7 +129,7 @@ public class RateLimitService {
         if (!allowed) {
             return RateLimitDecision.denied(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many write requests. Please retry later.",
+                    "Bạn đã gửi quá nhiều yêu cầu ghi dữ liệu. Vui lòng thử lại sau.",
                     rule.limit(),
                     Duration.ofMillis(retryAfterMs)
             );

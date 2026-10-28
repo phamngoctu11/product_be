@@ -275,7 +275,7 @@ public class OrderDeliveryService {
 
         if (!guest) {
             reputationService.changeReputation(
-                    order.getUser(), 2, "Completed order #" + order.getId(), "ORDER_DELIVERED",
+                    order.getUser(), 2, "Hoàn thành đơn hàng #" + order.getId(), "ORDER_DELIVERED",
                     String.valueOf(order.getId())
             );
         }
@@ -299,19 +299,19 @@ public class OrderDeliveryService {
         Map<Long, Integer> result = new LinkedHashMap<>();
         for (ShippingHandoverItemRequest requested : requestedItems) {
             if (requested == null || requested.orderItemId() == null || requested.exportedQuantity() == null) {
-                throw invalidHandover("Every item requires orderItemId and exportedQuantity.");
+                throw invalidHandover("Mỗi sản phẩm phải có mã sản phẩm trong đơn hàng và số lượng xuất kho.");
             }
             OrderItem item = orderItems.get(requested.orderItemId());
-            if (item == null) throw invalidHandover("Order item does not belong to this order: " + requested.orderItemId());
+            if (item == null) throw invalidHandover("Sản phẩm không thuộc đơn hàng này: " + requested.orderItemId());
             if (requested.exportedQuantity() < 0 || requested.exportedQuantity() > item.getQuantity()) {
-                throw invalidHandover("Exported quantity must be between 0 and ordered quantity for item " + item.getId() + ".");
+                throw invalidHandover("Số lượng xuất kho phải từ 0 đến số lượng đã đặt của sản phẩm " + item.getId() + ".");
             }
             if (result.put(item.getId(), requested.exportedQuantity()) != null) {
-                throw invalidHandover("Duplicate order item: " + item.getId() + ".");
+                throw invalidHandover("Sản phẩm trong đơn hàng bị trùng: " + item.getId() + ".");
             }
         }
         if (!result.keySet().equals(orderItems.keySet())) {
-            throw invalidHandover("Every order item must appear exactly once.");
+            throw invalidHandover("Mỗi sản phẩm trong đơn hàng phải xuất hiện chính xác một lần.");
         }
         return result;
     }
@@ -321,20 +321,20 @@ public class OrderDeliveryService {
         Map<Long, Integer> result = new LinkedHashMap<>();
         for (ItemCheckRequest requested : requestedItems) {
             if (requested == null || requested.getOrderItemId() == null) {
-                throw invalidReceipt("Every item requires orderItemId and receivedQuantity.");
+                throw invalidReceipt("Mỗi sản phẩm phải có mã sản phẩm trong đơn hàng và số lượng đã nhận.");
             }
             OrderItem item = orderItems.get(requested.getOrderItemId());
-            if (item == null) throw invalidReceipt("Order item does not belong to this order: " + requested.getOrderItemId());
+            if (item == null) throw invalidReceipt("Sản phẩm không thuộc đơn hàng này: " + requested.getOrderItemId());
             if (requested.getReceivedQuantity() < 0) {
-                throw invalidReceipt("Received quantity cannot be negative for item " + item.getId() + ".");
+                throw invalidReceipt("Số lượng đã nhận không được âm đối với sản phẩm " + item.getId() + ".");
             }
             effectiveExportedQuantity(order, item);
             if (result.put(item.getId(), requested.getReceivedQuantity()) != null) {
-                throw invalidReceipt("Duplicate order item: " + item.getId() + ".");
+                throw invalidReceipt("Sản phẩm trong đơn hàng bị trùng: " + item.getId() + ".");
             }
         }
         if (!result.keySet().equals(orderItems.keySet())) {
-            throw invalidReceipt("Every order item must appear exactly once.");
+            throw invalidReceipt("Mỗi sản phẩm trong đơn hàng phải xuất hiện chính xác một lần.");
         }
         return result;
     }
@@ -421,10 +421,10 @@ public class OrderDeliveryService {
     }
 
     private Map<Long, OrderItem> itemMap(Order order) {
-        if (order.itemsOrEmpty().isEmpty()) throw invalidReceipt("Order has no items.");
+        if (order.itemsOrEmpty().isEmpty()) throw invalidReceipt("Đơn hàng không có sản phẩm.");
         return order.itemsOrEmpty().stream().collect(Collectors.toMap(
                 OrderItem::getId, Function.identity(),
-                (left, right) -> { throw invalidReceipt("Duplicate persisted order item id."); },
+                (left, right) -> { throw invalidReceipt("Mã sản phẩm trong đơn hàng bị trùng."); },
                 LinkedHashMap::new
         ));
     }
@@ -443,21 +443,21 @@ public class OrderDeliveryService {
 
     private void requireHandoverRequest(ShippingHandoverRequest request) {
         if (request == null || request.orderVersion() == null || request.items() == null || request.items().isEmpty()) {
-            throw invalidHandover("orderVersion and a complete item list are required.");
+            throw invalidHandover("Phiên bản đơn hàng và danh sách đầy đủ sản phẩm là bắt buộc.");
         }
     }
 
     private void requireReceiptRequest(ReceiptConfirmRequest request) {
         if (request == null || request.getOrderVersion() == null
                 || request.getReceivedItems() == null || request.getReceivedItems().isEmpty()) {
-            throw invalidReceipt("orderVersion and a complete received item list are required.");
+            throw invalidReceipt("Phiên bản đơn hàng và danh sách đầy đủ sản phẩm đã nhận là bắt buộc.");
         }
     }
 
     private String normalizeOptionalNote(String note) {
         if (!StringUtils.hasText(note)) return null;
         String normalized = note.trim();
-        if (normalized.length() > 2000) throw invalidReceipt("Note must be at most 2000 characters.");
+        if (normalized.length() > 2000) throw invalidReceipt("Ghi chú không được vượt quá 2000 ký tự.");
         return normalized;
     }
 

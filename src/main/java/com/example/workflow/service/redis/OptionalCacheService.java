@@ -95,7 +95,7 @@ public class OptionalCacheService {
     public void applyOrThrow(CacheEvictionRequestedEvent event) {
         if (event == null || event.entries() == null) throw new IllegalArgumentException("Missing cache event");
         for (CacheEvictionEntry entry : event.entries()) {
-            if (entry == null || !StringUtils.hasText(entry.cacheName())) throw new IllegalArgumentException("Invalid cache entry");
+            if (entry == null || !StringUtils.hasText(entry.cacheName())) throw new IllegalArgumentException("Mục bộ nhớ đệm không hợp lệ.");
             if (entry.keyPrefix() != null && !entry.allEntries()) {
                 List<String> keys = new ArrayList<>();
                 try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions()

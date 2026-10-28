@@ -41,7 +41,7 @@ public class WishlistController {
     public ResponseEntity<ApiResponse<ProductDTO>> addToWishlist(
             @Positive @PathVariable Long productId
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Added to wishlist", wishlistService.addToWishlist(productId)));
+        return ResponseEntity.ok(ApiResponse.success("Đã thêm sản phẩm vào danh sách yêu thích.", wishlistService.addToWishlist(productId)));
     }
 
     @DeleteMapping("/{productId}")
@@ -49,7 +49,7 @@ public class WishlistController {
             @Positive @PathVariable Long productId
     ) {
         wishlistService.removeFromWishlist(productId);
-        return ResponseEntity.ok(ApiResponse.success("Removed from wishlist"));
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa sản phẩm khỏi danh sách yêu thích."));
     }
 
     @GetMapping("/{productId}/exists")

@@ -46,9 +46,9 @@ public class UserController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<UserListDTO>>> getAll(
-            @Min(value = 0, message = "Page must be zero or positive") @RequestParam(defaultValue = "0") int page,
-            @Min(value = 1, message = "Size must be positive")
-            @Max(value = 100, message = "Size must be at most 100") @RequestParam(defaultValue = "10") int size,
+            @Min(value = 0, message = "Số trang phải là số không âm.") @RequestParam(defaultValue = "0") int page,
+            @Min(value = 1, message = "Kích thước trang phải là số dương.")
+            @Max(value = 100, message = "Kích thước trang không được vượt quá 100.") @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) List<Role> roles
     ) {
         Pageable pageable = PageRequest.of(page, size);
@@ -80,7 +80,7 @@ public class UserController {
             @Valid @RequestBody ChangePasswordRequest request
     ) {
         passwordService.changeCurrentUserPassword(request);
-        return ResponseEntity.ok(ApiResponse.success("Doi mat khau thanh cong."));
+        return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công."));
     }
 
     @GetMapping("/{id}")
@@ -107,6 +107,6 @@ public class UserController {
             @PathVariable String id
     ) {
         userService.deleteUser(id);
-        return ResponseEntity.ok(ApiResponse.success("User deleted successfully"));
+        return ResponseEntity.ok(ApiResponse.success("Xóa người dùng thành công."));
     }
 }

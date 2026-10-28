@@ -17,6 +17,8 @@ import com.example.workflow.exception.ConstantErrorCode;
 import com.example.workflow.mapper.CustomRequestMapper;
 import com.example.workflow.mapper.CustomRequestSubmissionMapper;
 import com.example.workflow.nume.CustomRequestStatus;
+import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.OrderType;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.ProductTypeRepository;
@@ -94,18 +96,20 @@ public class CustomRequestService {
         Page<CustomRequest> requests = status == null
                 ? customRequestRepository.findAllByOwnerIdOrderByUpdatedAtDescIdDesc(ownerId, bounded)
                 : customRequestRepository.findAllByOwnerIdAndStatusOrderByUpdatedAtDescIdDesc(ownerId, status, bounded);
-        return requests.map(customRequestMapper::toDto);
+        return requests.map(request -> customRequestMapper.toDto(request, canDelete(request, ownerId)));
     }
 
     @Transactional(readOnly = true)
     public CustomRequestDTO get(Long requestId) {
-        return customRequestMapper.toDto(findOwned(requestId, requireActiveOwnerId()));
+        String ownerId = requireActiveOwnerId();
+        CustomRequest request = findOwned(requestId, ownerId);
+        return customRequestMapper.toDto(request, canDelete(request, ownerId));
     }
 
     @Transactional
     public CustomRequestDTO update(Long requestId, UpdateCustomRequest request) {
         if (request == null) {
-            throw invalid("Update body is required.");
+            throw invalid("Vui lòng gửi thông tin cần cập nhật.");
         }
         String ownerId = requireActiveOwnerId();
         CustomRequest draft = findOwned(requestId, ownerId);
@@ -129,10 +133,10 @@ public class CustomRequestService {
                 JsonUtils.write(objectMapper, canonical, "custom request data"),
                 () -> {
                     CustomRequest draft = lockOwned(requestId, ownerId);
-                    ensureEditable(draft);
                     ensureVersion(draft, expectedVersion);
-                    customRequestRepository.delete(draft);
-                    customRequestRepository.flush();
+                    ensureDeletable(draft, ownerId);
+                    draft.setDelete(true);
+                    customRequestRepository.saveAndFlush(draft);
                     return "{}";
                 }
         );
@@ -140,7 +144,7 @@ public class CustomRequestService {
 
     public CustomRequestSubmissionDTO submit(Long requestId, SubmitCustomRequest request, String idempotencyKey) {
         if (request == null) {
-            throw invalid("Submit body is required.");
+            throw invalid("Vui lòng gửi thông tin để gửi yêu cầu.");
         }
         String ownerId = requireActiveOwnerId();
         Map<String, Object> canonical = new LinkedHashMap<>();
@@ -207,7 +211,7 @@ public class CustomRequestService {
         String address = TextNormalizer.firstPresent(request.address(), owner.getAddress());
         if (!StringUtils.hasText(fullName) || !StringUtils.hasText(email)
                 || !StringUtils.hasText(phone) || !StringUtils.hasText(address)) {
-            throw invalid("Full name, email, phone and shipping address are required when submitting.");
+            throw invalid("Vui lòng cung cấp họ tên, email, số điện thoại và địa chỉ giao hàng khi gửi yêu cầu.");
         }
         return new OrderContactSnapshot(
                 fullName.trim(), email, phone.trim(), address.trim(), TextNormalizer.optional(request.note())
@@ -223,13 +227,13 @@ public class CustomRequestService {
         normalizeImageUrls(draft.getImageUrls());
         requirePositive(draft.getQuantity());
         if (draft.getProductType() == null || draft.getProductTypeSchemaSnapshot() == null) {
-            throw invalid("Product type must be selected before submitting.");
+            throw invalid("Vui lòng chọn loại sản phẩm trước khi gửi yêu cầu.");
         }
         validateFieldValues(readProductTypeFields(draft.getProductTypeSchemaSnapshot()), readFieldValues(draft.getFieldValuesJson()));
     }
 
     private void applyProductType(CustomRequest draft, Long typeId, Map<String, Object> values) {
-        if (typeId == null) throw invalid("Product type is required.");
+        if (typeId == null) throw invalid("Vui lòng chọn loại sản phẩm.");
         boolean keepExistingSnapshot = draft.getProductType() != null && typeId.equals(draft.getProductType().getId())
                 && draft.getProductTypeSchemaSnapshot() != null;
         ProductType type = keepExistingSnapshot ? draft.getProductType() : productTypeRepository.findById(typeId)
@@ -245,7 +249,7 @@ public class CustomRequestService {
         draft.setFieldValuesJson(JsonUtils.write(objectMapper, values == null ? Map.of() : values, "custom field values"));
     }
 
-    private void validateFieldValues(List<ProductTypeFieldDTO> fields, Map<String, Object> values) {
+    static void validateFieldValues(List<ProductTypeFieldDTO> fields, Map<String, Object> values) {
         for (ProductTypeFieldDTO field : fields) {
             Object value = values.get(field.code());
             if (value == null || value instanceof String text && text.isBlank()
@@ -300,6 +304,56 @@ public class CustomRequestService {
         }
     }
 
+    private void ensureDeletable(CustomRequest request, String ownerId) {
+        if (request.isDelete()) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_NOT_EDITABLE);
+        }
+        if (request.getStatus() == CustomRequestStatus.DRAFT && request.getLinkedOrderId() == null) {
+            return;
+        }
+        if (request.getStatus() != CustomRequestStatus.SUBMITTED || request.getLinkedOrderId() == null) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_NOT_EDITABLE);
+        }
+
+        Order order = orderRepository.findByIdForUpdate(request.getLinkedOrderId())
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND));
+        if (!isDeletableOrder(request, ownerId, order)) {
+            throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_NOT_EDITABLE);
+        }
+    }
+
+    private boolean canDelete(CustomRequest request, String ownerId) {
+        if (request.isDelete()) {
+            return false;
+        }
+        if (request.getStatus() == CustomRequestStatus.DRAFT && request.getLinkedOrderId() == null) {
+            return true;
+        }
+        if (request.getStatus() != CustomRequestStatus.SUBMITTED || request.getLinkedOrderId() == null) {
+            return false;
+        }
+        return orderRepository.findById(request.getLinkedOrderId())
+                .map(order -> isDeletableOrder(request, ownerId, order))
+                .orElse(false);
+    }
+
+    private boolean isDeletableOrder(CustomRequest request, String ownerId, Order order) {
+        return request.getLinkedOrderId() != null
+                && request.getLinkedOrderId().equals(order.getId())
+                && order.getOrderType() == OrderType.CUSTOM
+                && order.getUser() != null
+                && ownerId.equals(order.getUser().getId())
+                && isBeforeAcceptanceOrTerminal(order.getStatus());
+    }
+
+    private boolean isBeforeAcceptanceOrTerminal(OrderStatus status) {
+        return switch (status) {
+            case PENDING_APPROVAL, PENDING_ASSIGNMENT, DISCUSSING, WAITING_STAFF_CONFIRMATION,
+                    DELIVERED, CANCELLED -> true;
+            default -> false;
+        };
+    }
+
     private void ensureVersion(CustomRequest draft, Long expectedVersion) {
         if (expectedVersion == null || !expectedVersion.equals(draft.getVersion())) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CUSTOM_REQUEST_VERSION_CONFLICT);
@@ -312,40 +366,40 @@ public class CustomRequestService {
 
     private void requireCreateRequest(CreateCustomRequest request) {
         if (request == null) {
-            throw invalid("Create body is required.");
+            throw invalid("Vui lòng gửi thông tin yêu cầu tùy chỉnh.");
         }
     }
 
     private String normalizeDescription(String value) {
         if (!StringUtils.hasText(value)) {
-            throw invalid("Description is required.");
+            throw invalid("Vui lòng nhập mô tả.");
         }
         String normalized = value.trim();
         long wordCount = WORD_PATTERN.matcher(normalized).results().count();
         if (wordCount > MAX_DESCRIPTION_WORDS) {
-            throw invalid("Description must not exceed " + MAX_DESCRIPTION_WORDS + " words.");
+            throw invalid("Mô tả không được vượt quá " + MAX_DESCRIPTION_WORDS + " ký tự.");
         }
         return normalized;
     }
 
     private List<String> normalizeImageUrls(List<String> imageUrls) {
         if (imageUrls == null) {
-            throw invalid("Image URLs are required; use an empty list when there are no images.");
+            throw invalid("Danh sách đường dẫn hình ảnh là bắt buộc; nếu không có hình, hãy gửi danh sách rỗng.");
         }
         List<String> normalized = new ArrayList<>(imageUrls.size());
         for (String value : imageUrls) {
             if (!StringUtils.hasText(value)) {
-                throw invalid("Image URL must not be blank.");
+                throw invalid("Đường dẫn hình ảnh không được để trống.");
             }
             String url = value.trim();
             try {
                 URI uri = new URI(url);
                 String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
                 if (!("http".equals(scheme) || "https".equals(scheme)) || !StringUtils.hasText(uri.getHost())) {
-                    throw invalid("Each image URL must be an absolute HTTP or HTTPS URL.");
+                    throw invalid("Mỗi đường dẫn hình ảnh phải là địa chỉ HTTP hoặc HTTPS đầy đủ.");
                 }
             } catch (URISyntaxException exception) {
-                throw invalid("Each image URL must be an absolute HTTP or HTTPS URL.");
+                throw invalid("Mỗi đường dẫn hình ảnh phải là địa chỉ HTTP hoặc HTTPS đầy đủ.");
             }
             normalized.add(url);
         }
@@ -354,12 +408,12 @@ public class CustomRequestService {
 
     private Integer requirePositive(Integer value) {
         if (value == null || value < 1) {
-            throw invalid("Quantity must be positive.");
+            throw invalid("Số lượng phải là số dương.");
         }
         return value;
     }
 
-    private AppException invalid(String detail) {
+    private static AppException invalid(String detail) {
         return new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.CUSTOM_REQUEST_INVALID, detail);
     }
 

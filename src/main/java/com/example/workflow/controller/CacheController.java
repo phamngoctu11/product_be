@@ -19,12 +19,12 @@ public class CacheController {
     public ResponseEntity<ApiResponse<Void>> clearAllCaches() {
         OptionalCacheService.CacheClearResult result = optionalCacheService.clearAllAvailableCaches();
         if (result.listingFailed()) {
-            return ResponseEntity.ok(ApiResponse.success("Cache clear attempted, but cache backend was unavailable."));
+            return ResponseEntity.ok(ApiResponse.success("Đã thử xóa bộ nhớ đệm, nhưng dịch vụ bộ nhớ đệm hiện không khả dụng."));
         }
 
         if (!result.failedCaches().isEmpty()) {
-            return ResponseEntity.ok(ApiResponse.success("Cache clear attempted. Failed caches: " + String.join(", ", result.failedCaches())));
+            return ResponseEntity.ok(ApiResponse.success("Đã thử xóa bộ nhớ đệm. Các bộ nhớ đệm xóa thất bại: " + String.join(", ", result.failedCaches())));
         }
-        return ResponseEntity.ok(ApiResponse.success("Cleared all caches successfully."));
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa toàn bộ bộ nhớ đệm."));
     }
 }

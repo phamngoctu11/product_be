@@ -3,6 +3,8 @@ package com.example.workflow.service;
 import com.example.workflow.dto.BestSellerProductDTO;
 import com.example.workflow.dto.ProductDTO;
 import com.example.workflow.dto.ProductVariantDTO;
+import com.example.workflow.dto.ProductSearchSuggestionsDTO;
+import com.example.workflow.dto.ProductTypeSearchSuggestionDTO;
 import com.example.workflow.entity.Product;
 import com.example.workflow.entity.ProductVariant;
 import com.example.workflow.entity.ProductType;
@@ -20,6 +22,7 @@ import com.example.workflow.util.PageableUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,56 @@ public class ProductService {
                 normalizeSearchKeyword(keyword), normalizePrice(minPrice), normalizePrice(maxPrice),
                 ProductAvailabilityStatus.ACCEPTING_ORDERS, PageableUtils.normalize(pageable, 20, 100)
         ).map(mapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "products", key = "T(com.example.workflow.service.ProductService).productsCacheKey(#keyword, #minPrice, #maxPrice, #pageable, #productTypeIds)")
+    public Page<ProductDTO> getAllProducts(
+            String keyword,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Pageable pageable,
+            List<Long> productTypeIds
+    ) {
+        List<Long> selectedTypeIds = productTypeIds == null ? List.of() : productTypeIds.stream()
+                .filter(Objects::nonNull)
+                .filter(id -> id > 0)
+                .distinct()
+                .toList();
+        if (selectedTypeIds.isEmpty()) {
+            return getAllProducts(keyword, minPrice, maxPrice, pageable);
+        }
+
+        return repository.searchByAvailabilityPriorityAndProductTypes(
+                normalizeSearchKeyword(keyword), normalizePrice(minPrice), normalizePrice(maxPrice),
+                ProductAvailabilityStatus.ACCEPTING_ORDERS, selectedTypeIds,
+                PageableUtils.normalize(pageable, 20, 100)
+        ).map(mapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductSearchSuggestionsDTO getSearchSuggestions(String keyword, int requestedSize) {
+        String normalizedKeyword = normalizeSearchKeyword(keyword);
+        if (normalizedKeyword == null || normalizedKeyword.length() < 2) {
+            return new ProductSearchSuggestionsDTO(List.of(), List.of(), 0);
+        }
+
+        int productLimit = Math.min(Math.max(requestedSize, 1), 3);
+        var productPage = repository.searchByAvailabilityPriority(
+                normalizedKeyword, null, null, ProductAvailabilityStatus.ACCEPTING_ORDERS,
+                PageRequest.of(0, productLimit)
+        );
+        var productTypes = productTypeRepository.findSearchSuggestions(
+                        "%" + normalizedKeyword + "%", PageRequest.of(0, 8))
+                .stream()
+                .map(type -> new ProductTypeSearchSuggestionDTO(type.getId(), type.getCode(), type.getName()))
+                .toList();
+
+        return new ProductSearchSuggestionsDTO(
+                productTypes,
+                productPage.map(mapper::toDto).getContent(),
+                productPage.getTotalElements()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -185,7 +238,7 @@ public class ProductService {
     private void validateMadeDay(Double madeDay) {
         if (madeDay == null || !Double.isFinite(madeDay) || madeDay < 2) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Made day must be a finite number of at least 2.");
+                    "Thời gian sản xuất phải là số hợp lệ và không nhỏ hơn 2 ngày.");
         }
     }
 
@@ -217,12 +270,30 @@ public class ProductService {
     }
 
     public static String productsCacheKey(String keyword, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
+        return productsCacheKey(keyword, minPrice, maxPrice, pageable, List.of());
+    }
+
+    public static String productsCacheKey(
+            String keyword,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Pageable pageable,
+            List<Long> productTypeIds
+    ) {
         int page = pageable == null ? 0 : Math.max(pageable.getPageNumber(), 0);
         int size = pageable == null ? 20 : Math.min(Math.max(pageable.getPageSize(), 1), 100);
         String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
         String normalizedMinPrice = minPrice == null || minPrice.signum() < 0 ? "" : minPrice.stripTrailingZeros().toPlainString();
         String normalizedMaxPrice = maxPrice == null || maxPrice.signum() < 0 ? "" : maxPrice.stripTrailingZeros().toPlainString();
-        return normalizedKeyword + '-' + normalizedMinPrice + '-' + normalizedMaxPrice + '-' + page + '-' + size;
+        String normalizedProductTypeIds = productTypeIds == null ? "" : productTypeIds.stream()
+                .filter(Objects::nonNull)
+                .filter(id -> id > 0)
+                .distinct()
+                .sorted()
+                .map(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+        return normalizedKeyword + '-' + normalizedMinPrice + '-' + normalizedMaxPrice + '-'
+                + page + '-' + size + "-types-" + normalizedProductTypeIds;
     }
 
     private String normalizeSearchKeyword(String keyword) {

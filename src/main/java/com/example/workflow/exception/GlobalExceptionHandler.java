@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
                 errors.put(error.getField(), error.getDefaultMessage())
         );
         return new ResponseEntity<>(
-                ApiResponse.error(HttpStatus.BAD_REQUEST, "Validation failed", errors),
+                ApiResponse.error(HttpStatus.BAD_REQUEST, "Dữ liệu gửi lên không hợp lệ.", errors),
                 HttpStatus.BAD_REQUEST
         );
     }
@@ -39,7 +39,7 @@ public class GlobalExceptionHandler {
                 errors.put(violation.getPropertyPath().toString(), violation.getMessage())
         );
         return new ResponseEntity<>(
-                ApiResponse.error(HttpStatus.BAD_REQUEST, "Validation failed", errors),
+                ApiResponse.error(HttpStatus.BAD_REQUEST, "Dữ liệu gửi lên không hợp lệ.", errors),
                 HttpStatus.BAD_REQUEST
         );
     }
@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
             return buildAppExceptionResponse(appException);
         }
         return new ResponseEntity<>(
-                ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage()),
+                ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau."),
                 HttpStatus.INTERNAL_SERVER_ERROR
         );
     }

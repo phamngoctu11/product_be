@@ -17,4 +17,7 @@
     <include file="14-product-types-and-tags.xml" relativeToChangelogFile="true"/>
     <include file="15-product-model-cleanup.xml" relativeToChangelogFile="true"/>
     <include file="16-order-timestamp-cleanup.xml" relativeToChangelogFile="true"/>
+    <include file="17-order-chat-expiration.xml" relativeToChangelogFile="true"/>
+    <include file="18-custom-request-soft-delete.xml" relativeToChangelogFile="true"/>
+    <include file="19-custom-request-is-delete-flag.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

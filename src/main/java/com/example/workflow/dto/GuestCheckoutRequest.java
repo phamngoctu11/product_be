@@ -12,30 +12,30 @@ import java.util.List;
 
 @Data
 public class GuestCheckoutRequest {
-    @NotBlank(message = "Customer name is required")
-    @Size(max = 120, message = "Customer name must be at most 120 characters")
+    @NotBlank(message = "Tên khách hàng là bắt buộc.")
+    @Size(max = 120, message = "Tên khách hàng không được vượt quá 120 ký tự.")
     private String customerName;
 
-    @NotBlank(message = "Phone is required")
-    @Size(max = 30, message = "Phone must be at most 30 characters")
-    @Pattern(regexp = "^[0-9+().\\-\\s]{8,30}$", message = "Phone is invalid")
+    @NotBlank(message = "Số điện thoại là bắt buộc.")
+    @Size(max = 30, message = "Số điện thoại không được vượt quá 30 ký tự.")
+    @Pattern(regexp = "^[0-9+().\\-\\s]{8,30}$", message = "Số điện thoại không hợp lệ.")
     private String phone;
 
-    @NotBlank(message = "Email is required")
-    @Email(message = "Email is invalid")
-    @Size(max = 255, message = "Email must be at most 255 characters")
+    @NotBlank(message = "Địa chỉ email là bắt buộc.")
+    @Email(message = "Địa chỉ email không hợp lệ.")
+    @Size(max = 255, message = "Địa chỉ email không được vượt quá 255 ký tự.")
     private String email;
 
-    @NotBlank(message = "Shipping address is required")
-    @Size(max = 500, message = "Shipping address must be at most 500 characters")
+    @NotBlank(message = "Địa chỉ giao hàng là bắt buộc.")
+    @Size(max = 500, message = "Địa chỉ giao hàng không được vượt quá 500 ký tự.")
     private String shippingAddress;
 
-    @Size(max = 1000, message = "Note must be at most 1000 characters")
+    @Size(max = 1000, message = "Ghi chú không được vượt quá 1000 ký tự.")
     private String note;
 
-    @Size(max = 64, message = "Voucher code must be at most 64 characters")
+    @Size(max = 64, message = "Mã giảm giá không được vượt quá 64 ký tự.")
     private String voucherCode;
 
-    @NotEmpty(message = "Select at least one variant to checkout")
-    private List<@Positive(message = "Variant id must be positive") Long> variantIds;
+    @NotEmpty(message = "Vui lòng chọn ít nhất một biến thể để thanh toán.")
+    private List<@Positive(message = "Mã biến thể phải là số dương.") Long> variantIds;
 }

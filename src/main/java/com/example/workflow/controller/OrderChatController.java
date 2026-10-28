@@ -10,6 +10,7 @@ import com.example.workflow.exception.ConstantErrorCode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -29,6 +30,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Slf4j
 @Validated
 public class OrderChatController {
     private final OrderChatService orderChatService;
@@ -54,13 +56,20 @@ public class OrderChatController {
     ) {
         if (!orderId.equals(request.orderId())) {
             throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "Path orderId must match body orderId.");
+                    "Mã đơn hàng trên đường dẫn phải trùng với mã đơn hàng trong nội dung gửi.");
         }
         return ResponseEntity.ok(ApiResponse.success(orderChatService.send(request, authentication)));
     }
 
     @MessageMapping("/order-chat.send")
     public void sendWebSocket(@Valid @Payload SendOrderChatMessageRequest request, Authentication authentication) {
-        orderChatService.send(request, authentication);
+        try {
+            orderChatService.send(request, authentication);
+        } catch (AppException exception) {
+            if (exception.getStatus() != HttpStatus.NOT_FOUND) {
+                throw exception;
+            }
+            log.debug("Ignored WebSocket message for unavailable order chat {}", request.orderId());
+        }
     }
 }

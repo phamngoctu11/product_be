@@ -15,8 +15,10 @@ import com.example.workflow.repository.OrderChatThreadRepository;
 import com.example.workflow.util.UserDisplayNameUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,8 @@ import java.util.Objects;
 @Slf4j
 public class OrderChatService {
     private static final long SLOW_SEND_THRESHOLD_MS = 100;
+    private static final int EXPIRATION_CLEANUP_BATCH_SIZE = 100;
+    private static final long THREAD_RETENTION_HOURS = 24;
 
     private final OrderLookupService orderLookupService;
     private final OrderChatThreadRepository threadRepository;
@@ -42,7 +46,7 @@ public class OrderChatService {
     @Transactional
     public OrderChatThreadDTO ensureThreadForAssignedOrder(Long orderId) {
         Order order = orderLookupService.require(orderId);
-        if (order.getUser() == null) {
+        if (order.getUser() == null || order.getDeliveredAt() != null || order.getCancelledAt() != null) {
             return null;
         }
         String staffId = assignedStaffId(order);
@@ -67,6 +71,40 @@ public class OrderChatService {
         return toDto(thread);
     }
 
+    @Transactional
+    public void expireThreadAfterOrderFinalized(Long orderId, LocalDateTime finalizedAt) {
+        if (orderId == null) {
+            return;
+        }
+        threadRepository.findByOrderId(orderId).ifPresent(thread -> {
+            if (thread.getExpiresAt() == null) {
+                LocalDateTime finalizedTime = finalizedAt == null ? LocalDateTime.now() : finalizedAt;
+                thread.setExpiresAt(finalizedTime.plusHours(THREAD_RETENTION_HOURS));
+                threadRepository.save(thread);
+            }
+        });
+    }
+
+    @Scheduled(fixedDelayString = "${workflow.order-chat.cleanup-scan-delay-ms:60000}")
+    public void deleteExpiredThreads() {
+        List<OrderChatThread> expiredThreads = threadRepository.findByExpiresAtLessThanEqualOrderByExpiresAtAsc(
+                LocalDateTime.now(), PageRequest.of(0, EXPIRATION_CLEANUP_BATCH_SIZE)
+        );
+        int deletedCount = 0;
+        for (OrderChatThread thread : expiredThreads) {
+            try {
+                messageRepository.deleteByChatThreadId(thread.getId());
+                threadRepository.delete(thread);
+                deletedCount++;
+            } catch (RuntimeException exception) {
+                log.warn("Failed to delete expired order chat thread {}: {}", thread.getId(), exception.getMessage());
+            }
+        }
+        if (deletedCount > 0) {
+            log.info("Deleted {} expired order chat thread(s)", deletedCount);
+        }
+    }
+
     @Transactional(readOnly = true)
     public OrderChatThreadDTO getThread(Long orderId) {
         String actorId = currentUserService.requireCurrentUserId();
@@ -88,7 +126,7 @@ public class OrderChatService {
     public OrderChatMessageDTO send(SendOrderChatMessageRequest request, Authentication authentication) {
         long startedAt = System.nanoTime();
         if (request == null || request.orderId() == null || request.content() == null || request.content().isBlank()) {
-            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Order and message content are required.");
+            throw new AppException(HttpStatus.BAD_REQUEST, ConstantErrorCode.BAD_REQUEST_DETAIL, "Mã đơn hàng và nội dung tin nhắn là bắt buộc.");
         }
         String actorId = currentUserService.requireUserId(authentication);
         OrderChatThread thread = requireThread(request.orderId());
@@ -109,9 +147,14 @@ public class OrderChatService {
         return saved;
     }
 
-    public void authorizeSubscription(Long orderId, Authentication authentication) {
+    public boolean authorizeSubscription(Long orderId, Authentication authentication) {
         String actorId = currentUserService.requireUserId(authentication);
-        authorize(requireThread(orderId), actorId);
+        OrderChatThread thread = threadRepository.findByOrderId(orderId).orElse(null);
+        if (thread == null || isExpired(thread)) {
+            return false;
+        }
+        authorize(thread, actorId);
+        return true;
     }
 
     private void authorize(OrderChatThread thread, String actorId) {
@@ -121,8 +164,16 @@ public class OrderChatService {
     }
 
     private OrderChatThread requireThread(Long orderId) {
-        return threadRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Order chat is not available."));
+        OrderChatThread thread = threadRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Không thể truy cập cuộc trò chuyện của đơn hàng này."));
+        if (isExpired(thread)) {
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Không thể truy cập cuộc trò chuyện của đơn hàng này.");
+        }
+        return thread;
+    }
+
+    private boolean isExpired(OrderChatThread thread) {
+        return thread.getExpiresAt() != null && !thread.getExpiresAt().isAfter(LocalDateTime.now());
     }
 
     private String assignedStaffId(Order order) {

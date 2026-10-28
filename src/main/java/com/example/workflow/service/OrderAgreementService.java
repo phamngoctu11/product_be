@@ -28,6 +28,8 @@ import com.example.workflow.service.consistency.OrderTransitionService;
 import com.example.workflow.service.redis.DomainEventPublisher;
 import com.example.workflow.util.JsonUtils;
 import com.example.workflow.util.TextNormalizer;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -98,7 +100,7 @@ public class OrderAgreementService {
     @Transactional(propagation = Propagation.MANDATORY)
     OrderAgreementDTO submitWithinTransaction(Long orderId, SubmitOrderAgreementRequest request, String userId) {
         if (request == null || request.orderVersion() == null) {
-            throw badRequest("orderVersion is required.");
+            throw badRequest("Phiên bản đơn hàng là bắt buộc..");
         }
         Order order = orderLookupService.requireForUpdate(orderId);
         requireOwner(order, userId);
@@ -156,7 +158,7 @@ public class OrderAgreementService {
     @Transactional(propagation = Propagation.MANDATORY)
     OrderAgreementDTO decideWithinTransaction(Long orderId, OrderAgreementDecisionRequest request, String staffId) {
         if (request == null || request.orderVersion() == null || request.agreementVersion() == null || request.decision() == null) {
-            throw badRequest("orderVersion, agreementVersion and decision are required.");
+            throw badRequest("Vui lòng cung cấp phiên bản đơn hàng, phiên bản thỏa thuận và quyết định.");
         }
         Order order = orderLookupService.requireForUpdate(orderId);
         requireActiveAssignment(order, staffId);
@@ -167,7 +169,7 @@ public class OrderAgreementService {
         }
         OrderAgreement agreement = agreementRepository
                 .findByOrderIdAndAgreementVersionForUpdate(orderId, request.agreementVersion())
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Agreement not found."));
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.BAD_REQUEST_DETAIL, "Không tìm thấy thỏa thuận."));
         if (agreement.getStatus() != OrderAgreementStatus.USER_SUBMITTED) {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.ORDER_TRANSITION_INVALID);
         }
@@ -217,7 +219,7 @@ public class OrderAgreementService {
         if (request.quantity() == null || request.quantity() < 1 || request.unitPrice() == null
                 || request.unitPrice().signum() <= 0 || request.productionDurationDays() == null
                 || request.productionDurationDays() < 1) {
-            throw badRequest("Custom agreement requires quantity, positive unitPrice and productionDurationDays.");
+            throw badRequest("Thỏa thuận tùy chỉnh cần có số lượng, đơn giá dương và thời gian sản xuất.");
         }
         PaymentMethod paymentMethod = requireCustomPaymentMethod(order, request.paymentMethod());
         List<String> imageUrls = validateImageUrls(request.imageUrls());
@@ -225,6 +227,22 @@ public class OrderAgreementService {
         UserVoucher voucher = voucherService.previewVoucherForCheckout(request.userVoucherId(), userId, subtotal);
         BigDecimal discount = voucherService.calculateDiscountAmount(voucher, subtotal);
         Map<String, Object> snapshot = new LinkedHashMap<>();
+        OrderItem item = order.itemsOrEmpty().stream().findFirst().orElse(null);
+        if (item != null && StringUtils.hasText(item.getSpecSnapshot())) {
+            try {
+                JsonNode original = objectMapper.readTree(item.getSpecSnapshot());
+                if (original != null && original.isObject()) {
+                    for (String key : List.of("productType", "productTypeFields", "fieldValues")) {
+                        JsonNode value = original.get(key);
+                        if (value != null) {
+                            snapshot.put(key, objectMapper.convertValue(value, Object.class));
+                        }
+                    }
+                }
+            } catch (JsonProcessingException ignored) {
+                // Older custom orders may store a plain-text specification instead of a JSON snapshot.
+            }
+        }
         snapshot.put("description", description);
         snapshot.put("imageUrls", imageUrls);
         snapshot.put("quantity", request.quantity());
@@ -242,7 +260,7 @@ public class OrderAgreementService {
     private SnapshotAndTotals catalogSnapshot(Order order, SubmitOrderAgreementRequest request) {
         if (StringUtils.hasText(request.description()) || request.quantity() != null || request.unitPrice() != null
                 || request.productionDurationDays() != null || (request.imageUrls() != null && !request.imageUrls().isEmpty())) {
-            throw badRequest("Catalog item, quantity, price and duration are read-only.");
+            throw badRequest("Chỉ được xem sản phẩm danh mục, số lượng, giá và thời gian sản xuất.");
         }
         List<Map<String, Object>> items = new ArrayList<>();
         for (OrderItem item : order.itemsOrEmpty()) {
@@ -255,17 +273,17 @@ public class OrderAgreementService {
             value.put("productionDurationDays", item.getProductionDurationDays());
             items.add(value);
         }
-        BigDecimal subtotal = nonNegative(order.getTotalPrice(), "Catalog subtotal is invalid.");
-        BigDecimal discount = order.getDiscountAmount() == null ? BigDecimal.ZERO : nonNegative(order.getDiscountAmount(), "Catalog discount is invalid.");
+        BigDecimal subtotal = nonNegative(order.getTotalPrice(), "Tạm tính của sản phẩm danh mục không hợp lệ.");
+        BigDecimal discount = order.getDiscountAmount() == null ? BigDecimal.ZERO : nonNegative(order.getDiscountAmount(), "Mức giảm giá của sản phẩm danh mục không hợp lệ.");
         BigDecimal finalPrice = order.getFinalPrice() == null ? floorZero(subtotal.subtract(discount))
-                : nonNegative(order.getFinalPrice(), "Catalog final price is invalid.");
+                : nonNegative(order.getFinalPrice(), "Giá cuối cùng của sản phẩm danh mục không hợp lệ.");
         Long voucherId = order.getUserVoucher() == null ? null : order.getUserVoucher().getId();
         PaymentMethod paymentMethod = order.getPaymentMethodType();
         if (request.paymentMethod() != null && request.paymentMethod() != paymentMethod) {
-            throw badRequest("Catalog payment method cannot be changed during agreement.");
+            throw badRequest("Không thể thay đổi phương thức thanh toán của sản phẩm danh mục trong thỏa thuận.");
         }
         if (request.userVoucherId() != null && !Objects.equals(request.userVoucherId(), voucherId)) {
-            throw badRequest("Catalog voucher cannot be changed during agreement.");
+            throw badRequest("Không thể thay đổi mã giảm giá của sản phẩm danh mục trong thỏa thuận.");
         }
         return new SnapshotAndTotals(
                 JsonUtils.write(objectMapper, items, "catalog agreement snapshot"),
@@ -281,7 +299,7 @@ public class OrderAgreementService {
         Map<String, Object> snapshot = JsonUtils.read(objectMapper, agreement.getItemSnapshot(), Map.class, "custom agreement snapshot");
         List<OrderItem> items = order.itemsOrEmpty();
         if (items.isEmpty()) {
-            throw badRequest("Custom order has no item.");
+            throw badRequest("Đơn hàng tùy chỉnh không có sản phẩm.");
         }
         OrderItem item = items.get(0);
         int quantity = ((Number) snapshot.get("quantity")).intValue();
@@ -302,7 +320,7 @@ public class OrderAgreementService {
         try {
             paymentMethod = PaymentMethod.valueOf(String.valueOf(snapshot.get("paymentMethod")));
         } catch (IllegalArgumentException exception) {
-            throw badRequest("Custom agreement payment method is invalid.");
+            throw badRequest("Phương thức thanh toán trong thỏa thuận tùy chỉnh không hợp lệ.");
         }
         order.setPaymentMethodType(paymentMethod);
         order.setPaymentMethod(paymentMethod.name());
@@ -363,9 +381,9 @@ public class OrderAgreementService {
     }
 
     private String normalizedDescription(String value) {
-        if (!StringUtils.hasText(value)) throw badRequest("Custom description is required.");
+        if (!StringUtils.hasText(value)) throw badRequest("Vui lòng nhập mô tả yêu cầu tùy chỉnh.");
         String normalized = value.trim();
-        if (normalized.length() > 4000) throw badRequest("Custom description must be at most 4000 characters.");
+        if (normalized.length() > 4000) throw badRequest("Mô tả yêu cầu tùy chỉnh không được vượt quá 4000 ký tự.");
         return normalized;
     }
 
@@ -379,14 +397,14 @@ public class OrderAgreementService {
                 }
                 return uri.toString();
             } catch (IllegalArgumentException exception) {
-                throw badRequest("Image URLs must use http or https.");
+                throw badRequest("Đường dẫn hình ảnh phải sử dụng giao thức HTTP hoặc HTTPS.");
             }
         }).toList();
     }
 
     private PaymentMethod requireCustomPaymentMethod(Order order, PaymentMethod paymentMethod) {
         if (paymentMethod == null) {
-            throw badRequest("Custom agreement paymentMethod is required.");
+            throw badRequest("Vui lòng chọn phương thức thanh toán cho thỏa thuận tùy chỉnh.");
         }
         if (paymentMethod == PaymentMethod.COD
                 && (order.getUser() == null || order.getUser().getReputation() < 20)) {
@@ -396,7 +414,7 @@ public class OrderAgreementService {
     }
 
     private String normalizedReason(String value) {
-        if (!StringUtils.hasText(value)) throw badRequest("A reason is required when requesting changes.");
+        if (!StringUtils.hasText(value)) throw badRequest("A Vui lòng nhập lý do. when requesting changes.");
         return value.trim();
     }
 

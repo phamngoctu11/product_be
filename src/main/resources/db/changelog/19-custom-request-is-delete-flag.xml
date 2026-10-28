@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <changeSet id="19-custom-request-is-delete-flag" author="workflow">
+        <addColumn tableName="custom_requests">
+            <column name="is_delete" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <update tableName="custom_requests">
+            <column name="is_delete" valueBoolean="true"/>
+            <where>deleted_at IS NOT NULL</where>
+        </update>
+        <dropIndex tableName="custom_requests" indexName="idx_custom_request_owner_deleted_status_updated"/>
+        <dropColumn tableName="custom_requests" columnName="deleted_at"/>
+        <createIndex tableName="custom_requests" indexName="idx_custom_request_owner_delete_status_updated">
+            <column name="owner_id"/>
+            <column name="is_delete"/>
+            <column name="status"/>
+            <column name="updated_at"/>
+            <column name="id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

@@ -295,12 +295,12 @@ public class RedisStreamEventConsumer {
             return;
         }
         if (event.orderId() == null) {
-            throw new IllegalArgumentException("Workflow email request must contain explicit content or orderId");
+            throw new IllegalArgumentException("Yêu cầu email quy trình phải có nội dung cụ thể hoặc mã đơn hàng.");
         }
 
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Order not found for WORKFLOW_EMAIL_REQUESTED event: " + event.orderId()
+                        "Không tìm thấy đơn hàng của sự kiện WORKFLOW_EMAIL_REQUESTED: " + event.orderId()
                 ));
         if (!StringUtils.hasText(order.getEmail())) {
             throw new IllegalStateException("Guest email is empty for order " + event.orderId());

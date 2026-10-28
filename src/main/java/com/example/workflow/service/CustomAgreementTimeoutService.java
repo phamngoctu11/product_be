@@ -57,7 +57,7 @@ public class CustomAgreementTimeoutService {
                     orderId,
                     snapshot.getVersion(),
                     CancellationSource.CUSTOM_CONFIRMATION_TIMEOUT,
-                    "Customer did not submit a valid custom agreement before the confirmation deadline.",
+                    "Khách hàng chưa gửi thỏa thuận tùy chỉnh hợp lệ trước hạn xác nhận.",
                     "custom-confirm-timeout:" + orderId,
                     "custom-confirm-timeout:" + orderId + ":" + dueKey
             );

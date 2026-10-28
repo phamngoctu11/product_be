@@ -7,8 +7,8 @@ import java.io.Serializable;
 
 @Data
 public class LoginRequest implements Serializable {
-    @NotBlank(message = "Username is required")
+    @NotBlank(message = "Tên đăng nhập là bắt buộc.")
     private String username;
-    @NotBlank(message = "Password is required")
+    @NotBlank(message = "Mật khẩu là bắt buộc.")
     private String password;
 }

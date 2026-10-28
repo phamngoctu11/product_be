@@ -159,7 +159,7 @@ public class EmailService {
     ) {
         StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
                 .append(escapeHtml(customerName))
-                .append(",</p><p>Đã có hình ảnh đầu tiên của item #")
+                .append(",</p><p>Đã có hình ảnh đầu tiên của sản phẩm #")
                 .append(orderItemId)
                 .append(" thuộc đơn hàng #")
                 .append(orderId)
@@ -187,7 +187,56 @@ public class EmailService {
                 new WorkflowEmailRequestedEvent(
                         "PRODUCTION_INITIAL_SHAPE",
                         toEmail,
-                        "Hình ảnh tiến độ item #" + orderItemId + " - đơn hàng #" + orderId,
+                        "Hình ảnh tiến độ sản phẩm #" + orderItemId + " - đơn hàng #" + orderId,
+                        html.toString(),
+                        orderId
+                )
+        );
+    }
+
+    public void sendFinalProductCheckpointEmail(
+            String toEmail,
+            String customerName,
+            Long orderId,
+            Long orderItemId,
+            int attemptNumber,
+            java.util.List<String> imageUrls,
+            String note,
+            String orderAccessUrl
+    ) {
+        StringBuilder html = new StringBuilder("<html><body><p>Xin chào ")
+                .append(escapeHtml(customerName))
+                .append(",</p><p>Đã có hình ảnh sản phẩm hoàn thiện lần ")
+                .append(attemptNumber)
+                .append(" của sản phẩm #")
+                .append(orderItemId)
+                .append(" thuộc đơn hàng #")
+                .append(orderId)
+                .append(". Sản phẩm đang chờ kiểm tra chất lượng.</p>");
+        if (note != null && !note.isBlank()) {
+            html.append("<p>Ghi chú: ").append(escapeHtml(note)).append("</p>");
+        }
+        if (imageUrls != null && !imageUrls.isEmpty()) {
+            html.append("<ul>");
+            for (String imageUrl : imageUrls) {
+                html.append("<li><a href=\"")
+                        .append(escapeHtml(imageUrl))
+                        .append("\">Xem hình ảnh sản phẩm hoàn thiện</a></li>");
+            }
+            html.append("</ul>");
+        }
+        if (orderAccessUrl != null && !orderAccessUrl.isBlank()) {
+            html.append("<p><a href=\"")
+                    .append(escapeHtml(orderAccessUrl))
+                    .append("\">Xem thông tin đơn hàng</a></p>");
+        }
+        html.append("</body></html>");
+        eventPublisher.publishAfterCommit(
+                EventTypes.WORKFLOW_EMAIL_REQUESTED,
+                new WorkflowEmailRequestedEvent(
+                        "PRODUCTION_FINAL_PRODUCT",
+                        toEmail,
+                        "Hình ảnh sản phẩm hoàn thiện sản phẩm #" + orderItemId + " - đơn hàng #" + orderId,
                         html.toString(),
                         orderId
                 )
@@ -272,7 +321,7 @@ public class EmailService {
         context.setVariable("quantity", quantity);
 
         String htmlContent = templateEngine.process("order-confirmation", context);
-        sendHtmlEmailOrThrow(toEmail, "Order confirmation #" + orderId, htmlContent);
+        sendHtmlEmailOrThrow(toEmail, "Xác nhận đơn hàng #" + orderId, htmlContent);
         log.info("Sent order confirmation email for order {} to {}", orderId, toEmail);
     }
 
@@ -298,7 +347,7 @@ public class EmailService {
         context.setVariable("reason", reason);
 
         String htmlContent = templateEngine.process("order-cancelled", context);
-        sendHtmlEmailOrThrow(toEmail, "Order cancelled #" + orderId, htmlContent);
+        sendHtmlEmailOrThrow(toEmail, "Đơn hàng đã hủy #" + orderId, htmlContent);
         log.info("Sent order cancellation email for order {} to {}", orderId, toEmail);
     }
 
@@ -320,7 +369,7 @@ public class EmailService {
     public void sendPasswordResetEmailNowOrThrow(String toEmail, String customerName, String resetLink, int expiresInMinutes) {
         sendHtmlEmailOrThrow(
                 toEmail,
-                "Dat lai mat khau tai khoan ShopVN",
+                "Đặt lại mật khẩu tài khoản ShopVN",
                 buildPasswordResetHtml(customerName, resetLink, expiresInMinutes)
         );
         log.info("Sent password reset email to {}", toEmail);
@@ -341,21 +390,21 @@ public class EmailService {
         String message;
         switch (emailType) {
             case "GUEST_READY_TO_SHIP" -> {
-                subject = "Order #" + orderId + " is ready to ship";
-                message = "Your handmade order is ready for delivery.";
+                subject = "Đơn hàng #" + orderId + " đã sẵn sàng bàn giao vận chuyển";
+                message = "Đơn hàng thủ công của bạn đã sẵn sàng được bàn giao.";
             }
             case "GUEST_CHECKPOINT_INITIAL_SHAPE" -> {
-                subject = "Initial shape checkpoint for order #" + orderId;
-                message = "The initial shape checkpoint for your handmade item is ready.";
+                subject = "Điểm kiểm tra hình dạng ban đầu của đơn hàng #" + orderId;
+                message = "Điểm kiểm tra hình dạng ban đầu của sản phẩm trong đơn hàng thủ công của bạn đã sẵn sàng.";
             }
             case "GUEST_CHECKPOINT_FINAL_PRODUCT" -> {
-                subject = "Final product checkpoint for order #" + orderId;
-                message = "The final product checkpoint for your handmade item is ready.";
+                subject = "Điểm kiểm tra sản phẩm hoàn thiện của đơn hàng #" + orderId;
+                message = "Điểm kiểm tra sản phẩm hoàn thiện trong đơn hàng thủ công của bạn đã sẵn sàng.";
             }
-            default -> throw new IllegalArgumentException("Unsupported workflow emailType '" + emailType + "'");
+            default -> throw new IllegalArgumentException("Loại email quy trình không được hỗ trợ '" + emailType + "'");
         }
 
-        String htmlContent = "<html><body><p>Xin chao " + escapeHtml(customerName) + ",</p><p>"
+        String htmlContent = "<html><body><p>Xin chào " + escapeHtml(customerName) + ",</p><p>"
                 + escapeHtml(message) + "</p></body></html>";
         sendHtmlEmailOrThrow(toEmail, subject, htmlContent);
         log.info("Sent {} workflow email for order {} to {}", emailType, orderId, toEmail);
@@ -375,7 +424,7 @@ public class EmailService {
 
             mailSender.send(message);
         } catch (MessagingException | RuntimeException e) {
-            throw new IllegalStateException("Email delivery failed: " + e.getMessage(), e);
+            throw new IllegalStateException("Gửi email thất bại: " + e.getMessage(), e);
         }
     }
 
@@ -383,16 +432,16 @@ public class EmailService {
         return """
                 <html>
                 <body style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
-                    <h2>Dat lai mat khau</h2>
-                    <p>Xin chao %s,</p>
-                    <p>Chung toi da nhan duoc yeu cau dat lai mat khau cho tai khoan cua ban.</p>
+                    <h2>Đặt lại mật khẩu</h2>
+                    <p>Xin chào %s,</p>
+                    <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
                     <p>
                         <a href="%s" style="display:inline-block;padding:12px 18px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">
-                            Dat lai mat khau
+                            Đặt lại mật khẩu
                         </a>
                     </p>
-                    <p>Duong dan nay co hieu luc trong %s phut va chi su dung duoc mot lan.</p>
-                    <p>Neu ban khong yeu cau thao tac nay, vui long bo qua email nay.</p>
+                    <p>Liên kết này có hiệu lực trong %s phút và chỉ sử dụng được một lần.</p>
+                    <p>Nếu bạn không yêu cầu thao tác này, vui lòng bỏ qua email này.</p>
                 </body>
                 </html>
                 """.formatted(

@@ -104,7 +104,7 @@ public class ManagerOrderReviewService {
             throw new AppException(
                     HttpStatus.BAD_REQUEST,
                     ConstantErrorCode.BAD_REQUEST_DETAIL,
-                    "A valid manager decision, order version and rejection reason are required."
+                    "Quyết định của quản lý, phiên bản đơn hàng và lý do từ chối hợp lệ là các thông tin bắt buộc."
             );
         }
         User manager = requireManager();

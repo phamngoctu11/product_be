@@ -9,21 +9,20 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 @Getter
 @Setter
 public class CreateChangeRequestRequest {
-    @NotNull(message = "orderVersion is required") private Long orderVersion;
-    @NotNull(message = "orderItemId is required") private Long orderItemId;
-    @NotNull(message = "baseSpecVersion is required") private Integer baseSpecVersion;
-    @NotBlank(message = "proposedDescription is required")
-    @Size(max = 4000, message = "proposedDescription must be at most 4000 characters")
+    @NotNull(message = "Phiên bản đơn hàng là bắt buộc.") private Long orderVersion;
+    @NotNull(message = "Mã sản phẩm trong đơn hàng là bắt buộc.") private Long orderItemId;
+    @NotNull(message = "Phiên bản thông số gốc là bắt buộc.") private Integer baseSpecVersion;
+    @NotBlank(message = "Mô tả đề xuất là bắt buộc.")
+    @Size(max = 4000, message = "Mô tả đề xuất không được vượt quá 4000 ký tự.")
     private String proposedDescription;
-    @Size(max = 10, message = "At most 10 images are allowed") private List<String> proposedImageUrls;
-    @NotBlank(message = "reason is required")
-    @Size(max = 2000, message = "reason must be at most 2000 characters")
+    private Map<String, Object> fieldValues;
+    @NotBlank(message = "Vui lòng nhập lý do.")
+    @Size(max = 2000, message = "Lý do không được vượt quá 2000 ký tự.")
     private String reason;
 
     @JsonIgnore
@@ -33,12 +32,12 @@ public class CreateChangeRequestRequest {
     }
 
     public CreateChangeRequestRequest(Long orderVersion, Long orderItemId, Integer baseSpecVersion,
-                                      String proposedDescription, List<String> proposedImageUrls, String reason) {
+                                      String proposedDescription, Map<String, Object> fieldValues, String reason) {
         this.orderVersion = orderVersion;
         this.orderItemId = orderItemId;
         this.baseSpecVersion = baseSpecVersion;
         this.proposedDescription = proposedDescription;
-        this.proposedImageUrls = proposedImageUrls;
+        this.fieldValues = fieldValues;
         this.reason = reason;
     }
 
@@ -50,6 +49,6 @@ public class CreateChangeRequestRequest {
     public Long orderItemId() { return orderItemId; }
     public Integer baseSpecVersion() { return baseSpecVersion; }
     public String proposedDescription() { return proposedDescription; }
-    public List<String> proposedImageUrls() { return proposedImageUrls; }
+    public Map<String, Object> fieldValues() { return fieldValues; }
     public String reason() { return reason; }
 }
