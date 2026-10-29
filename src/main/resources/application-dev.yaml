@@ -1,18 +1,23 @@
 
 spring:
+  liquibase:
+    enabled: ${LIQUIBASE_ENABLED:true}
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/my-workflow-dev}
-
+  datasource:
+    url: ${DB_URL:jdbc:mysql://mysql-3046e449-tup20658-b458.d.aivencloud.com:20481/defaultdb?sslMode=REQUIRED&sessionVariables=sql_require_primary_key=0}
+    username: ${DB_USERNAME:avnadmin}
+    password: ${DB_PASSWORD:AVNS_Kd7H_JPu_49mrZzF5Al}
   jpa:
     show-sql: true
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 app:
-  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  public-base-url: ${APP_PUBLIC_BASE_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev}
   frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost}
@@ -20,5 +25,21 @@ app:
 keycloak:
   realm: ${KEYCLOAK_REALM:my-workflow-dev}
 
-momo:
-  redirectUrl: ${MOMO_REDIRECT_URL:http://localhost:4200/payment-success}
+sepay:
+  payment:
+    provider: ${SEPAY_PAYMENT_PROVIDER:SEPAY}
+    code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:DH}
+    expiry-minutes: ${SEPAY_PAYMENT_EXPIRY_MINUTES:60}
+    bank-code: ${SEPAY_BANK_CODE:VietinBank}
+    account-number: ${SEPAY_ACCOUNT_NUMBER:104888199452}
+    account-name: ${SEPAY_ACCOUNT_NAME:PHAM NGOC TU}
+    memo-prefix: ${SEPAY_PAYMENT_MEMO_PREFIX:SEVQR}
+    qr-base-url: ${SEPAY_QR_BASE_URL:https://vietqr.app/img}
+  webhook:
+    enabled: ${SEPAY_WEBHOOK_ENABLED:true}
+    url: ${SEPAY_WEBHOOK_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev/api/webhooks/sepay}
+    signature-header: ${SEPAY_WEBHOOK_SIGNATURE_HEADER:X-SePay-Signature}
+    timestamp-header: ${SEPAY_WEBHOOK_TIMESTAMP_HEADER:X-SePay-Timestamp}
+    signature-algorithm: ${SEPAY_WEBHOOK_SIGNATURE_ALGORITHM:HmacSHA256}
+    max-clock-skew-seconds: ${SEPAY_WEBHOOK_MAX_CLOCK_SKEW_SECONDS:300}
+    secret-key: ${SEPAY_WEBHOOK_SECRET_KEY:quachhieuphuong}

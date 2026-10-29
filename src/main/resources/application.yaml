@@ -1,8 +1,12 @@
 server:
   port: 8080
 app:
-  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  # Local tunnel used by payment providers to call this application.
+  public-base-url: ${APP_PUBLIC_BASE_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev}
   frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
+  order-links:
+    # Production overrides this with a required environment secret.
+    signing-secret: ${ORDER_LINK_SIGNING_SECRET:local-order-link-signing-secret-change-before-production}
   rate-limit:
     enabled: ${APP_RATE_LIMIT_ENABLED:true}
     login-credential:
@@ -11,16 +15,6 @@ app:
       lock-increment-minutes: ${APP_RATE_LIMIT_LOGIN_CREDENTIAL_LOCK_INCREMENT_MINUTES:1}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200}
-chat:
-  realtime:
-    redis-pubsub:
-      enabled: ${CHAT_REALTIME_REDIS_PUBSUB_ENABLED:false}
-  migration:
-    mysql-to-mongo:
-      enabled: ${CHAT_MIGRATION_MYSQL_TO_MONGO_ENABLED:false}
-consultation:
-  bonus:
-    percent: ${CONSULTATION_BONUS_PERCENT:5}
 workflow:
   events:
     redis-stream:
@@ -31,7 +25,7 @@ workflow:
       poll-delay-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_POLL_DELAY_MS:1000}
       idempotency-ttl-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_IDEMPOTENCY_TTL_MS:604800000}
       retry:
-        enabled-types: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_ENABLED_TYPES:NOTIFICATION_REQUESTED,ORDER_CONFIRMATION_EMAIL_REQUESTED,ORDER_CANCELLATION_EMAIL_REQUESTED,RECEIPT_COMPLAINT_EMAIL_REQUESTED,PASSWORD_RESET_EMAIL_REQUESTED,WORKFLOW_EMAIL_REQUESTED,GUEST_ORDER_CREATED,ORDER_CREATED,ORDER_DELIVERED,ORDER_CANCELLED,STAFF_COMMISSION_REFRESH_REQUESTED,CACHE_EVICTION_REQUESTED}
+        enabled-types: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_ENABLED_TYPES:NOTIFICATION_REQUESTED,ORDER_CONFIRMATION_EMAIL_REQUESTED,ORDER_CANCELLATION_EMAIL_REQUESTED,PASSWORD_RESET_EMAIL_REQUESTED,WORKFLOW_EMAIL_REQUESTED,GUEST_ORDER_CREATED,ORDER_CREATED,ORDER_REVIEWED,ORDER_ASSIGNED,ORDER_ACCEPTED,ORDER_AGREEMENT_SUBMITTED,ORDER_AGREEMENT_REVIEWED,ORDER_DELIVERED,ORDER_CANCELLED,ORDER_SHIPPING,PAYMENT_OPENED,PAYMENT_CONFIRMED,PRODUCTION_STARTED,PRODUCTION_CHECKPOINT_SUBMITTED,PRODUCTION_CHECKPOINT_REVIEWED,ORDER_READY_TO_SHIP,CHANGE_REQUEST_SUBMITTED,CHANGE_REQUEST_DECIDED,CACHE_EVICTION_REQUESTED}
         max-attempts: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_MAX_ATTEMPTS:5}
         backoff-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_BACKOFF_MS:5000,30000,120000,600000,1800000}
         metadata-ttl-ms: ${WORKFLOW_EVENTS_REDIS_STREAM_RETRY_METADATA_TTL_MS:604800000}
@@ -45,10 +39,6 @@ checkout:
   idempotency:
     in-progress-ttl-ms: ${CHECKOUT_IDEMPOTENCY_IN_PROGRESS_TTL_MS:900000}
     response-ttl-ms: ${CHECKOUT_IDEMPOTENCY_RESPONSE_TTL_MS:86400000}
-  reservation-timeout:
-    enabled: ${CHECKOUT_RESERVATION_TIMEOUT_ENABLED:true}
-    minutes: ${CHECKOUT_RESERVATION_TIMEOUT_MINUTES:15}
-    scan-delay-ms: ${CHECKOUT_RESERVATION_TIMEOUT_SCAN_DELAY_MS:60000}
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
   realm: ${KEYCLOAK_REALM:my-workflow-dev}
@@ -59,6 +49,11 @@ keycloak:
     username: ${KEYCLOAK_ADMIN_USERNAME:admin}
     password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
 spring:
+  liquibase:
+    # Local/default startup applies pending changelogs before Hibernate validates the schema.
+    # Production overrides this to false unless an explicit migration deployment enables it.
+    enabled: ${LIQUIBASE_ENABLED:true}
+    change-log: classpath:db/changelog/db.changelog-master.xml
   application:
     name: my-workflow-app
   security:
@@ -69,15 +64,21 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME:tup20658@gmail.com}
-    password: ${MAIL_PASSWORD:eoyi rxsi qquw xmhs}
+    username: ${MAIL_USERNAME:tu20042909@gmail.com}
+    password: ${MAIL_PASSWORD:muux dbtl efgr urxp}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
-
+  datasource:
+    # Aiven requires primary keys globally, while Liquibase's DATABASECHANGELOG
+    # metadata table has none. Relax the rule only for this JDBC session.
+    url: ${DB_URL:jdbc:mysql://mysql-3046e449-tup20658-b458.d.aivencloud.com:20481/defaultdb?sslMode=REQUIRED&sessionVariables=sql_require_primary_key=0}
+    username: ${DB_USERNAME:avnadmin}
+    password: ${DB_PASSWORD:AVNS_Kd7H_JPu_49mrZzF5Al}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/workflow_chat}
@@ -96,7 +97,7 @@ spring:
     database-platform: org.hibernate.dialect.MySQLDialect
     show-sql: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 camunda.bpm:
   deployment-resource-pattern:
@@ -117,12 +118,23 @@ cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:dgoolohc8}
   api-key: ${CLOUDINARY_API_KEY:768686576265143}
   api-secret: ${CLOUDINARY_API_SECRET:puDa8eZvm0E3ttWKAzxS6nUDFn8}
-momo:
-  # Các biến này chưa có trong docker-compose nên tạm thời để trống hoặc bạn tự điền mã partner của mình vào sau dấu :
-  partnerCode: ${MOMO_PARTNER_CODE:MOMOBKUN20180529}
-  accessKey: ${MOMO_ACCESS_KEY:klm05TvNBzhg7h7j}
-  secretKey: ${MOMO_SECRET_KEY:at67qH6mk8w5Y1nAyMoYKMWACiEi2bsa}
-  apiUrl: ${MOMO_API_URL:https://test-payment.momo.vn/v2/gateway/api/create}
-  redirectUrl: ${MOMO_REDIRECT_URL:http://localhost:4200/payment-success}
-  ipnUrl: ${MOMO_IPN_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev/api/payment/momo-callback}
-  mock-enabled: ${MOMO_MOCK_ENABLED:true}
+sepay:
+  payment:
+    provider: ${SEPAY_PAYMENT_PROVIDER:SEPAY}
+    code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:DH}
+    expiry-minutes: ${SEPAY_PAYMENT_EXPIRY_MINUTES:60}
+    bank-code: ${SEPAY_BANK_CODE:VietinBank}
+    account-number: ${SEPAY_ACCOUNT_NUMBER:104888199452}
+    account-name: ${SEPAY_ACCOUNT_NAME:PHAM NGOC TU}
+    memo-prefix: ${SEPAY_PAYMENT_MEMO_PREFIX:SEVQR}
+    qr-base-url: ${SEPAY_QR_BASE_URL:https://vietqr.app/img}
+    timeout-scan-delay-ms: ${SEPAY_TIMEOUT_SCAN_DELAY_MS:60000}
+    timeout-batch-size: ${SEPAY_TIMEOUT_BATCH_SIZE:100}
+  webhook:
+    enabled: ${SEPAY_WEBHOOK_ENABLED:true}
+    url: ${SEPAY_WEBHOOK_URL:https://pseudoemotional-unrequisitely-jeri.ngrok-free.dev/api/webhooks/sepay}
+    signature-header: ${SEPAY_WEBHOOK_SIGNATURE_HEADER:X-SePay-Signature}
+    timestamp-header: ${SEPAY_WEBHOOK_TIMESTAMP_HEADER:X-SePay-Timestamp}
+    signature-algorithm: ${SEPAY_WEBHOOK_SIGNATURE_ALGORITHM:HmacSHA256}
+    max-clock-skew-seconds: ${SEPAY_WEBHOOK_MAX_CLOCK_SKEW_SECONDS:300}
+    secret-key: ${SEPAY_WEBHOOK_SECRET_KEY:quachhieuphuong}

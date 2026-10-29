@@ -1,4 +1,7 @@
 spring:
+  liquibase:
+    # Enable only in the deployment responsible for applying database migrations.
+    enabled: ${LIQUIBASE_ENABLED:false}
   security:
     oauth2:
       resourceserver:
@@ -11,16 +14,34 @@ spring:
   jpa:
     show-sql: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://165.245.188.101}
+  order-links:
+    signing-secret: ${ORDER_LINK_SIGNING_SECRET}
   frontend-base-url: ${APP_FRONTEND_BASE_URL:http://165.245.188.101}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://165.245.188.101}
 
+sepay:
+  payment:
+    provider: ${SEPAY_PAYMENT_PROVIDER:SEPAY}
+    code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:DH}
+    expiry-minutes: ${SEPAY_PAYMENT_EXPIRY_MINUTES:60}
+    bank-code: ${SEPAY_BANK_CODE:}
+    account-number: ${SEPAY_ACCOUNT_NUMBER:}
+    account-name: ${SEPAY_ACCOUNT_NAME:}
+    memo-prefix: ${SEPAY_PAYMENT_MEMO_PREFIX:}
+    qr-base-url: ${SEPAY_QR_BASE_URL:https://vietqr.app/img}
+  webhook:
+    enabled: ${SEPAY_WEBHOOK_ENABLED:false}
+    url: ${SEPAY_WEBHOOK_URL:}
+    signature-header: ${SEPAY_WEBHOOK_SIGNATURE_HEADER:X-SePay-Signature}
+    timestamp-header: ${SEPAY_WEBHOOK_TIMESTAMP_HEADER:X-SePay-Timestamp}
+    signature-algorithm: ${SEPAY_WEBHOOK_SIGNATURE_ALGORITHM:HmacSHA256}
+    max-clock-skew-seconds: ${SEPAY_WEBHOOK_MAX_CLOCK_SKEW_SECONDS:300}
+    secret-key: ${SEPAY_WEBHOOK_SECRET_KEY:}
+
 keycloak:
   realm: ${KEYCLOAK_REALM:my-workflow}
-
-momo:
-  redirectUrl: ${MOMO_REDIRECT_URL:http://165.245.188.101/payment-success}
