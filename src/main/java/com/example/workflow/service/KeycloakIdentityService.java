@@ -21,10 +21,13 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class KeycloakIdentityService {
@@ -60,19 +63,64 @@ public class KeycloakIdentityService {
     }
 
     public String createUser(UserCreDTO user, Role role) {
-        String adminToken = getAdminToken();
-        Map<String, Object> representation = Map.of(
-                "username", user.getUsername(),
-                "enabled", true,
-                "firstName", user.getFirstname(),
-                "lastName", user.getLastname(),
-                "email", user.getEmail() == null ? "" : user.getEmail(),
-                "credentials", List.of(Map.of(
-                        "type", "password",
-                        "value", user.getPassword(),
-                        "temporary", false
-                ))
+        return createUser(user, role, Map.of());
+    }
+
+    public BootstrapManagerIdentity createBootstrapManager(UserCreDTO user) {
+        String userId = createUser(
+                user,
+                Role.MANAGER,
+                Map.of("bootstrap_manager", List.of("true"))
         );
+        try {
+            return getBootstrapManagerIdentity(userId);
+        } catch (RuntimeException ex) {
+            deleteUserById(userId);
+            throw ex;
+        }
+    }
+
+    public Optional<BootstrapManagerIdentity> findBootstrapManager(String usernamePrefix) {
+        String adminToken = getAdminToken();
+        String encodedPrefix = URLEncoder.encode(usernamePrefix, StandardCharsets.UTF_8);
+        List<Map<String, Object>> users = exchangeAdmin(
+                adminUrl("/users?search=" + encodedPrefix + "&max=1000"),
+                HttpMethod.GET,
+                adminToken,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                }
+        ).getBody();
+        if (users == null) {
+            return Optional.empty();
+        }
+        return users.stream()
+                .filter(this::isBootstrapManager)
+                .filter(user -> stringValue(user.get("username")).startsWith(usernamePrefix))
+                .findFirst()
+                .map(this::toBootstrapManagerIdentity);
+    }
+
+    public void synchronizeBootstrapManagerRole(String userId) {
+        synchronizeRealmRole(getAdminToken(), userId, Role.MANAGER);
+    }
+
+    private String createUser(UserCreDTO user, Role role, Map<String, List<String>> attributes) {
+        String adminToken = getAdminToken();
+        Map<String, Object> representation = new HashMap<>();
+        representation.put("username", user.getUsername());
+        representation.put("enabled", true);
+        representation.put("firstName", user.getFirstname());
+        representation.put("lastName", user.getLastname());
+        representation.put("email", user.getEmail() == null ? "" : user.getEmail());
+        representation.put("credentials", List.of(Map.of(
+                "type", "password",
+                "value", user.getPassword(),
+                "temporary", false
+        )));
+        if (!attributes.isEmpty()) {
+            representation.put("attributes", attributes);
+        }
 
         try {
             ResponseEntity<Void> response = restTemplate.exchange(
@@ -94,6 +142,56 @@ public class KeycloakIdentityService {
         } catch (RestClientException ex) {
             throw new AppException(HttpStatus.SERVICE_UNAVAILABLE, ConstantErrorCode.KEYCLOAK_USER_SYNC_FAILED);
         }
+    }
+
+    private BootstrapManagerIdentity getBootstrapManagerIdentity(String userId) {
+        Map<String, Object> user = exchangeAdmin(
+                adminUrl("/users/" + userId),
+                HttpMethod.GET,
+                getAdminToken(),
+                null,
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                }
+        ).getBody();
+        if (user == null || stringValue(user.get("id")).isBlank()) {
+            throw new AppException(HttpStatus.SERVICE_UNAVAILABLE, ConstantErrorCode.KEYCLOAK_USER_SYNC_FAILED);
+        }
+        return toBootstrapManagerIdentity(user);
+    }
+
+    private boolean isBootstrapManager(Map<String, Object> user) {
+        Object rawAttributes = user.get("attributes");
+        if (!(rawAttributes instanceof Map<?, ?> attributes)) {
+            return false;
+        }
+        Object marker = attributes.get("bootstrap_manager");
+        if (marker instanceof List<?> values) {
+            return values.stream().anyMatch(value -> "true".equalsIgnoreCase(String.valueOf(value)));
+        }
+        return "true".equalsIgnoreCase(String.valueOf(marker));
+    }
+
+    private BootstrapManagerIdentity toBootstrapManagerIdentity(Map<String, Object> user) {
+        return new BootstrapManagerIdentity(
+                stringValue(user.get("id")),
+                stringValue(user.get("username")),
+                stringValue(user.get("firstName")),
+                stringValue(user.get("lastName")),
+                stringValue(user.get("email"))
+        );
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    public record BootstrapManagerIdentity(
+            String id,
+            String username,
+            String firstName,
+            String lastName,
+            String email
+    ) {
     }
 
     public void updateUser(String userId, UserCreDTO user, Role role) {

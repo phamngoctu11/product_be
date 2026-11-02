@@ -2,6 +2,7 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <include file="01-initial-entity-tables.xml" relativeToChangelogFile="true"/>
     <include file="02-domain-expand.xml" relativeToChangelogFile="true"/>
     <include file="03-consistency.xml" relativeToChangelogFile="true"/>
     <include file="04-custom-request.xml" relativeToChangelogFile="true"/>
@@ -20,4 +21,5 @@
     <include file="17-order-chat-expiration.xml" relativeToChangelogFile="true"/>
     <include file="18-custom-request-soft-delete.xml" relativeToChangelogFile="true"/>
     <include file="19-custom-request-is-delete-flag.xml" relativeToChangelogFile="true"/>
+    <include file="20-money-precision-repair.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -1,6 +1,7 @@
 package com.example.workflow.cache;
 
 import com.example.workflow.nume.OrderStatus;
+import com.example.workflow.nume.CustomRequestStatus;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
@@ -55,6 +56,37 @@ public final class CacheKeys {
 
     public static String reputationHistoriesPrefix(String userId) {
         return "user:" + safe(userId) + ":reputation:";
+    }
+
+    public static String customRequests(String userId, CustomRequestStatus status, Pageable pageable) {
+        String sort = pageable == null ? "unsorted" : safe(pageable.getSort());
+        return customRequestsPrefix(userId)
+                + "status:" + (status == null ? "all" : status.name()) + ":"
+                + pageSuffix(pageable) + ":sort:" + sort;
+    }
+
+    public static String customRequest(String userId, Long requestId) {
+        return customRequestsPrefix(userId) + "id:" + safe(requestId);
+    }
+
+    public static String customRequestsPrefix(String userId) {
+        return "user:" + safe(userId) + ":custom-requests:";
+    }
+
+    public static String orderChatThread(String userId, Long orderId) {
+        return orderChatThreadPrefix(userId) + safe(orderId);
+    }
+
+    public static String orderChatThreadPrefix(String userId) {
+        return "user:" + safe(userId) + ":order-chat:thread:";
+    }
+
+    public static String orderChatMessages(String userId, Long orderId) {
+        return orderChatMessagesPrefix(userId) + safe(orderId);
+    }
+
+    public static String orderChatMessagesPrefix(String userId) {
+        return "user:" + safe(userId) + ":order-chat:messages:";
     }
 
     private static String priceAndPageSuffix(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {

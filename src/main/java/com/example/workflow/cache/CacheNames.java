@@ -31,6 +31,10 @@ public final class CacheNames {
     public static final String USER = "user";
     public static final String REPUTATION_HISTORIES = "reputationHistories";
 
+    public static final String CUSTOM_REQUESTS = "customRequests";
+    public static final String ORDER_CHAT_THREADS = "orderChatThreads";
+    public static final String ORDER_CHAT_MESSAGES = "orderChatMessages";
+
     public static final String PRODUCT_REVIEWS = "productReviews";
     public static final String PRODUCT_REVIEW_SUMMARIES = "productReviewSummaries";
 

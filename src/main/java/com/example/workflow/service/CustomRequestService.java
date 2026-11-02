@@ -19,6 +19,7 @@ import com.example.workflow.mapper.CustomRequestSubmissionMapper;
 import com.example.workflow.nume.CustomRequestStatus;
 import com.example.workflow.nume.OrderStatus;
 import com.example.workflow.nume.OrderType;
+import com.example.workflow.nume.Role;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.repository.OrderRepository;
 import com.example.workflow.repository.ProductTypeRepository;
@@ -31,7 +32,10 @@ import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.workflow.dto.ProductTypeFieldDTO;
 import com.example.workflow.nume.ProductTypeFieldKind;
+import com.example.workflow.cache.CacheNames;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -66,30 +70,39 @@ public class CustomRequestService {
     private final DomainEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final ProductTypeRepository productTypeRepository;
+    private final ApplicationCacheService applicationCacheService;
 
     public CustomRequestDTO create(CreateCustomRequest request, String idempotencyKey) {
         requireCreateRequest(request);
         String ownerId = requireActiveOwnerId();
+        CustomRequestDTO created;
         if (!StringUtils.hasText(idempotencyKey)) {
-            return createDraft(ownerId, request);
+            created = createDraft(ownerId, request);
+        } else {
+            Map<String, Object> canonical = new LinkedHashMap<>();
+            canonical.put("description", normalizeDescription(request.description()));
+            canonical.put("imageUrls", normalizeImageUrls(request.imageUrls()));
+            canonical.put("quantity", request.quantity());
+            canonical.put("productTypeId", request.productTypeId());
+            canonical.put("fieldValues", request.fieldValues());
+            String result = durableRequests.execute(
+                    "custom-request:create:" + ownerId,
+                    idempotencyKey,
+                    JsonUtils.write(objectMapper, canonical, "custom request data"),
+                    () -> JsonUtils.write(objectMapper, createDraft(ownerId, request), "custom request data")
+            );
+            created = JsonUtils.read(objectMapper, result, CustomRequestDTO.class, "custom request result");
         }
-
-        Map<String, Object> canonical = new LinkedHashMap<>();
-        canonical.put("description", normalizeDescription(request.description()));
-        canonical.put("imageUrls", normalizeImageUrls(request.imageUrls()));
-        canonical.put("quantity", request.quantity());
-        canonical.put("productTypeId", request.productTypeId());
-        canonical.put("fieldValues", request.fieldValues());
-        String result = durableRequests.execute(
-                "custom-request:create:" + ownerId,
-                idempotencyKey,
-                JsonUtils.write(objectMapper, canonical, "custom request data"),
-                () -> JsonUtils.write(objectMapper, createDraft(ownerId, request), "custom request data")
-        );
-        return JsonUtils.read(objectMapper, result, CustomRequestDTO.class, "custom request result");
+        applicationCacheService.evictCustomRequestsChanged(ownerId);
+        return created;
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            value = CacheNames.CUSTOM_REQUESTS,
+            key = "T(com.example.workflow.cache.CacheKeys).customRequests(@customRequestService.cacheOwnerId(), #status, #pageable)",
+            unless = "#result == null"
+    )
     public Page<CustomRequestDTO> list(CustomRequestStatus status, Pageable pageable) {
         String ownerId = requireActiveOwnerId();
         Pageable bounded = boundedPage(pageable);
@@ -100,6 +113,11 @@ public class CustomRequestService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            value = CacheNames.CUSTOM_REQUESTS,
+            key = "T(com.example.workflow.cache.CacheKeys).customRequest(@customRequestService.cacheOwnerId(), #requestId)",
+            unless = "#result == null"
+    )
     public CustomRequestDTO get(Long requestId) {
         String ownerId = requireActiveOwnerId();
         CustomRequest request = findOwned(requestId, ownerId);
@@ -119,7 +137,9 @@ public class CustomRequestService {
         draft.setImageUrls(normalizeImageUrls(request.imageUrls()));
         draft.setQuantity(requirePositive(request.quantity()));
         applyProductType(draft, draft.getProductType() == null ? null : draft.getProductType().getId(), request.fieldValues());
-        return customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
+        CustomRequestDTO updated = customRequestMapper.toDto(customRequestRepository.saveAndFlush(draft));
+        applicationCacheService.evictCustomRequestsChanged(ownerId);
+        return updated;
     }
 
     public void delete(Long requestId, Long expectedVersion, String idempotencyKey) {
@@ -140,6 +160,7 @@ public class CustomRequestService {
                     return "{}";
                 }
         );
+        applicationCacheService.evictCustomRequestsChanged(ownerId);
     }
 
     public CustomRequestSubmissionDTO submit(Long requestId, SubmitCustomRequest request, String idempotencyKey) {
@@ -162,7 +183,9 @@ public class CustomRequestService {
                 JsonUtils.write(objectMapper, canonical, "custom request data"),
                 () -> JsonUtils.write(objectMapper, submitDraft(requestId, ownerId, request), "custom request data")
         );
-        return JsonUtils.read(objectMapper, result, CustomRequestSubmissionDTO.class, "custom request submission");
+        CustomRequestSubmissionDTO submitted = JsonUtils.read(objectMapper, result, CustomRequestSubmissionDTO.class, "custom request submission");
+        applicationCacheService.evictCustomRequestsChanged(ownerId);
+        return submitted;
     }
 
     private CustomRequestDTO createDraft(String ownerId, CreateCustomRequest request) {
@@ -282,8 +305,15 @@ public class CustomRequestService {
         catch (Exception exception) { throw invalid("Không thể đọc cấu hình trường của loại sản phẩm."); }
     }
 
+    public String cacheOwnerId() {
+        if (!currentUserService.hasAuthority(Role.USER.name())) {
+            throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
+        }
+        return currentUserService.requireCurrentUserId();
+    }
+
     private String requireActiveOwnerId() {
-        String ownerId = currentUserService.requireCurrentUserId();
+        String ownerId = cacheOwnerId();
         userService.requireActiveUser(ownerId);
         return ownerId;
     }

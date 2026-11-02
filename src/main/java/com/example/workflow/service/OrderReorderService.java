@@ -17,6 +17,7 @@ import com.example.workflow.nume.ProductAvailabilityStatus;
 import com.example.workflow.nume.Role;
 import com.example.workflow.repository.CustomRequestRepository;
 import com.example.workflow.service.consistency.DurableRequestExecutor;
+import com.example.workflow.service.cache.ApplicationCacheService;
 import com.example.workflow.util.JsonUtils;
 import com.example.workflow.util.TextNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,6 +45,7 @@ public class OrderReorderService {
     private final CartService cartService;
     private final DurableRequestExecutor durableRequests;
     private final ObjectMapper objectMapper;
+    private final ApplicationCacheService applicationCacheService;
 
     public ReorderResponseDTO reorder(Long orderId, String idempotencyKey) {
         User owner = currentUserService.requireCurrentUser(Role.USER, ConstantErrorCode.REORDER_NOT_ALLOWED);
@@ -113,6 +115,7 @@ public class OrderReorderService {
         draft.setQuantity(Math.max(item.getQuantity(), 1));
         draft.setSourceOrderId(source.getId());
         draft = customRequestRepository.saveAndFlush(draft);
+        applicationCacheService.evictCustomRequestsChanged(ownerId);
         return new ReorderResponseDTO(OrderType.CUSTOM, draft.getId(), 0, 0, List.of(), List.of());
     }
 

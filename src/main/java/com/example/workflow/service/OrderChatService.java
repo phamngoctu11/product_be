@@ -9,9 +9,10 @@ import com.example.workflow.entity.OrderChatThread;
 import com.example.workflow.entity.User;
 import com.example.workflow.exception.AppException;
 import com.example.workflow.exception.ConstantErrorCode;
-import com.example.workflow.nume.Role;
 import com.example.workflow.repository.ChatMessageRepository;
 import com.example.workflow.repository.OrderChatThreadRepository;
+import com.example.workflow.service.cache.ApplicationCacheService;
+import com.example.workflow.service.cache.OrderChatReadCacheService;
 import com.example.workflow.util.UserDisplayNameUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +42,8 @@ public class OrderChatService {
     private final ChatMessageRepository messageRepository;
     private final CurrentUserService currentUserService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ApplicationCacheService applicationCacheService;
+    private final OrderChatReadCacheService orderChatReadCacheService;
 
     /** Called by the assignment event and safe to retry. Guest orders intentionally have no thread. */
     @Transactional
@@ -68,7 +71,10 @@ public class OrderChatService {
             throw new AppException(HttpStatus.CONFLICT, ConstantErrorCode.CONCURRENT_UPDATE);
         }
         backfillParticipantNames(thread, order);
-        return toDto(thread);
+        applicationCacheService.evictOrderChatChanged(
+                thread.getOwnerUserId(), thread.getAssignedStaffId(), thread.getOrderId()
+        );
+        return orderChatReadCacheService.toThreadDto(thread);
     }
 
     @Transactional
@@ -81,6 +87,9 @@ public class OrderChatService {
                 LocalDateTime finalizedTime = finalizedAt == null ? LocalDateTime.now() : finalizedAt;
                 thread.setExpiresAt(finalizedTime.plusHours(THREAD_RETENTION_HOURS));
                 threadRepository.save(thread);
+                applicationCacheService.evictOrderChatChanged(
+                        thread.getOwnerUserId(), thread.getAssignedStaffId(), thread.getOrderId()
+                );
             }
         });
     }
@@ -95,6 +104,9 @@ public class OrderChatService {
             try {
                 messageRepository.deleteByChatThreadId(thread.getId());
                 threadRepository.delete(thread);
+                applicationCacheService.evictOrderChatChanged(
+                        thread.getOwnerUserId(), thread.getAssignedStaffId(), thread.getOrderId()
+                );
                 deletedCount++;
             } catch (RuntimeException exception) {
                 log.warn("Failed to delete expired order chat thread {}: {}", thread.getId(), exception.getMessage());
@@ -110,17 +122,15 @@ public class OrderChatService {
         String actorId = currentUserService.requireCurrentUserId();
         OrderChatThread thread = requireThread(orderId);
         authorize(thread, actorId);
-        return toDto(thread);
+        return orderChatReadCacheService.getThread(actorId, orderId, thread);
     }
 
+    @Transactional(readOnly = true)
     public List<OrderChatMessageDTO> getMessages(Long orderId) {
         String actorId = currentUserService.requireCurrentUserId();
         OrderChatThread thread = requireThread(orderId);
         authorize(thread, actorId);
-        return messageRepository.findByChatThreadIdOrderByTimestampAsc(thread.getId())
-                .stream()
-                .map(message -> toMessageDto(thread, message))
-                .toList();
+        return orderChatReadCacheService.getMessages(actorId, orderId, thread);
     }
 
     public OrderChatMessageDTO send(SendOrderChatMessageRequest request, Authentication authentication) {
@@ -139,7 +149,10 @@ public class OrderChatService {
         message.setContent(request.content().trim());
         message.setMessageType("TEXT");
         message.setTimestamp(LocalDateTime.now());
-        OrderChatMessageDTO saved = toMessageDto(thread, messageRepository.save(message));
+        OrderChatMessageDTO saved = orderChatReadCacheService.toMessageDto(thread, messageRepository.save(message));
+        applicationCacheService.evictOrderChatChanged(
+                thread.getOwnerUserId(), thread.getAssignedStaffId(), thread.getOrderId()
+        );
         long persistedAt = System.nanoTime();
         messagingTemplate.convertAndSend("/topic/order-chat/" + request.orderId(), saved);
         long publishedAt = System.nanoTime();
@@ -198,23 +211,6 @@ public class OrderChatService {
         if (changed) {
             threadRepository.save(thread);
         }
-    }
-
-    private OrderChatThreadDTO toDto(OrderChatThread thread) {
-        return new OrderChatThreadDTO(thread.getId(), thread.getOrderId(), thread.getOwnerUserId(),
-                thread.getAssignedStaffId(), thread.getCreatedAt());
-    }
-
-    private OrderChatMessageDTO toMessageDto(OrderChatThread thread, ChatMessage message) {
-        boolean ownerMessage = thread.getOwnerUserId().equals(message.getSenderId());
-        String senderRole = ownerMessage ? Role.USER.name() : Role.STAFF.name();
-        String senderName = ownerMessage ? thread.getOwnerDisplayName() : thread.getAssignedStaffDisplayName();
-        if (!StringUtils.hasText(senderName)) {
-            senderName = message.getSenderId();
-        }
-        return new OrderChatMessageDTO(message.getId(), thread.getOrderId(), message.getChatThreadId(),
-                message.getSenderId(), senderRole, senderName, message.getContent(),
-                message.getTimestamp(), message.getMessageType());
     }
 
     private void logSendLatency(Long orderId, long startedAt, long authorizedAt, long persistedAt, long publishedAt) {

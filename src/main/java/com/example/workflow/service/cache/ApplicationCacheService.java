@@ -14,6 +14,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -123,6 +124,7 @@ public class ApplicationCacheService {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCTS);
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCT);
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCT_TYPES);
+        optionalCacheService.clearAfterCommit(CacheNames.CUSTOM_REQUESTS);
     }
 
     public void evictProductUpdated(Long productId) {
@@ -178,6 +180,25 @@ public class ApplicationCacheService {
         optionalCacheService.clearAfterCommit(CacheNames.USERS);
     }
 
+    public void evictCustomRequestsChanged(String userId) {
+        if (StringUtils.hasText(userId)) {
+            optionalCacheService.evictByPrefixAfterCommit(
+                    CacheNames.CUSTOM_REQUESTS,
+                    CacheKeys.customRequestsPrefix(userId)
+            );
+        }
+    }
+
+    public void evictOrderChatChanged(String ownerUserId, String assignedStaffId, Long orderId) {
+        if (orderId == null) {
+            return;
+        }
+        evictOrderChatForParticipant(ownerUserId, orderId);
+        if (!Objects.equals(ownerUserId, assignedStaffId)) {
+            evictOrderChatForParticipant(assignedStaffId, orderId);
+        }
+    }
+
     public void evictProductReviewChanged() {
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCT_REVIEWS);
         optionalCacheService.clearAfterCommit(CacheNames.PRODUCT_REVIEW_SUMMARIES);
@@ -205,6 +226,7 @@ public class ApplicationCacheService {
     public void evictUserDeleted(String userId) {
         optionalCacheService.clearAfterCommit(CacheNames.USERS);
         optionalCacheService.evictAfterCommit(CacheNames.USER, userId);
+        evictCustomRequestsChanged(userId);
     }
 
     private void evictManagerPendingOrdersAfterCommit(OrderStatus status) {
@@ -222,6 +244,7 @@ public class ApplicationCacheService {
             return;
         }
         optionalCacheService.evictByPrefixAfterCommit(CacheNames.USER_ORDERS, CacheKeys.userOrdersPrefix(userId));
+        evictCustomRequestsChanged(userId);
     }
 
     private void evictUserCancelledOrdersAfterCommit(String userId) {
@@ -244,6 +267,20 @@ public class ApplicationCacheService {
         }
         optionalCacheService.evictAfterCommit(CacheNames.USER, userId);
         optionalCacheService.evictByPrefixAfterCommit(CacheNames.REPUTATION_HISTORIES, CacheKeys.reputationHistoriesPrefix(userId));
+    }
+
+    private void evictOrderChatForParticipant(String userId, Long orderId) {
+        if (!StringUtils.hasText(userId)) {
+            return;
+        }
+        optionalCacheService.evictAfterCommit(
+                CacheNames.ORDER_CHAT_THREADS,
+                CacheKeys.orderChatThread(userId, orderId)
+        );
+        optionalCacheService.evictAfterCommit(
+                CacheNames.ORDER_CHAT_MESSAGES,
+                CacheKeys.orderChatMessages(userId, orderId)
+        );
     }
 
     private void evictUserVoucherWalletAfterCommit(String userId) {

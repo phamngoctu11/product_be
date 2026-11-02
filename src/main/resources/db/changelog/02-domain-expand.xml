@@ -2,15 +2,18 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
-    <!-- Expand only. Run on a verified legacy schema with application writes stopped. -->
-    <preConditions onFail="HALT">
-        <tableExists tableName="orders"/>
-        <tableExists tableName="order_item"/>
-        <tableExists tableName="products"/>
-        <tableExists tableName="users"/>
-        <tableExists tableName="user_vouchers"/>
-        <tableExists tableName="orderhistory"/>
-    </preConditions>
+    <!-- Runs after the initial entity baseline, so these checks see the created tables. -->
+    <changeSet id="02-legacy-table-guard" author="workflow">
+        <preConditions onFail="HALT">
+            <tableExists tableName="orders"/>
+            <tableExists tableName="order_item"/>
+            <tableExists tableName="products"/>
+            <tableExists tableName="users"/>
+            <tableExists tableName="user_vouchers"/>
+            <tableExists tableName="orderhistory"/>
+        </preConditions>
+        <sql>SELECT 1</sql>
+    </changeSet>
     <changeSet id="02-expand-1" author="workflow">
         <addColumn tableName="orders">
             <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>

@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    <!--
+        Bootstrap the legacy entity tables that the expand changelog (02-*) expects.
+        Tables introduced by later domain migrations are still created by those migrations.
+        Every table has its own existence precondition so an existing database is preserved.
+    -->
+    <changeSet id="01-create-users" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="users"/></not></preConditions>
+        <createTable tableName="users">
+            <column name="id" type="varchar(36)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="firstname" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="lastname" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="username" type="varchar(255)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_users_username"/></column>
+            <column name="gender" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="address" type="varchar(255)"/>
+            <column name="phone" type="varchar(255)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_users_phone"/></column>
+            <column name="birth" type="date"/>
+            <column name="role" type="varchar(255)"/>
+            <column name="reputation" type="int"><constraints nullable="false"/></column>
+            <column name="isdelete" type="boolean"><constraints nullable="false"/></column>
+            <column name="avatar_url" type="varchar(255)"/>
+            <column name="email" type="varchar(255)"/>
+            <column name="is_active" type="boolean"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-voucher-templates" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="voucher_templates"/></not></preConditions>
+        <createTable tableName="voucher_templates">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="code" type="varchar(255)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_voucher_templates_code"/></column>
+            <column name="name" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="description" type="varchar(255)"/>
+            <column name="point_cost" type="int"><constraints nullable="false"/></column>
+            <column name="min_order_value" type="double"><constraints nullable="false"/></column>
+            <column name="discount_percent" type="double"><constraints nullable="false"/></column>
+            <column name="max_discount_amount" type="double"><constraints nullable="false"/></column>
+            <column name="quantity" type="int"><constraints nullable="false"/></column>
+            <column name="expiry_date" type="datetime"><constraints nullable="false"/></column>
+            <column name="is_active" type="boolean"><constraints nullable="false"/></column>
+            <column name="is_guest_voucher" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-products" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="products"/></not></preConditions>
+        <createTable tableName="products">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="product_name" type="varchar(255)"/>
+            <column name="price" type="double"><constraints nullable="false"/></column>
+            <column name="tags" type="varchar(255)"/>
+            <column name="image_url" type="varchar(255)"/>
+            <column name="is_handmade" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="availability_status" type="varchar(32)" defaultValue="ACCEPTING_ORDERS"><constraints nullable="false"/></column>
+            <column name="is_delete" type="boolean"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-product-variants" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="product_variants"/></not></preConditions>
+        <createTable tableName="product_variants">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="product_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_product_variants_product" references="products(id)"/></column>
+            <column name="variant_name" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="price" type="double"><constraints nullable="false"/></column>
+            <column name="quantity" type="int" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="attributes" type="json"/>
+            <column name="image_url" type="varchar(255)"/>
+            <column name="is_delete" type="boolean"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-user-vouchers" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="user_vouchers"/></not></preConditions>
+        <createTable tableName="user_vouchers">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_user_vouchers_user" references="users(id)"/></column>
+            <column name="template_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_user_vouchers_template" references="voucher_templates(id)"/></column>
+            <column name="is_used" type="boolean"><constraints nullable="false"/></column>
+            <column name="redeem_date" type="datetime"/>
+            <column name="used_date" type="datetime"/>
+            <column name="expiry_date" type="datetime"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-cart" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="cart"/></not></preConditions>
+        <createTable tableName="cart">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints unique="true" uniqueConstraintName="uk_cart_user" foreignKeyName="fk_cart_user" references="users(id)"/></column>
+            <column name="guest_session_id" type="varchar(128)"><constraints unique="true" uniqueConstraintName="uk_cart_guest_session"/></column>
+        </createTable>
+        <createIndex tableName="cart" indexName="idx_cart_guest_session_id"><column name="guest_session_id"/></createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-cart-items" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="cart_item"/></not></preConditions>
+        <createTable tableName="cart_item">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="cart_id" type="bigint"><constraints foreignKeyName="fk_cart_item_cart" references="cart(id)"/></column>
+            <column name="product_variant_id" type="bigint"><constraints foreignKeyName="fk_cart_item_product_variant" references="product_variants(id)"/></column>
+            <column name="quantity" type="int"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-orders" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="orders"/></not></preConditions>
+        <createTable tableName="orders">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints foreignKeyName="fk_orders_user" references="users(id)"/></column>
+            <column name="total_price" type="double"><constraints nullable="false"/></column>
+            <column name="start_order_time" type="datetime"/>
+            <column name="end_order_time" type="datetime"/>
+            <column name="status" type="varchar(50)"/>
+            <column name="production_status" type="varchar(32)" defaultValue="NOT_REQUIRED"><constraints nullable="false"/></column>
+            <column name="cancel_reason" type="varchar(255)"/>
+            <column name="user_voucher_id" type="bigint"><constraints foreignKeyName="fk_orders_user_voucher" references="user_vouchers(id)"/></column>
+            <column name="guest_voucher_template_id" type="bigint"><constraints foreignKeyName="fk_orders_guest_voucher_template" references="voucher_templates(id)"/></column>
+            <column name="discount_amount" type="double"/>
+            <column name="final_price" type="double"/>
+            <column name="payment_method" type="varchar(255)"/>
+            <column name="guest_session_id" type="varchar(128)"/>
+            <column name="recipient_name" type="varchar(120)"/>
+            <column name="email" type="varchar(255)"/>
+            <column name="recipient_phone" type="varchar(30)"/>
+            <column name="shipping_address" type="text"/>
+            <column name="note" type="text"/>
+            <column name="order_lookup_token_hash" type="varchar(64)"><constraints unique="true" uniqueConstraintName="uk_orders_lookup_token_hash"/></column>
+            <column name="order_lookup_token_created_at" type="datetime"/>
+            <column name="guest_workflow_status" type="varchar(32)"/>
+            <column name="guest_workflow_process_instance_id" type="varchar(64)"/>
+            <column name="guest_workflow_started_at" type="datetime"/>
+            <column name="guest_workflow_error" type="varchar(1000)"/>
+            <column name="manager_id" type="varchar(36)"><constraints foreignKeyName="fk_orders_manager" references="users(id)"/></column>
+            <column name="approved_by_id" type="varchar(255)"/>
+            <column name="approved_by_full_name" type="varchar(255)"/>
+            <column name="warehouse_staff_id" type="varchar(36)"><constraints foreignKeyName="fk_orders_warehouse_staff" references="users(id)"/></column>
+            <column name="shipping_provider" type="varchar(255)"/>
+            <column name="tracking_code" type="varchar(255)"/>
+            <column name="stock_reserved" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="stock_deducted" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-order-items" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="order_item"/></not></preConditions>
+        <createTable tableName="order_item">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_id" type="bigint"><constraints foreignKeyName="fk_order_item_order" references="orders(id)"/></column>
+            <column name="product_variant_id" type="bigint"><constraints foreignKeyName="fk_order_item_product_variant" references="product_variants(id)"/></column>
+            <column name="price" type="double"><constraints nullable="false"/></column>
+            <column name="is_handmade" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="production_status" type="varchar(40)" defaultValue="NOT_REQUIRED"><constraints nullable="false"/></column>
+            <column name="quantity" type="int"><constraints nullable="false"/></column>
+            <column name="exported_quantity" type="int"/>
+            <column name="received_quantity" type="int"/>
+        </createTable>
+        <createIndex tableName="order_item" indexName="idx_order_item_production">
+            <column name="order_id"/><column name="production_status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-order-history" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="orderhistory"/></not></preConditions>
+        <createTable tableName="orderhistory">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_id" type="bigint"><constraints foreignKeyName="fk_orderhistory_order" references="orders(id)"/></column>
+            <column name="oldstatus" type="varchar(50)"/>
+            <column name="newstatus" type="varchar(50)"/>
+            <column name="update_time" type="datetime"/>
+            <column name="changer_id" type="varchar(255)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-order-item-assignments" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="order_item_assignments"/></not></preConditions>
+        <createTable tableName="order_item_assignments">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_item_id" type="bigint"><constraints nullable="false" unique="true" uniqueConstraintName="uk_item_assignment_order_item" foreignKeyName="fk_item_assignment_order_item" references="order_item(id)"/></column>
+            <column name="assigned_staff_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_item_assignment_staff" references="users(id)"/></column>
+            <column name="assigned_by_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_item_assignment_manager" references="users(id)"/></column>
+            <column name="assigned_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="updated_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="version" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="order_item_assignments" indexName="idx_item_assignment_staff">
+            <column name="assigned_staff_id"/><column name="assigned_at"/>
+        </createIndex>
+        <createIndex tableName="order_item_assignments" indexName="idx_item_assignment_manager">
+            <column name="assigned_by_id"/><column name="assigned_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-product-reviews" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="product_reviews"/></not></preConditions>
+        <createTable tableName="product_reviews">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="order_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_product_review_order" references="orders(id)"/></column>
+            <column name="order_item_id" type="bigint"><constraints nullable="false" unique="true" uniqueConstraintName="uk_product_review_order_item" foreignKeyName="fk_product_review_order_item" references="order_item(id)"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_product_review_user" references="users(id)"/></column>
+            <column name="product_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_product_review_product" references="products(id)"/></column>
+            <column name="product_variant_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_product_review_variant" references="product_variants(id)"/></column>
+            <column name="rating" type="int"/>
+            <column name="comment" type="varchar(1000)"/>
+            <column name="image_urls" type="text"/>
+            <column name="status" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="hidden_reason" type="varchar(500)"/>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="updated_at" type="datetime"/>
+        </createTable>
+        <createIndex tableName="product_reviews" indexName="idx_product_review_product">
+            <column name="product_id"/><column name="status"/><column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="product_reviews" indexName="idx_product_review_variant">
+            <column name="product_variant_id"/><column name="status"/><column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="product_reviews" indexName="idx_product_review_user">
+            <column name="user_id"/><column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-notifications" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="notifications"/></not></preConditions>
+        <createTable tableName="notifications">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="title" type="varchar(255)"/>
+            <column name="content" type="varchar(255)"/>
+            <column name="order_id" type="bigint"/>
+            <column name="consultation_request_id" type="bigint"/>
+            <column name="target_user_id" type="varchar(255)"/>
+            <column name="is_read" type="boolean"><constraints nullable="false"/></column>
+            <column name="created_at" type="datetime"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-notification-reads" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="notification_reads"/></not></preConditions>
+        <createTable tableName="notification_reads">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="notification_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_notification_reads_notification" references="notifications(id)"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false"/></column>
+            <column name="is_read" type="boolean"><constraints nullable="false"/></column>
+            <column name="read_at" type="datetime"/>
+        </createTable>
+        <addUniqueConstraint tableName="notification_reads" columnNames="notification_id, user_id" constraintName="uk_notification_reads_notification_user"/>
+        <createIndex tableName="notification_reads" indexName="idx_notification_reads_user"><column name="user_id"/></createIndex>
+        <createIndex tableName="notification_reads" indexName="idx_notification_reads_notification"><column name="notification_id"/></createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-guest-voucher-usages" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="guest_voucher_usages"/></not></preConditions>
+        <createTable tableName="guest_voucher_usages">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="voucher_template_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_guest_voucher_usage_template" references="voucher_templates(id)"/></column>
+            <column name="order_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_guest_voucher_usage_order" references="orders(id)"/></column>
+            <column name="guest_session_id" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="email_hash" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="phone_hash" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="used_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="guest_voucher_usages" columnNames="order_id" constraintName="uk_guest_voucher_usage_order"/>
+        <addUniqueConstraint tableName="guest_voucher_usages" columnNames="voucher_template_id, guest_session_id" constraintName="uk_guest_voucher_usage_session"/>
+        <addUniqueConstraint tableName="guest_voucher_usages" columnNames="voucher_template_id, email_hash" constraintName="uk_guest_voucher_usage_email"/>
+        <addUniqueConstraint tableName="guest_voucher_usages" columnNames="voucher_template_id, phone_hash" constraintName="uk_guest_voucher_usage_phone"/>
+    </changeSet>
+
+    <changeSet id="01-create-password-reset-tokens" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="password_reset_tokens"/></not></preConditions>
+        <createTable tableName="password_reset_tokens">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_password_reset_token_user" references="users(id)"/></column>
+            <column name="token_hash" type="varchar(64)"><constraints nullable="false" unique="true" uniqueConstraintName="uk_password_reset_token_hash"/></column>
+            <column name="expires_at" type="datetime"><constraints nullable="false"/></column>
+            <column name="used_at" type="datetime"/>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="password_reset_tokens" indexName="idx_password_reset_token_user"><column name="user_id"/></createIndex>
+    </changeSet>
+
+    <changeSet id="01-create-reputation-history" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="reputation_history"/></not></preConditions>
+        <createTable tableName="reputation_history">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_reputation_history_user" references="users(id)"/></column>
+            <column name="delta" type="int"><constraints nullable="false"/></column>
+            <column name="balance_after" type="int"><constraints nullable="false"/></column>
+            <column name="reason" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="reference_type" type="varchar(50)"/>
+            <column name="reference_id" type="varchar(100)"/>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="01-create-wishlist-items" author="workflow">
+        <preConditions onFail="MARK_RAN"><not><tableExists tableName="wishlist_items"/></not></preConditions>
+        <createTable tableName="wishlist_items">
+            <column name="id" type="bigint" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="varchar(36)"><constraints nullable="false" foreignKeyName="fk_wishlist_items_user" references="users(id)"/></column>
+            <column name="product_id" type="bigint"><constraints nullable="false" foreignKeyName="fk_wishlist_items_product" references="products(id)"/></column>
+            <column name="created_at" type="datetime"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="wishlist_items" columnNames="user_id, product_id" constraintName="uk_wishlist_items_user_product"/>
+    </changeSet>
+</databaseChangeLog>

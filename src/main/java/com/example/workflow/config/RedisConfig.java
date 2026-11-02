@@ -95,6 +95,9 @@ public class RedisConfig implements CachingConfigurer {
                 .withCacheConfiguration(CacheNames.USERS, ttl(Duration.ofMinutes(5)))
                 .withCacheConfiguration(CacheNames.USER, ttl(Duration.ofMinutes(5)))
                 .withCacheConfiguration(CacheNames.REPUTATION_HISTORIES, ttl(Duration.ofMinutes(5)))
+                .withCacheConfiguration(CacheNames.CUSTOM_REQUESTS, ttl(Duration.ofMinutes(2)))
+                .withCacheConfiguration(CacheNames.ORDER_CHAT_THREADS, ttl(Duration.ofMinutes(1)))
+                .withCacheConfiguration(CacheNames.ORDER_CHAT_MESSAGES, ttl(Duration.ofSeconds(30)))
                 .withCacheConfiguration(CacheNames.PRODUCT_REVIEWS, ttl(Duration.ofMinutes(10)))
                 .withCacheConfiguration(CacheNames.PRODUCT_REVIEW_SUMMARIES, ttl(Duration.ofMinutes(10)));
     }

@@ -17,7 +17,7 @@ Ngày thực hiện: 06/10/2026. Quyết định của người dùng: Liquibase
 
 ## Cách áp dụng migration
 
-Changelog `src/main/resources/db/changelog/db.changelog-master.xml` là migration **expand cho database legacy đã tồn tại**. Nó không phải bộ bootstrap database trống. Precondition thiếu bảng legacy sẽ dừng migration. Không dùng `changelogSync` hoặc MARK_RAN để bỏ qua xung đột schema.
+Changelog `src/main/resources/db/changelog/db.changelog-master.xml` bắt đầu bằng `01-initial-entity-tables.xml`. Trên database trống, baseline tạo các bảng entity nền tảng rồi các migration `02` trở đi bổ sung schema hiện tại. Trên database đã có bảng, từng changeset baseline bỏ qua bảng đó để giữ nguyên dữ liệu; precondition của migration `02` vẫn dừng nếu thiếu bảng legacy bắt buộc. Không dùng `changelogSync` hoặc MARK_RAN để bỏ qua xung đột schema.
 
 Changelog cũng chuyển `orders.status`, `orderhistory.oldstatus/newstatus` từ ENUM legacy sang VARCHAR để chấp nhận state mới. Test MySQL khởi tạo đúng ENUM cũ và xác nhận có thể ghi ORDER_ACCEPTED/ORDER_CREATING sau migration.
 
@@ -52,7 +52,7 @@ Các trường stock/tracking, OrderProductionStatus, OrderItemAssignment và AP
 
 ## Rollback
 
-Changelog chỉ mở rộng và backfill dữ liệu xác định; không cung cấp rollback tự động drop bảng nghiệp vụ mới. MySQL DDL có implicit commit, nên lỗi giữa migration có thể để lại một số changeset đã áp dụng.
+Changelog tạo baseline khi bảng entity nền tảng còn thiếu, sau đó mở rộng schema và backfill dữ liệu xác định; không cung cấp rollback tự động drop bảng nghiệp vụ mới. MySQL DDL có implicit commit, nên lỗi giữa migration có thể để lại một số changeset đã áp dụng.
 
 - Trước cutover: khôi phục backup bản sao/production và binary tương ứng nếu migration thất bại; hoặc sửa bằng changeset bổ sung đã kiểm thử khi xác định được trạng thái.
 - Khi chỉ rollback binary và chưa có workflow mới ghi dữ liệu: giữ cột/bảng expand, kiểm tra bản cũ còn đọc được legacy state; không chạy bản cũ nếu đã có state mới mà enum cũ không hỗ trợ.
@@ -70,7 +70,7 @@ Các test migration dùng schema legacy tối thiểu có dữ liệu mẫu, ki�
 
 MySQL test cần Docker, sử dụng image mysql:8.0.36 và database container dùng một lần. `api.version=1.44` là tham số tương thích Docker 29 trên môi trường phát triển này.
 
-Test schema tối thiểu không thay thế diễn tập migration trên bản sao toàn bộ dữ liệu vận hành. Changelog này chưa quản lý tạo mới toàn bộ schema legacy hay Camunda engine tables. Chưa bật workflow mới, tự migrate process đang chạy hoặc quyết định chính sách hoàn tiền callback muộn.
+Test schema tối thiểu không thay thế diễn tập migration trên bản sao toàn bộ dữ liệu vận hành. Changelog tạo schema entity ứng dụng nhưng không quản lý các bảng Camunda engine. Chưa bật workflow mới, tự migrate process đang chạy hoặc quyết định chính sách hoàn tiền callback muộn.
 
 ## Bàn giao cho các phần tiếp theo
 
