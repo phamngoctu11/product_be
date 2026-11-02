@@ -45,3 +45,8 @@ sepay:
 
 keycloak:
   realm: ${KEYCLOAK_REALM:my-workflow}
+  bootstrap:
+    manager:
+      enabled: ${KEYCLOAK_BOOTSTRAP_MANAGER_ENABLED:false}
+      base-username: ${KEYCLOAK_BOOTSTRAP_MANAGER_USERNAME:manager}
+      password: ${KEYCLOAK_BOOTSTRAP_MANAGER_PASSWORD:}

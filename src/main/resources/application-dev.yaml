@@ -24,6 +24,11 @@ app:
 
 keycloak:
   realm: ${KEYCLOAK_REALM:my-workflow-dev}
+  bootstrap:
+    manager:
+      enabled: ${KEYCLOAK_BOOTSTRAP_MANAGER_ENABLED:true}
+      base-username: ${KEYCLOAK_BOOTSTRAP_MANAGER_USERNAME:manager}
+      password: ${KEYCLOAK_BOOTSTRAP_MANAGER_PASSWORD:manager123}
 
 sepay:
   payment:

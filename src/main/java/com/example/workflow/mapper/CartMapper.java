@@ -21,6 +21,7 @@ public interface CartMapper {
     @Mapping(source = "id", target = "cartItemId")
     @Mapping(source = "productVariant.id", target = "variantId")
     @Mapping(source = "productVariant.variantName", target = "variantName")
+    @Mapping(source = "productVariant.product.productName", target = "productName")
     @Mapping(source = "productVariant.price", target = "price")
     @Mapping(target = "imageUrl", expression = "java(resolveImageUrl(cartItem))")
     CartItemDTO toDto(CartItem cartItem);

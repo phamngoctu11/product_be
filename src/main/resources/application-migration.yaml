@@ -1,5 +1,5 @@
-# Activate explicitly on a backed-up existing schema, with DB_URL supplied.
-# This expand changelog requires the legacy application tables to exist.
+# Activate explicitly with DB_URL supplied for an existing or empty application database.
+# The master changelog creates missing baseline entity tables before applying expansions.
 spring:
   liquibase:
     enabled: true

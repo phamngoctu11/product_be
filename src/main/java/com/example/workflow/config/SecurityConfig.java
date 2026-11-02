@@ -58,6 +58,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/guest/orders/*/cancellation").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guest/orders/*/receipt").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/sepay").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/{id}").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/camunda/**").hasAuthority("ADMIN")
                         .requestMatchers("/api/**").authenticated()

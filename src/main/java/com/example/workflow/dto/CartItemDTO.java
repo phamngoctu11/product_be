@@ -15,6 +15,7 @@ public class CartItemDTO implements Serializable {
     private Long cartItemId;
     private Long variantId;
     private String variantName;
+    private String productName;
     private int quantity;
     private BigDecimal price;
     @JsonProperty("image_url")

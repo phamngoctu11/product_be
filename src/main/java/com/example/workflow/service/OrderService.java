@@ -45,7 +45,16 @@ public class OrderService {
     @Transactional(readOnly = true)
     public OrderDTO getOrderById(Long id) {
         Order order = orderLookupService.require(id);
-        assertCurrentUserCanViewOrder(order);
+        var currentUser = currentUserService.findCurrentUser();
+        if (currentUser.isEmpty() && order.getUser() != null) {
+            throw new AppException(HttpStatus.NOT_FOUND, ConstantErrorCode.ORDER_NOT_FOUND);
+        }
+        currentUser.ifPresent(user -> {
+            if (user.getRole() == Role.USER
+                    && (order.getUser() == null || !order.getUser().getId().equals(user.getId()))) {
+                throw new AppException(HttpStatus.FORBIDDEN, ConstantErrorCode.USER_DATA_ACCESS_FORBIDDEN);
+            }
+        });
         return orderDetailsAssembler.toDto(order);
     }
 

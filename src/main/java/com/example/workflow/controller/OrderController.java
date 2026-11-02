@@ -88,7 +88,6 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<OrderDTO>> getOrderById(@Positive @PathVariable("id") Long id) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getOrderById(id)));
     }

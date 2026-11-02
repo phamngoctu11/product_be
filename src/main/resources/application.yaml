@@ -43,6 +43,11 @@ keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
   realm: ${KEYCLOAK_REALM:my-workflow-dev}
   client-id: ${KEYCLOAK_CLIENT_ID:workflow-frontend}
+  bootstrap:
+    manager:
+      enabled: ${KEYCLOAK_BOOTSTRAP_MANAGER_ENABLED:true}
+      base-username: ${KEYCLOAK_BOOTSTRAP_MANAGER_USERNAME:manager}
+      password: ${KEYCLOAK_BOOTSTRAP_MANAGER_PASSWORD:123456}
   admin:
     realm: ${KEYCLOAK_ADMIN_REALM:master}
     client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
@@ -75,9 +80,9 @@ spring:
   datasource:
     # Aiven requires primary keys globally, while Liquibase's DATABASECHANGELOG
     # metadata table has none. Relax the rule only for this JDBC session.
-    url: ${DB_URL:jdbc:mysql://mysql-3046e449-tup20658-b458.d.aivencloud.com:20481/defaultdb?sslMode=REQUIRED&sessionVariables=sql_require_primary_key=0}
+    url: ${DB_URL:jdbc:mysql://mysql-2e217108-tup20658-b458.g.aivencloud.com:20481/defaultdb?sslMode=REQUIRED&sessionVariables=sql_require_primary_key=0}
     username: ${DB_USERNAME:avnadmin}
-    password: ${DB_PASSWORD:AVNS_Kd7H_JPu_49mrZzF5Al}
+    password: ${DB_PASSWORD:AVNS_YtHzX3-c_Way8m2h4WI}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     mongodb:
